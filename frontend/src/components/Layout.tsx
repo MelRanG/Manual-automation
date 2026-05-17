@@ -1,0 +1,176 @@
+import { useState, useEffect } from "react"
+import { Link, useLocation, Outlet, useNavigate } from "react-router-dom"
+import { cn } from "@/lib/utils"
+import {
+  FileText,
+  MessageSquare,
+  AlertCircle,
+  CheckCircle,
+  Shield,
+  GitMerge,
+  LayoutDashboard,
+  Ticket,
+  Webhook,
+  BookOpen,
+  Globe,
+  Users,
+  Plus,
+  LifeBuoy,
+  Search,
+  Settings,
+  LogOut,
+} from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
+import { useNotifications } from "@/hooks/useNotifications"
+import { NotificationBell } from "@/components/NotificationBell"
+import { ToastContainer } from "@/components/Toast"
+
+const navItems = [
+  { to: "/", icon: LayoutDashboard, label: "대시보드" },
+  { to: "/documents", icon: FileText, label: "문서 관리" },
+  { to: "/chat", icon: MessageSquare, label: "Q&A 챗봇" },
+  { to: "/approvals", icon: CheckCircle, label: "승인 관리" },
+  { to: "/feedback", icon: AlertCircle, label: "오류 제보" },
+  { to: "/trust", icon: Shield, label: "신뢰도 점수" },
+  { to: "/sr", icon: Ticket, label: "서비스 요청" },
+  { to: "/change-impact", icon: GitMerge, label: "변경 영향" },
+  { to: "/webhook-logs", icon: Webhook, label: "웹훅 로그" },
+  { to: "/manuals", icon: BookOpen, label: "매뉴얼 생성" },
+  { to: "/widget-demo", icon: Globe, label: "위젯 데모" },
+  { to: "/widget-conversations", icon: Users, label: "위젯 대화" },
+]
+
+interface ToastItem { id: string; title: string; message: string }
+
+export function Layout() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
+  const { notifications, unreadCount, newNotification, markRead, markAllRead, clearNew } =
+    useNotifications(user?.id)
+  const [toasts, setToasts] = useState<ToastItem[]>([])
+
+  // 새 알림이 오면 토스트 표시
+  useEffect(() => {
+    if (!newNotification) return
+    setToasts((prev) => [
+      ...prev,
+      { id: newNotification.id + Date.now(), title: newNotification.title, message: newNotification.message },
+    ])
+    clearNew()
+  }, [newNotification, clearNew])
+
+  const removeToast = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id))
+
+  const handleLogout = () => {
+    logout()
+    navigate("/login")
+  }
+
+  const initials = user?.name
+    ? user.name.slice(0, 2).toUpperCase()
+    : user?.email?.slice(0, 2).toUpperCase() ?? "U"
+
+  return (
+    <div className="flex min-h-[100dvh] bg-background">
+      <aside className="w-[240px] border-r border-border bg-card flex flex-col shrink-0">
+        <div className="p-5 pb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <FileText className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-foreground tracking-tight leading-tight">
+                Manual Automation
+              </h1>
+              <p className="text-[11px] text-muted-foreground leading-tight">Enterprise Tier</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 mb-4">
+          <Link
+            to="/documents"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New Document
+          </Link>
+        </div>
+
+        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
+          {navItems.map((item) => {
+            const active = location.pathname === item.to ||
+              (item.to !== "/" && location.pathname.startsWith(item.to))
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                  active
+                    ? "bg-accent text-primary font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                <item.icon className="h-[18px] w-[18px]" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="px-3 pb-4 space-y-0.5 border-t border-border pt-3 mt-2">
+          <a href="#" className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <LifeBuoy className="h-[18px] w-[18px]" />
+            Support
+          </a>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <LogOut className="h-[18px] w-[18px]" />
+            로그아웃
+          </button>
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className="h-14 border-b border-border bg-card flex items-center justify-between px-6 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center bg-muted rounded-full px-3 py-1.5 border border-border">
+              <Search className="h-4 w-4 text-muted-foreground mr-2" />
+              <input
+                type="text"
+                placeholder="Search documents, AI chat..."
+                className="bg-transparent border-none outline-none text-sm w-56 placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              onMarkRead={markRead}
+              onMarkAllRead={markAllRead}
+            />
+            <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+              <Settings className="h-[18px] w-[18px]" />
+            </button>
+            <div
+              className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center cursor-pointer"
+              title={user?.email}
+            >
+              <span className="text-xs font-semibold text-primary">{initials}</span>
+            </div>
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+      </div>
+
+      <ToastContainer toasts={toasts} onClose={removeToast} />
+    </div>
+  )
+}

@@ -1,0 +1,23 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class ApprovalAction(BaseModel):
+    reviewer_id: uuid.UUID
+    action: str  # "approved", "rejected", "edit_and_approve", "request_review"
+    comment: str | None = None
+    edited_content: str | None = None
+
+
+class ApprovalRequestResponse(BaseModel):
+    id: uuid.UUID
+    proposed_change_id: uuid.UUID
+    reviewer_id: uuid.UUID | None
+    status: str
+    comment: str | None
+    reviewed_at: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

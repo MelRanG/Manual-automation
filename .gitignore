@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/Coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Claude Code
+.claude/settings.local.json
+.claude/
+
+# Test results
+backend/test-results/
+frontend/test-results/
+frontend/dist-widget/
+
+# Uploads (runtime data)
+backend/uploads/
+
+# Design/stitch prototypes
+stitch_docops_ai_platform/

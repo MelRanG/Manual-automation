@@ -1,0 +1,157 @@
+import json
+import logging
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.models.sr import SRDraft, WebhookDeliveryLog
+from app.schemas.sr import SRDraftCreate
+from app.services.llm_service import get_llm_provider
+
+logger = logging.getLogger(__name__)
+
+SR_GENERATION_PROMPT = """You are a service request generator for documentation issues.
+Given a document context and issue description, generate a clear, actionable service request.
+Format your response as:
+Title: [concise title]
+Priority: [low/medium/high/critical]
+Description: [detailed description of what needs to be done]"""
+
+
+async def create_sr_draft(db: AsyncSession, data: SRDraftCreate) -> SRDraft:
+    draft = SRDraft(
+        id=uuid.uuid4(),
+        user_id=data.user_id,
+        title=data.title,
+        description=data.description,
+        priority=data.priority,
+        related_document_ids=[str(d) for d in data.related_document_ids] if data.related_document_ids else None,
+        status="draft",
+        created_by_ai=False,
+    )
+    db.add(draft)
+    await db.commit()
+    await db.refresh(draft)
+    return draft
+
+
+async def generate_sr_draft(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    document_id: uuid.UUID,
+    issue_description: str,
+) -> SRDraft:
+    llm = get_llm_provider()
+    result = await llm.generate(
+        SR_GENERATION_PROMPT,
+        f"Issue: {issue_description}\nDocument ID: {document_id}",
+    )
+
+    title = f"SR: {issue_description[:80]}"
+    priority = "medium"
+    description = result
+
+    for line in result.split("\n"):
+        if line.startswith("Title:"):
+            title = line[6:].strip()
+        elif line.startswith("Priority:"):
+            p = line[9:].strip().lower()
+            if p in ("low", "medium", "high", "critical"):
+                priority = p
+        elif line.startswith("Description:"):
+            description = line[12:].strip()
+
+    draft = SRDraft(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title=title,
+        description=description,
+        priority=priority,
+        related_document_ids=[str(document_id)],
+        status="draft",
+        created_by_ai=True,
+    )
+    db.add(draft)
+    await db.commit()
+    await db.refresh(draft)
+    return draft
+
+
+async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise ValueError("SR draft not found")
+
+    draft.status = "submitted"
+
+    webhook_result = await deliver_webhook(db, draft)
+    await db.commit()
+    return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+
+
+async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
+    target_url = settings.jira_webhook_url
+    payload = {
+        "fields": {
+            "project": {"key": "DOCOPS"},
+            "summary": draft.title,
+            "description": draft.description,
+            "priority": {"name": draft.priority.capitalize()},
+            "issuetype": {"name": "Task"},
+            "labels": ["docops-ai", "auto-generated"],
+        }
+    }
+
+    if not target_url:
+        logger.info(f"Webhook not configured. SR {draft.id} logged internally.")
+        log = WebhookDeliveryLog(
+            id=uuid.uuid4(),
+            sr_draft_id=draft.id,
+            target_url="(not configured)",
+            payload=payload,
+            response_status=None,
+            response_body="Webhook URL not configured - logged internally",
+            status="skipped",
+        )
+        db.add(log)
+        return {"status": "skipped", "reason": "JIRA_WEBHOOK_URL not configured"}
+
+    import aiohttp
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(target_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                body = await resp.text()
+                log = WebhookDeliveryLog(
+                    id=uuid.uuid4(),
+                    sr_draft_id=draft.id,
+                    target_url=target_url,
+                    payload=payload,
+                    response_status=resp.status,
+                    response_body=body[:1000],
+                    status="delivered" if resp.status < 400 else "failed",
+                )
+                db.add(log)
+                return {"status": "delivered", "response_status": resp.status}
+    except Exception as e:
+        log = WebhookDeliveryLog(
+            id=uuid.uuid4(),
+            sr_draft_id=draft.id,
+            target_url=target_url,
+            payload=payload,
+            response_status=None,
+            response_body=str(e)[:1000],
+            status="error",
+        )
+        db.add(log)
+        return {"status": "error", "error": str(e)}
+
+
+async def list_sr_drafts(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[SRDraft]:
+    stmt = select(SRDraft).order_by(SRDraft.created_at.desc())
+    if user_id:
+        stmt = stmt.where(SRDraft.user_id == user_id)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
