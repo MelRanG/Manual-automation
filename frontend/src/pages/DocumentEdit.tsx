@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { api } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
@@ -13,6 +13,7 @@ export function DocumentEdit() {
   const [description, setDescription] = useState("")
   const [content, setContent] = useState("")
   const [changeSummary, setChangeSummary] = useState("")
+  const contentInitialized = useRef(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -24,8 +25,9 @@ export function DocumentEdit() {
   }, [doc])
 
   useEffect(() => {
-    if (versions && versions.length > 0) {
+    if (versions && versions.length > 0 && !contentInitialized.current) {
       setContent(versions[0].content)
+      contentInitialized.current = true
     }
   }, [versions])
 
