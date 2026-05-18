@@ -15,7 +15,9 @@ export function DocumentDetail() {
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm">("idle")
   const [deleting, setDeleting] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const exportRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -51,34 +53,45 @@ export function DocumentDetail() {
     URL.revokeObjectURL(url)
   }
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
     setExportOpen(false)
-    if (!doc || !versions || versions.length === 0) return
-    const pdf = new jsPDF()
-    const content = versions[0].content
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const margin = 20
-    const maxWidth = pageWidth - margin * 2
+    if (!doc || !contentRef.current) return
+    setExporting(true)
+    try {
+      const html2canvas = (await import("html2canvas")).default
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#ffffff",
+      })
+      const pdf = new jsPDF({ unit: "px", format: "a4" })
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+      const pdfHeight = pdf.internal.pageSize.getHeight()
+      const margin = 32
+      const contentWidth = pdfWidth - margin * 2
+      const imgHeight = (canvas.height * contentWidth) / canvas.width
+      let remainingHeight = imgHeight
+      let srcY = 0
 
-    pdf.setFont("helvetica", "bold")
-    pdf.setFontSize(16)
-    pdf.text(doc.title, margin, 20)
-
-    pdf.setFont("helvetica", "normal")
-    pdf.setFontSize(10)
-    let y = 32
-
-    const lines = pdf.splitTextToSize(content, maxWidth) as string[]
-    for (const line of lines) {
-      if (y > 270) {
-        pdf.addPage()
-        y = 20
+      while (remainingHeight > 0) {
+        const pageContentHeight = pdfHeight - margin * 2
+        const sliceHeight = Math.min(remainingHeight, pageContentHeight)
+        const sliceCanvas = document.createElement("canvas")
+        sliceCanvas.width = canvas.width
+        sliceCanvas.height = (sliceHeight * canvas.width) / contentWidth
+        const ctx = sliceCanvas.getContext("2d")!
+        ctx.drawImage(canvas, 0, srcY, canvas.width, sliceCanvas.height, 0, 0, canvas.width, sliceCanvas.height)
+        pdf.addImage(sliceCanvas.toDataURL("image/png"), "PNG", margin, margin, contentWidth, sliceHeight)
+        remainingHeight -= sliceHeight
+        srcY += sliceCanvas.height
+        if (remainingHeight > 0) pdf.addPage()
       }
-      pdf.text(line, margin, y)
-      y += 6
-    }
 
-    pdf.save(`${doc.title}.pdf`)
+      pdf.save(`${doc.title}.pdf`)
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (!doc) return (
@@ -193,10 +206,11 @@ export function DocumentDetail() {
                 </button>
                 <button
                   onClick={handleExportPdf}
-                  className="w-full px-4 py-2.5 text-left text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors flex items-center gap-2"
+                  disabled={exporting}
+                  className="w-full px-4 py-2.5 text-left text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors flex items-center gap-2 disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-base text-[#757684]">picture_as_pdf</span>
-                  PDF (.pdf)
+                  {exporting ? "생성 중..." : "PDF (.pdf)"}
                 </button>
               </div>
             )}
@@ -223,7 +237,7 @@ export function DocumentDetail() {
             </div>
             <div className="px-8 py-6">
               {versions && versions.length > 0 ? (
-                <div className="prose prose-sm max-w-none">
+                <div ref={contentRef} className="prose prose-sm max-w-none">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {versions[0].content}
                   </ReactMarkdown>
