@@ -102,13 +102,25 @@ export function ServiceRequests() {
                     <span className="material-symbols-outlined text-lg text-[#00288e]">confirmation_number</span>
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-[#191c1e]">{sr.title}</p>
                       {sr.created_by_ai && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dde1ff] text-[#00288e]">
                           <span className="material-symbols-outlined text-[12px]">auto_awesome</span>
                           AI
                         </span>
+                      )}
+                      {sr.jira_issue_key && sr.jira_issue_url && (
+                        <a
+                          href={sr.jira_issue_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e8f0fe] text-[#1a56db] hover:bg-[#c7d7fb] transition-colors"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <span className="material-symbols-outlined text-[12px]">link</span>
+                          {sr.jira_issue_key}
+                        </a>
                       )}
                     </div>
                     <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
@@ -117,10 +129,12 @@ export function ServiceRequests() {
                         {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : "낮음"}
                       </span>
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        sr.status === "done_synced" ? "bg-[#d5e3fc] text-[#16a34a]" :
+                        sr.status === "jira_created" ? "bg-[#e8f0fe] text-[#1a56db]" :
                         sr.status === "submitted" ? "bg-[#d5e3fc] text-[#16a34a]" : "bg-[#e6e8ea] text-[#444653]"
                       }`}>
                         <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                        {sr.status === "submitted" ? "제출됨" : "초안"}
+                        {sr.status === "done_synced" ? "완료 동기화됨" : sr.status === "jira_created" ? "Jira 생성됨" : sr.status === "submitted" ? "제출됨" : "초안"}
                       </span>
                       <span className="text-[11px] text-[#757684]">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
                     </div>
