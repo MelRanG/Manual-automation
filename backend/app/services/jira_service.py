@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.jira import JiraConfig, JiraCallbackLog
 from app.models.sr import SRDraft
+from app.services.manual_service import capture_screenshots
 from app.services.search_service import search_similar_chunks
 
 logger = logging.getLogger(__name__)
@@ -178,7 +179,108 @@ async def process_jira_done(
             sr.related_document_ids = [str(d["document_id"]) for d in related_docs]
             await session.flush()
 
-            # 이후 단계 (Task 4에서 구현)
+            # Playwright 캡처 (target_url 있을 때만)
+            page_context = ""
+            if sr.target_url:
+                try:
+                    from app.models.manual import ManualGenerationJob
+                    mock_job = ManualGenerationJob(
+                        target_url=sr.target_url,
+                        user_id=sr.user_id,
+                        login_id=None, login_pw=None,
+                        login_url=None, scenario_steps=None,
+                    )
+                    screenshots = await capture_screenshots(mock_job)
+                    page_context = "\n".join(
+                        s.get("page_text", "")[:500]
+                        for s in screenshots if s.get("page_text")
+                    )
+                except Exception as e:
+                    logger.warning(f"Playwright 캡처 스킵 (sr={sr_id}): {e}")
+
+            # 각 문서마다 수정안 생성
+            from app.services.llm_service import get_llm_provider
+            from app.models.feedback import ProposedDocumentChange, ApprovalRequest
+            from app.models.document import Document, DocumentVersion
+
+            llm = get_llm_provider()
+            proposals_created = 0
+
+            for doc_info in related_docs:
+                try:
+                    doc_id = uuid.UUID(str(doc_info["document_id"]))
+                    ver_result = await session.execute(
+                        select(DocumentVersion)
+                        .join(Document, Document.current_version_id == DocumentVersion.id)
+                        .where(Document.id == doc_id)
+                    )
+                    version = ver_result.scalar_one_or_none()
+                    if not version:
+                        continue
+                    original = version.content
+
+                    prompt = f"""다음 서비스 요청(SR)이 Jira에서 완료되었습니다.
+SR 제목: {sr.title}
+SR 설명: {sr.description}
+
+현재 문서 내용:
+{original[:3000]}
+"""
+                    if page_context:
+                        prompt += f"\n현재 시스템 화면 텍스트:\n{page_context[:1000]}"
+                    prompt += "\n\n위 SR 내용을 반영해 문서를 수정한 전체 내용을 작성하세요."
+
+                    proposed_text = await llm.generate(
+                        "당신은 기술 문서 작가입니다. SR 완료 내용을 반영해 문서를 현행화합니다.",
+                        prompt,
+                    )
+
+                    change = ProposedDocumentChange(
+                        id=uuid.uuid4(),
+                        feedback_report_id=None,
+                        document_id=doc_id,
+                        document_version_id=version.id,
+                        manual_job_id=None,
+                        original_text=original,
+                        proposed_text=proposed_text,
+                        diff="",
+                        reasoning=f"Jira SR 완료: {sr.title}",
+                        confidence=0.8,
+                        source_type="jira_sr",
+                        status="pending",
+                    )
+                    session.add(change)
+                    await session.flush()
+
+                    approval = ApprovalRequest(
+                        id=uuid.uuid4(),
+                        proposed_change_id=change.id,
+                        status="pending",
+                    )
+                    session.add(approval)
+                    proposals_created += 1
+
+                except Exception as e:
+                    logger.warning(f"문서 {doc_info['document_id']} 수정안 생성 실패: {e}")
+
+            if proposals_created > 0:
+                from app.routers.notifications import create_notification
+                from app.models.user import User
+                admin_result = await session.execute(
+                    select(User).where(User.role == "admin").limit(1)
+                )
+                admin = admin_result.scalar_one_or_none()
+                if admin:
+                    await create_notification(
+                        session,
+                        user_id=admin.id,
+                        type="jira_sr_proposals_ready",
+                        title=f"SR '{sr.title}' 완료 — 문서 수정안 {proposals_created}건 생성",
+                        message="Approvals 페이지에서 검토하세요.",
+                        document_id=None,
+                    )
+
+            sr.status = "done_synced" if proposals_created > 0 else "done_no_proposal"
             log.status = "processed"
             await session.commit()
 

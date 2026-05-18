@@ -133,3 +133,143 @@ async def test_process_jira_done_no_related_docs(client, db_session):
 
     await db_session.refresh(log)
     assert log.status == "skipped_no_docs"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_process_jira_done_creates_proposals(client, db_session):
+    """관련 문서가 있으면 ProposedChange + ApprovalRequest 생성"""
+    import uuid
+    from unittest.mock import patch
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraCallbackLog
+    from app.models.document import Document, DocumentVersion
+    from app.models.feedback import ProposedDocumentChange, ApprovalRequest
+    from app.services import jira_service
+    from sqlalchemy import select
+
+    resp = await client.post("/api/users", json={
+        "name": "Proposals Test User",
+        "email": f"proposals_test_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    user_id = uuid.UUID(resp.json()["id"])
+
+    doc = Document(
+        id=uuid.uuid4(), title="테스트 문서", description="설명",
+        owner_id=user_id,
+        status="active", priority="medium", trust_score=1.0,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+
+    version = DocumentVersion(
+        id=uuid.uuid4(), document_id=doc.id, version_number=1,
+        content="기존 문서 내용",
+        created_by=user_id,
+        change_summary="초기",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    doc.current_version_id = version.id
+
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title="기능 개선 요청", description="로그인 버튼 위치 변경",
+        priority="medium", status="submitted",
+        created_by_ai=False, target_url=None,
+    )
+    db_session.add(sr)
+    await db_session.flush()
+    log = JiraCallbackLog(
+        id=uuid.uuid4(), jira_issue_key="TEST-200",
+        event_type="jira:issue_updated", payload={},
+        status="pending", sr_draft_id=sr.id,
+    )
+    db_session.add(log)
+    await db_session.commit()
+
+    mock_chunk = {
+        "document_id": doc.id, "document_title": doc.title,
+        "content": "기존 문서 내용", "distance": 0.2,
+    }
+
+    with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]):
+        await jira_service.process_jira_done(sr.id, log.id, db=db_session)
+
+    await db_session.refresh(log)
+    assert log.status == "processed"
+
+    proposals = (await db_session.execute(
+        select(ProposedDocumentChange).where(ProposedDocumentChange.document_id == doc.id)
+    )).scalars().all()
+    assert len(proposals) == 1
+    assert proposals[0].source_type == "jira_sr"
+
+    approvals = (await db_session.execute(
+        select(ApprovalRequest).where(ApprovalRequest.proposed_change_id == proposals[0].id)
+    )).scalars().all()
+    assert len(approvals) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_process_jira_done_no_playwright_without_target_url(client, db_session):
+    """target_url 없으면 capture_screenshots 미호출"""
+    import uuid
+    from unittest.mock import patch, MagicMock
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraCallbackLog
+    from app.models.document import Document, DocumentVersion
+    from app.services import jira_service
+
+    resp = await client.post("/api/users", json={
+        "name": "No Playwright Test User",
+        "email": f"no_playwright_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    user_id = uuid.UUID(resp.json()["id"])
+
+    doc = Document(
+        id=uuid.uuid4(), title="문서3", description="설명",
+        owner_id=user_id,
+        status="active", priority="medium", trust_score=1.0,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+    version = DocumentVersion(
+        id=uuid.uuid4(), document_id=doc.id, version_number=1,
+        content="내용", created_by=user_id,
+        change_summary="초기",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    doc.current_version_id = version.id
+
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title="SR no url", description="설명",
+        priority="medium", status="submitted",
+        created_by_ai=False, target_url=None,
+    )
+    db_session.add(sr)
+    await db_session.flush()
+    log = JiraCallbackLog(
+        id=uuid.uuid4(), jira_issue_key="TEST-300",
+        event_type="jira:issue_updated", payload={},
+        status="pending", sr_draft_id=sr.id,
+    )
+    db_session.add(log)
+    await db_session.commit()
+
+    mock_chunk = {
+        "document_id": doc.id, "document_title": doc.title,
+        "content": "내용", "distance": 0.1,
+    }
+
+    with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]), \
+         patch("app.services.jira_service.capture_screenshots") as mock_capture:
+        await jira_service.process_jira_done(sr.id, log.id, db=db_session)
+        mock_capture.assert_not_called()
