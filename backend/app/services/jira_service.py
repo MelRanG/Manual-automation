@@ -1,12 +1,19 @@
+import logging
 import uuid
 from base64 import b64encode
+from contextlib import asynccontextmanager
 
 import aiohttp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.jira import JiraConfig
+from app.models.jira import JiraConfig, JiraCallbackLog
 from app.models.sr import SRDraft
+from app.services.search_service import search_similar_chunks
+
+logger = logging.getLogger(__name__)
+
+DISTANCE_THRESHOLD = 0.6
 
 
 def mask_token(token: str) -> str:
@@ -94,3 +101,87 @@ async def test_connection(config: JiraConfig) -> dict:
                 return {"success": False, "message": f"인증 실패 (HTTP {resp.status})"}
     except Exception as e:
         return {"success": False, "message": str(e)}
+
+
+async def _find_related_documents(db: AsyncSession, query: str) -> list[dict]:
+    """벡터 검색으로 관련 문서 탐색. 실패 시 제목 키워드 매칭으로 폴백."""
+    from app.models.document import Document
+    from sqlalchemy import or_
+
+    try:
+        chunks = await search_similar_chunks(db, query, top_k=10)
+        seen: set[str] = set()
+        docs = []
+        for c in chunks:
+            if c["distance"] is not None and c["distance"] > DISTANCE_THRESHOLD:
+                continue
+            doc_id = str(c["document_id"])
+            if doc_id not in seen:
+                seen.add(doc_id)
+                docs.append(c)
+                if len(docs) >= 3:
+                    break
+        if docs:
+            return docs
+    except Exception as e:
+        logger.warning(f"벡터 검색 실패, 키워드 폴백: {e}")
+
+    keywords = query.split()[:5]
+    conditions = [Document.title.ilike(f"%{kw}%") for kw in keywords]
+    result = await db.execute(
+        select(Document)
+        .where(Document.status == "active")
+        .where(or_(*conditions))
+        .limit(3)
+    )
+    fallback_docs = result.scalars().all()
+    return [
+        {"document_id": d.id, "document_title": d.title, "content": "", "distance": None}
+        for d in fallback_docs
+    ]
+
+
+async def process_jira_done(
+    sr_id: uuid.UUID,
+    log_id: uuid.UUID,
+    db: AsyncSession | None = None,
+) -> None:
+    from app.db import SessionLocal
+
+    @asynccontextmanager
+    async def _get_db():
+        if db is not None:
+            yield db
+        else:
+            async with SessionLocal() as session:
+                yield session
+
+    async with _get_db() as session:
+        sr_result = await session.execute(select(SRDraft).where(SRDraft.id == sr_id))
+        sr = sr_result.scalar_one_or_none()
+        log_result = await session.execute(select(JiraCallbackLog).where(JiraCallbackLog.id == log_id))
+        log = log_result.scalar_one_or_none()
+        if not sr or not log:
+            return
+
+        try:
+            query = f"{sr.title} {sr.description}"
+            related_docs = await _find_related_documents(session, query)
+
+            if not related_docs:
+                log.status = "skipped_no_docs"
+                await session.commit()
+                return
+
+            sr.related_document_ids = [str(d["document_id"]) for d in related_docs]
+            await session.flush()
+
+            # 이후 단계 (Task 4에서 구현)
+            log.status = "processed"
+            await session.commit()
+
+        except Exception as e:
+            logger.error(f"process_jira_done 실패 sr={sr_id}: {e}")
+            log.status = "failed"
+            log.error_message = str(e)[:500]
+            await session.commit()
