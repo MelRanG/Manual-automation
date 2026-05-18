@@ -11,6 +11,9 @@ export function ServiceRequests() {
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState("medium")
   const [submitting, setSubmitting] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ title: "", description: "", priority: "medium" })
+  const [saving, setSaving] = useState(false)
 
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) return
@@ -29,6 +32,23 @@ export function ServiceRequests() {
   const handleSubmit = async (id: string) => {
     await api.submitSR(id)
     refetch()
+  }
+
+  const handleEditStart = (sr: { id: string; title: string; description: string; priority: string }) => {
+    setEditingId(sr.id)
+    setEditForm({ title: sr.title, description: sr.description, priority: sr.priority })
+  }
+
+  const handleEditSave = async () => {
+    if (!editingId) return
+    setSaving(true)
+    try {
+      await api.updateSRDraft(editingId, editForm)
+      setEditingId(null)
+      refetch()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const getPriorityStyle = (p: string) => {
@@ -96,57 +116,94 @@ export function ServiceRequests() {
         <div className="space-y-3">
           {drafts.map((sr) => (
             <div key={sr.id} className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3 flex-1">
-                  <div className="w-10 h-10 rounded-lg bg-[#dde1ff] flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-lg text-[#00288e]">confirmation_number</span>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-[#191c1e]">{sr.title}</p>
-                      {sr.created_by_ai && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dde1ff] text-[#00288e]">
-                          <span className="material-symbols-outlined text-[12px]">auto_awesome</span>
-                          AI
-                        </span>
-                      )}
-                      {sr.jira_issue_key && sr.jira_issue_url && (
-                        <a
-                          href={sr.jira_issue_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e8f0fe] text-[#1a56db] hover:bg-[#c7d7fb] transition-colors"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <span className="material-symbols-outlined text-[12px]">link</span>
-                          {sr.jira_issue_key}
-                        </a>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
-                        {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : "낮음"}
-                      </span>
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        sr.status === "done_synced" ? "bg-[#d5e3fc] text-[#16a34a]" :
-                        sr.status === "jira_created" ? "bg-[#e8f0fe] text-[#1a56db]" :
-                        sr.status === "submitted" ? "bg-[#d5e3fc] text-[#16a34a]" : "bg-[#e6e8ea] text-[#444653]"
-                      }`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                        {sr.status === "done_synced" ? "완료 동기화됨" : sr.status === "jira_created" ? "Jira 생성됨" : sr.status === "submitted" ? "제출됨" : "초안"}
-                      </span>
-                      <span className="text-[11px] text-[#757684]">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
-                    </div>
+              {editingId === sr.id ? (
+                <div className="space-y-3">
+                  <input
+                    className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
+                    value={editForm.title}
+                    onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+                  />
+                  <textarea
+                    className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
+                    rows={3}
+                    value={editForm.description}
+                    onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  />
+                  <select
+                    className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none bg-white"
+                    value={editForm.priority}
+                    onChange={e => setEditForm(f => ({ ...f, priority: e.target.value }))}
+                  >
+                    <option value="low">낮음</option>
+                    <option value="medium">보통</option>
+                    <option value="high">높음</option>
+                    <option value="critical">긴급</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button onClick={handleEditSave} disabled={saving} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50 transition-colors">
+                      {saving ? "저장 중..." : "저장"}
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm text-[#444653] hover:bg-[#f2f4f6] rounded-lg transition-colors">취소</button>
                   </div>
                 </div>
-                {sr.status === "draft" && (
-                  <button onClick={() => handleSubmit(sr.id)} className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors">
-                    <span className="material-symbols-outlined text-base">send</span>
-                    제출
-                  </button>
-                )}
-              </div>
+              ) : (
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1">
+                    <div className="w-10 h-10 rounded-lg bg-[#dde1ff] flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-lg text-[#00288e]">confirmation_number</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-[#191c1e]">{sr.title}</p>
+                        {sr.created_by_ai && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dde1ff] text-[#00288e]">
+                            <span className="material-symbols-outlined text-[12px]">auto_awesome</span>
+                            AI
+                          </span>
+                        )}
+                        {sr.jira_issue_key && sr.jira_issue_url && (
+                          <a
+                            href={sr.jira_issue_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e8f0fe] text-[#1a56db] hover:bg-[#c7d7fb] transition-colors"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <span className="material-symbols-outlined text-[12px]">link</span>
+                            {sr.jira_issue_key}
+                          </a>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
+                          {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : "낮음"}
+                        </span>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          sr.status === "done_synced" ? "bg-[#d5e3fc] text-[#16a34a]" :
+                          sr.status === "jira_created" ? "bg-[#e8f0fe] text-[#1a56db]" :
+                          sr.status === "submitted" ? "bg-[#d5e3fc] text-[#16a34a]" : "bg-[#e6e8ea] text-[#444653]"
+                        }`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {sr.status === "done_synced" ? "완료 동기화됨" : sr.status === "jira_created" ? "Jira 생성됨" : sr.status === "submitted" ? "제출됨" : "초안"}
+                        </span>
+                        <span className="text-[11px] text-[#757684]">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {sr.status === "draft" && (
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleEditStart(sr)} className="flex items-center gap-1 px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#444653] hover:bg-[#f2f4f6] transition-colors">
+                        <span className="material-symbols-outlined text-base">edit</span>
+                      </button>
+                      <button onClick={() => handleSubmit(sr.id)} className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors">
+                        <span className="material-symbols-outlined text-base">send</span>
+                        제출
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

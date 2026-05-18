@@ -118,6 +118,8 @@ export const api = {
     request<SRDraft>('/sr/generate', { method: 'POST', body: JSON.stringify(data) }),
   submitSR: (id: string) =>
     request<{ sr_id: string; status: string; webhook: { status: string } }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
+  updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string }) =>
+    request<SRDraft>(`/sr/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Change Impact
   analyzeImpact: (data: { source_type: string; source_id: string; related_document_ids?: string[] }) =>
