@@ -105,27 +105,29 @@ async def generate_correction(
 
 async def list_feedback(
     db: AsyncSession, document_id: uuid.UUID | None = None
-) -> list[FeedbackReport]:
+) -> list["FeedbackReportResponse"]:
+    from app.schemas.feedback import FeedbackReportResponse
+
     stmt = select(FeedbackReport).order_by(FeedbackReport.created_at.desc())
     if document_id:
         stmt = stmt.where(FeedbackReport.document_id == document_id)
     result = await db.execute(stmt)
     reports = list(result.scalars().all())
 
-    # document_title을 동적 속성으로 설정 (ORM 컬럼 아님)
     doc_ids = {r.document_id for r in reports if r.document_id}
+    title_map: dict = {}
     if doc_ids:
         doc_result = await db.execute(
             select(Document.id, Document.title).where(Document.id.in_(doc_ids))
         )
         title_map = {row.id: row.title for row in doc_result}
-        for report in reports:
-            report.__dict__["document_title"] = title_map.get(report.document_id)
-    else:
-        for report in reports:
-            report.__dict__["document_title"] = None
 
-    return reports
+    return [
+        FeedbackReportResponse.model_validate(r, from_attributes=True).model_copy(
+            update={"document_title": title_map.get(r.document_id)}
+        )
+        for r in reports
+    ]
 
 
 async def get_proposed_change(
