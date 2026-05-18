@@ -96,6 +96,16 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
             draft.jira_issue_key = issue["key"]
             draft.jira_issue_url = issue["url"]
             draft.status = "jira_created"
+            log = WebhookDeliveryLog(
+                id=uuid.uuid4(),
+                sr_draft_id=draft.id,
+                target_url=f"{config.base_url.rstrip('/')}/rest/api/3/issue",
+                payload={"summary": draft.title, "project": config.project_key},
+                response_status=201,
+                response_body=f"Jira issue created: {issue['key']}",
+                status="delivered",
+            )
+            db.add(log)
             await db.commit()
             return {"sr_id": str(sr_id), "status": "jira_created", "jira_issue_key": issue["key"]}
         except Exception as e:

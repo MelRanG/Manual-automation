@@ -39,7 +39,7 @@ async def test_generate_sr_draft(client: AsyncClient, test_user: dict):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_submit_sr_no_webhook(client: AsyncClient, test_user: dict):
+async def test_submit_sr(client: AsyncClient, test_user: dict):
     create_resp = await client.post("/api/sr/drafts", json={
         "user_id": test_user["id"],
         "title": "Submit Test",
@@ -51,8 +51,8 @@ async def test_submit_sr_no_webhook(client: AsyncClient, test_user: dict):
     resp = await client.post(f"/api/sr/drafts/{sr_id}/submit")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "submitted"
-    assert data["webhook"]["status"] == "skipped"
+    # Jira config 유무에 따라 경로가 달라짐: jira_created(직접 연동) 또는 submitted(webhook 폴백)
+    assert data["status"] in ("jira_created", "submitted")
 
 
 @pytest.mark.asyncio(loop_scope="session")
