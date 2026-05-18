@@ -48,6 +48,7 @@ class ProposedDocumentChange(Base, UUIDMixin, TimestampMixin):
     diff: Mapped[str] = mapped_column(Text)
     reasoning: Mapped[str] = mapped_column(Text)
     confidence: Mapped[float] = mapped_column(Float)
+    source_type: Mapped[str] = mapped_column(String(50), default="feedback")
     status: Mapped[str] = mapped_column(String(50), default="pending")
 
     feedback_report: Mapped["FeedbackReport"] = relationship(

@@ -90,3 +90,22 @@ async def test_duplicate_approval_request(client: AsyncClient, test_user: dict):
     await client.post(f"/api/approvals/{proposal_id}")
     dup_resp = await client.post(f"/api/approvals/{proposal_id}")
     assert dup_resp.status_code == 409
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_proposed_change_has_source_type(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Source Type Test Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Original text."})
+    doc_id = doc_resp.json()["id"]
+
+    fb_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "This content needs updating",
+    })
+    assert fb_resp.status_code == 201
+    proposed = fb_resp.json()["proposed_change"]
+    assert proposed is not None
+    assert proposed["source_type"] == "feedback"
