@@ -107,6 +107,33 @@ async def create_new_version(
     return version
 
 
+async def update_document(
+    db: AsyncSession,
+    document_id: uuid.UUID,
+    title: str | None = None,
+    description: str | None = None,
+    content: str | None = None,
+    change_summary: str | None = None,
+) -> Document:
+    doc = await get_document(db, document_id)
+    if not doc:
+        raise ValueError("Document not found")
+
+    if title is not None:
+        doc.title = title
+    if description is not None:
+        doc.description = description
+
+    if content is not None:
+        await create_new_version(db, document_id, content, change_summary=change_summary)
+        await db.refresh(doc)
+    else:
+        await db.commit()
+        await db.refresh(doc)
+
+    return doc
+
+
 async def get_document_versions(
     db: AsyncSession, document_id: uuid.UUID
 ) -> list[DocumentVersion]:

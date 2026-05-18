@@ -11,6 +11,13 @@ class DocumentCreate(BaseModel):
     priority: str = "medium"
 
 
+class DocumentUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    content: str | None = None
+    change_summary: str | None = None
+
+
 class DocumentVersionResponse(BaseModel):
     id: uuid.UUID
     document_id: uuid.UUID

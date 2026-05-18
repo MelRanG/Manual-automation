@@ -102,3 +102,49 @@ async def test_get_versions(client: AsyncClient, test_user: dict):
     assert len(versions) == 2
     assert versions[0]["version_number"] == 2
     assert versions[1]["version_number"] == 1
+
+
+@pytest.mark.asyncio
+async def test_update_document(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/documents", json={
+        "title": "Original Title",
+        "owner_id": test_user["id"],
+    }, params={"content": "original content"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.patch(f"/api/documents/{doc_id}", json={
+        "title": "Updated Title",
+        "content": "updated content",
+        "change_summary": "제목 및 내용 변경",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Updated Title"
+
+    versions_resp = await client.get(f"/api/documents/{doc_id}/versions")
+    assert len(versions_resp.json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_update_document_not_found(client: AsyncClient):
+    resp = await client.patch(
+        "/api/documents/00000000-0000-0000-0000-000000000000",
+        json={"title": "X"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_document_metadata_only(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/documents", json={
+        "title": "Meta Only",
+        "owner_id": test_user["id"],
+    }, params={"content": "content stays"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.patch(f"/api/documents/{doc_id}", json={"title": "New Title"})
+    assert resp.status_code == 200
+    assert resp.json()["title"] == "New Title"
+
+    versions_resp = await client.get(f"/api/documents/{doc_id}/versions")
+    assert len(versions_resp.json()) == 1  # content 미변경이면 새 버전 없음
