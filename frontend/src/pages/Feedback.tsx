@@ -1,8 +1,100 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
-import { api, type FeedbackReport, type ProposedChange } from "@/lib/api"
+import { api, type Document, type FeedbackReport, type ProposedChange } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
+
+interface DocumentPickerDropdownProps {
+  value: string
+  title: string
+  onChange: (id: string, title: string) => void
+  onClear: () => void
+}
+
+function DocumentPickerDropdown({ value, title, onChange, onClear }: DocumentPickerDropdownProps) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [documents, setDocuments] = useState<Document[]>([])
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    api.listDocuments(0, 100).then(res => setDocuments(res.documents))
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery("")
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  const filtered = documents.filter(d =>
+    d.title.toLowerCase().includes(query.toLowerCase())
+  )
+
+  return (
+    <div ref={ref} className="relative">
+      {value ? (
+        <div className="flex items-center gap-2 px-3 py-2 border border-[#c4c5d5] rounded-lg bg-[#eeeeff]">
+          <span className="material-symbols-outlined text-sm text-[#4a4bdc]">description</span>
+          <span className="flex-1 text-sm text-[#4a4bdc] font-medium truncate">{title || value}</span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[#9a9bad] hover:text-[#1a1b25] transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full text-left px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#9a9bad] hover:border-[#00288e] transition-colors"
+        >
+          관련 문서 선택 (선택사항)
+        </button>
+      )}
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-[#4a4bdc] rounded-lg shadow-lg overflow-hidden">
+          <div className="px-3 py-2 border-b border-[#e4e5f0]">
+            <input
+              autoFocus
+              className="w-full text-sm outline-none placeholder-[#9a9bad]"
+              placeholder="문서 검색..."
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+          <ul className="max-h-60 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-4 py-3 text-sm text-[#9a9bad]">검색 결과가 없습니다</li>
+            ) : (
+              filtered.map(doc => (
+                <li
+                  key={doc.id}
+                  onClick={() => { onChange(doc.id, doc.title); setOpen(false); setQuery("") }}
+                  className="px-4 py-3 cursor-pointer hover:bg-[#f0f0ff] border-b border-[#f0f0f5] last:border-0 transition-colors"
+                >
+                  <p className="text-sm font-semibold text-[#1a1b25]">{doc.title}</p>
+                  <p className="text-xs text-[#5a5b6e] mt-0.5 truncate">{doc.description ?? "설명 없음"}</p>
+                  <p className="text-[10px] text-[#9a9bad] mt-1">
+                    최근 수정 · {new Date(doc.updated_at).toLocaleDateString("ko-KR")}
+                  </p>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export function Feedback() {
   const navigate = useNavigate()
@@ -11,6 +103,7 @@ export function Feedback() {
   const [showCreate, setShowCreate] = useState(false)
   const [text, setText] = useState("")
   const [docId, setDocId] = useState("")
+  const [docTitle, setDocTitle] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [result, setResult] = useState<{ feedback: FeedbackReport; proposed_change: ProposedChange | null } | null>(null)
@@ -27,6 +120,7 @@ export function Feedback() {
       setResult(res)
       setText("")
       setDocId("")
+      setDocTitle("")
       refetch()
     } finally {
       setSubmitting(false)
@@ -62,11 +156,11 @@ export function Feedback() {
 
       {showCreate && (
         <div className="bg-white border border-[#00288e]/30 rounded-xl p-6 shadow-sm space-y-4">
-          <input
-            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-            placeholder="문서 ID (선택)"
+          <DocumentPickerDropdown
             value={docId}
-            onChange={e => setDocId(e.target.value)}
+            title={docTitle}
+            onChange={(id, title) => { setDocId(id); setDocTitle(title) }}
+            onClear={() => { setDocId(""); setDocTitle("") }}
           />
           <textarea
             className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
