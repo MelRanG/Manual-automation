@@ -220,7 +220,7 @@ async def export_document(
     versions = await document_service.get_document_versions(db, document_id)
     content = versions[0].content if versions else ""
 
-    safe_title = doc.title.replace("/", "_").replace("\\", "_")
+    safe_title = doc.title.replace("/", "_").replace("\\", "_").replace('"', "_")
     media_type = "text/plain" if format == "txt" else "text/markdown"
 
     return Response(

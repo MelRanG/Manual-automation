@@ -200,6 +200,7 @@ async def test_export_document_md(client: AsyncClient, test_user: dict):
     resp = await client.get(f"/api/documents/{doc_id}/export?format=md")
     assert resp.status_code == 200
     assert "text/markdown" in resp.headers["content-type"]
+    assert "attachment" in resp.headers["content-disposition"]
     assert resp.text == "# heading"
 
 
