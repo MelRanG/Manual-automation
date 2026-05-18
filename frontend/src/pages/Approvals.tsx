@@ -13,10 +13,8 @@ export function Approvals() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>("feedback")
-  const [statusFilter, setStatusFilter] = useState<"all" | "processing" | "completed">(() => {
-    const s = searchParams.get("status")
-    if (s === "processing" || s === "completed") return s
-    return "all"
+  const [statusFilter, setStatusFilter] = useState<"processing" | "completed">(() => {
+    return searchParams.get("status") === "completed" ? "completed" : "processing"
   })
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
@@ -28,7 +26,16 @@ export function Approvals() {
 
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
 
-  const { data: result, refetch } = useApi(
+  // 탭 배지용: 항상 processing 건수만 별도 조회 (statusFilter와 독립)
+  const { data: processingData, refetch: refetchCounts } = useApi(
+    () => api.listApprovals({ status: "processing", skip: 0, limit: 500 }),
+    []
+  )
+  const processingItems = processingData?.items ?? []
+  const feedbackProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "feedback").length
+  const playwrightProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "playwright").length
+
+  const { data: result, refetch: refetchMain } = useApi(
     () => api.listApprovals({ status: statusFilter, skip: (page - 1) * pageSize, limit: pageSize }),
     [statusFilter, page, pageSize]
   )
@@ -55,8 +62,10 @@ export function Approvals() {
     setEditedContent("")
   }
 
+  const refetch = () => { refetchMain(); refetchCounts() }
+
   const handleTabChange = (t: Tab) => { setTab(t); setPage(1); closeReview() }
-  const handleFilterChange = (f: "all" | "processing" | "completed") => { setStatusFilter(f); setPage(1) }
+  const handleFilterChange = (f: "processing" | "completed") => { setStatusFilter(f); setPage(1) }
 
   const handleSubmit = async (id: string) => {
     if (reviewMode === "request_review" && !comment.trim()) return
@@ -99,9 +108,9 @@ export function Approvals() {
         >
           <span className="material-symbols-outlined text-base">bug_report</span>
           오류 제보 수정안
-          {feedbackApprovals.length > 0 && (
+          {feedbackProcessingCount > 0 && (
             <span className="ml-1 px-1.5 py-0.5 bg-[#ffdbce] text-[#611e00] text-[10px] font-bold rounded-full">
-              {feedbackApprovals.length}
+              {feedbackProcessingCount}
             </span>
           )}
         </button>
@@ -115,9 +124,9 @@ export function Approvals() {
         >
           <span className="material-symbols-outlined text-base">smart_toy</span>
           Playwright 매뉴얼
-          {playwrightApprovals.length > 0 && (
+          {playwrightProcessingCount > 0 && (
             <span className="ml-1 px-1.5 py-0.5 bg-[#ffdbce] text-[#611e00] text-[10px] font-bold rounded-full">
-              {playwrightApprovals.length}
+              {playwrightProcessingCount}
             </span>
           )}
         </button>
@@ -125,8 +134,8 @@ export function Approvals() {
 
       {/* 상태 필터 */}
       <div className="flex items-center gap-2 py-2">
-        {(["all", "processing", "completed"] as const).map((f) => {
-          const labels = { all: "전체", processing: "처리 중", completed: "완료" }
+        {(["processing", "completed"] as const).map((f) => {
+          const labels: Record<"processing" | "completed", string> = { processing: "처리 중", completed: "완료" }
           const isActive = statusFilter === f
           return (
             <button
@@ -152,7 +161,7 @@ export function Approvals() {
         <div className="text-center py-16">
           <span className="material-symbols-outlined text-5xl text-[#c4c5d5]">task_alt</span>
           <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">
-            {statusFilter === "completed" ? "완료된 항목이 없습니다" : "모든 승인이 처리되었습니다"}
+            {statusFilter === "completed" ? "완료된 항목이 없습니다" : "처리 중인 항목이 없습니다"}
           </h3>
           <p className="mt-2 text-sm text-[#757684]">
             {statusFilter === "completed"
