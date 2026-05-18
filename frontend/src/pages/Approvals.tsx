@@ -1,4 +1,6 @@
 import { useState } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { api, type ApprovalRequest } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
@@ -259,8 +261,10 @@ function ApprovalCard({
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg p-3 overflow-auto max-h-64">
-                    <pre className="text-xs text-[#191c1e] whitespace-pre-wrap font-mono">{change.proposed_text}</pre>
+                  <div className="bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg p-4 overflow-auto max-h-96 prose prose-sm max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {change.proposed_text}
+                    </ReactMarkdown>
                   </div>
                 )}
               </div>
