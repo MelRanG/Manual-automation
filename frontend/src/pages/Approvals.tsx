@@ -10,7 +10,8 @@ type ReviewMode = "approve" | "reject" | "edit_and_approve" | "request_review" |
 
 export function Approvals() {
   const { user } = useAuth()
-  const { data: approvals, refetch } = useApi(() => api.listApprovals("pending"), [])
+  const { data: approvalsData, refetch } = useApi(() => api.listApprovals({ status: "pending" }), [])
+  const approvals = approvalsData?.items ?? []
   const [tab, setTab] = useState<Tab>("feedback")
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [reviewMode, setReviewMode] = useState<ReviewMode>(null)

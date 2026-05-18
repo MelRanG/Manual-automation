@@ -106,7 +106,10 @@ export const api = {
   // Approvals
   createApproval: (proposedChangeId: string) =>
     request<ApprovalRequest>(`/approvals/${proposedChangeId}`, { method: 'POST' }),
-  listApprovals: (status = "pending") => request<ApprovalRequest[]>(`/approvals?status=${status}`),
+  listApprovals: (params: { status?: string; skip?: number; limit?: number } = {}) => {
+    const { status = "pending", skip = 0, limit = 20 } = params
+    return request<ApprovalListResponse>(`/approvals?status=${status}&skip=${skip}&limit=${limit}`)
+  },
   reviewApproval: (id: string, data: { reviewer_id: string; action: string; comment?: string; edited_content?: string }) =>
     request<ApprovalRequest>(`/approvals/${id}/review`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -164,9 +167,10 @@ export interface ChatMessage { id: string; session_id: string; role: string; con
 export interface AskResponse { message_id: string; content: string; citations: Citation[]; warnings?: DocumentWarning[] }
 export interface DocumentWarning { document_id: string; title: string; reason: "trust_score_low" | "stale" }
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }
-export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; status: string; document_title: string | null; created_at: string }
+export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; status: string; document_title: string | null; proposed_change_status: string | null; created_at: string }
 export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright"; status: string }
 export interface ApprovalRequest { id: string; proposed_change_id: string; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
+export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
 export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; created_at: string }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }

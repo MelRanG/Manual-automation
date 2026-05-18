@@ -33,7 +33,7 @@ export function Dashboard() {
       api.listSRDrafts(),
       fetch('/api/documents/stats/dashboard').then(r => r.json()),
     ]).then(([docs, approvals, feedback, sr, dashData]) => {
-      setStats({ docs: docs.total, approvals: approvals.length, feedback: feedback.length, sr: sr.length })
+      setStats({ docs: docs.total, approvals: approvals.total, feedback: feedback.length, sr: sr.length })
       setRecentDocs(docs.documents.slice(0, 5))
       setDashboard(dashData)
     }).catch(() => {})
