@@ -269,7 +269,7 @@ export function ServiceRequests() {
                       <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
                       <div className="flex items-center gap-3 mt-2">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
-                          {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : "낮음"}
+                          {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : sr.priority === "low" ? "낮음" : "최저"}
                         </span>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getStatusStyle(sr.status)}`}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current" />
