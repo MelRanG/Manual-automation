@@ -67,7 +67,7 @@ async def create_jira_issue(config: JiraConfig, draft: SRDraft) -> dict:
                 "version": 1,
                 "content": [{"type": "paragraph", "content": [{"type": "text", "text": draft.description}]}],
             },
-            "priority": {"name": draft.priority.capitalize()},
+            "priority": {"name": {"critical": "Highest", "high": "High", "medium": "Medium", "low": "Low"}.get(draft.priority, "Medium")},
             "issuetype": {"name": "Task"},
             "labels": ["docops-ai", "auto-generated"],
         }
