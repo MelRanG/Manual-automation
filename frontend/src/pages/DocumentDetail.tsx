@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import jsPDF from "jspdf"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { api } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 
@@ -221,10 +223,10 @@ export function DocumentDetail() {
             </div>
             <div className="px-8 py-6">
               {versions && versions.length > 0 ? (
-                <div className="prose prose-sm max-w-none text-[#191c1e] leading-relaxed">
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-7 text-[#191c1e] bg-transparent p-0 border-none">
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {versions[0].content}
-                  </pre>
+                  </ReactMarkdown>
                 </div>
               ) : (
                 <p className="text-sm text-[#757684] italic">문서 내용이 없습니다.</p>

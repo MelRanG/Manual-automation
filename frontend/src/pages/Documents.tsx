@@ -2,8 +2,10 @@ import { useState } from "react"
 import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
+import { useAuth } from "@/contexts/AuthContext"
 
 export function Documents() {
+  const { user } = useAuth()
   const { data, loading, refetch } = useApi(() => api.listDocuments(0, 50), [])
   const [showCreate, setShowCreate] = useState(false)
   const [title, setTitle] = useState("")
@@ -21,7 +23,7 @@ export function Documents() {
     if (!title.trim()) return
     setCreating(true)
     try {
-      await api.createDocument({ title, description: description || undefined }, content)
+      await api.createDocument({ title, description: description || undefined, owner_id: user?.id }, content)
       setTitle("")
       setDescription("")
       setContent("")
@@ -38,6 +40,7 @@ export function Documents() {
     const form = new FormData()
     form.append("file", file)
     form.append("title", file.name)
+    if (user?.id) form.append("owner_id", user.id)
     await api.uploadDocument(form)
     refetch()
   }
