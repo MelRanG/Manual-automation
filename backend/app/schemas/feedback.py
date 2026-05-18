@@ -32,6 +32,7 @@ class ProposedChangeResponse(BaseModel):
     feedback_report_id: uuid.UUID | None
     document_id: uuid.UUID | None
     document_version_id: uuid.UUID | None
+    manual_job_id: uuid.UUID | None = None
     original_text: str
     proposed_text: str
     diff: str

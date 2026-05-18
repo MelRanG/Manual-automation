@@ -11,7 +11,7 @@ async def test_full_approval_workflow(client: AsyncClient, test_user: dict):
     }, params={"content": "Original content here."})
     doc_id = doc_resp.json()["id"]
 
-    # Report feedback -> generates proposal
+    # Report feedback -> generates proposal + auto-creates approval
     fb_resp = await client.post("/api/feedback", json={
         "user_id": test_user["id"],
         "document_id": doc_id,
@@ -19,16 +19,19 @@ async def test_full_approval_workflow(client: AsyncClient, test_user: dict):
     })
     proposal_id = fb_resp.json()["proposed_change"]["id"]
 
-    # Create approval request
-    approval_resp = await client.post(f"/api/approvals/{proposal_id}")
-    assert approval_resp.status_code == 201
-    approval_id = approval_resp.json()["id"]
-    assert approval_resp.json()["status"] == "pending"
-
-    # List pending approvals
-    list_resp = await client.get("/api/approvals")
+    # Approval is auto-created by feedback endpoint; find it by proposal_id
+    list_resp = await client.get("/api/approvals?status=all&limit=200")
     assert list_resp.status_code == 200
-    assert any(a["id"] == approval_id for a in list_resp.json()["items"])
+    items = list_resp.json()["items"]
+    approval = next((a for a in items if a["proposed_change_id"] == proposal_id), None)
+    assert approval is not None
+    approval_id = approval["id"]
+    assert approval["status"] == "pending"
+
+    # List pending approvals (limit=200 to avoid pagination miss)
+    list_resp2 = await client.get("/api/approvals?limit=200")
+    assert list_resp2.status_code == 200
+    assert any(a["id"] == approval_id for a in list_resp2.json()["items"])
 
     # Approve it
     review_resp = await client.post(f"/api/approvals/{approval_id}/review", json={
@@ -60,8 +63,11 @@ async def test_reject_approval(client: AsyncClient, test_user: dict):
     })
     proposal_id = fb_resp.json()["proposed_change"]["id"]
 
-    approval_resp = await client.post(f"/api/approvals/{proposal_id}")
-    approval_id = approval_resp.json()["id"]
+    # Approval auto-created; find by proposal_id
+    list_resp = await client.get("/api/approvals?status=all&limit=200")
+    approval = next((a for a in list_resp.json()["items"] if a["proposed_change_id"] == proposal_id), None)
+    assert approval is not None
+    approval_id = approval["id"]
 
     review_resp = await client.post(f"/api/approvals/{approval_id}/review", json={
         "reviewer_id": test_user["id"],
@@ -125,9 +131,9 @@ async def test_list_approvals_includes_proposed_change(client: AsyncClient, test
         "feedback_text": "This needs correction",
     })
     proposal_id = fb_resp.json()["proposed_change"]["id"]
-    await client.post(f"/api/approvals/{proposal_id}")
+    # Approval auto-created by feedback endpoint; no need to POST again
 
-    list_resp = await client.get("/api/approvals")
+    list_resp = await client.get("/api/approvals?status=all&limit=200")
     assert list_resp.status_code == 200
     approvals = list_resp.json()["items"]
     assert len(approvals) > 0
@@ -163,12 +169,14 @@ async def test_playwright_manual_approval_flow(client: AsyncClient, test_user: d
     assert job_data["output_document_id"] is None
     assert job_data["status"] == "completed"
 
-    # Approvals 목록에서 playwright 수정안 확인
-    list_resp = await client.get("/api/approvals")
+    # Approvals 목록에서 이 job의 playwright 수정안 확인 (manual_job_id로 정확히 매칭)
+    list_resp = await client.get("/api/approvals?status=all&limit=200")
     approvals = list_resp.json()["items"]
     playwright_approval = next(
         (a for a in approvals
-         if a["proposed_change"] and a["proposed_change"]["source_type"] == "playwright"),
+         if a["proposed_change"]
+         and a["proposed_change"]["source_type"] == "playwright"
+         and a["proposed_change"].get("manual_job_id") == str(job_id)),
         None
     )
     assert playwright_approval is not None
@@ -218,3 +226,5 @@ async def test_list_approvals_status_completed(client: AsyncClient, test_user: d
     data = resp.json()
     for item in data["items"]:
         assert item["status"] in ("approved", "rejected")
+
+
