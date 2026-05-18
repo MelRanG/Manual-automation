@@ -124,6 +124,8 @@ async def update_document(
     if description is not None:
         doc.description = description
 
+    await db.flush()
+
     if content is not None:
         await create_new_version(db, document_id, content, change_summary=change_summary)
         await db.refresh(doc)
