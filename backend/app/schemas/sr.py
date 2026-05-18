@@ -28,6 +28,12 @@ class SRDraftResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SRDraftUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    priority: str | None = None
+
+
 class SRGenerateRequest(BaseModel):
     user_id: uuid.UUID
     document_id: uuid.UUID

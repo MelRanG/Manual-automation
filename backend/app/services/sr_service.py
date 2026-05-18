@@ -167,6 +167,21 @@ async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+async def update_sr_draft(db: AsyncSession, sr_id: uuid.UUID, data: dict) -> SRDraft:
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise ValueError("SR draft not found")
+    if draft.status != "draft":
+        raise PermissionError("Only draft status SR can be edited")
+    for key, value in data.items():
+        if value is not None:
+            setattr(draft, key, value)
+    await db.commit()
+    await db.refresh(draft)
+    return draft
+
+
 async def list_sr_drafts(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[SRDraft]:
     stmt = select(SRDraft).order_by(SRDraft.created_at.desc())
     if user_id:

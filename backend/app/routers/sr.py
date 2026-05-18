@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.sr import WebhookDeliveryLog
-from app.schemas.sr import SRDraftCreate, SRDraftResponse, SRGenerateRequest
+from app.schemas.sr import SRDraftCreate, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
 from app.services import sr_service
 
 router = APIRouter(prefix="/api/sr", tags=["service-requests"])
@@ -39,6 +39,20 @@ async def submit_sr(
         return await sr_service.submit_sr(db, sr_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.patch("/drafts/{sr_id}", response_model=SRDraftResponse)
+async def update_sr_draft(
+    sr_id: uuid.UUID,
+    data: SRDraftUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        return await sr_service.update_sr_draft(db, sr_id, data.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/drafts", response_model=list[SRDraftResponse])

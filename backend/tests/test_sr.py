@@ -66,3 +66,39 @@ async def test_list_sr_drafts(client: AsyncClient, test_user: dict):
     resp = await client.get("/api/sr/drafts", params={"user_id": test_user["id"]})
     assert resp.status_code == 200
     assert len(resp.json()) >= 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_update_sr_draft(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Original Title",
+        "description": "Original description",
+        "priority": "low",
+    })
+    sr_id = create_resp.json()["id"]
+
+    resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={
+        "title": "Updated Title",
+        "priority": "high",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Updated Title"
+    assert data["priority"] == "high"
+    assert data["description"] == "Original description"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_update_submitted_sr_fails(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "To Submit",
+        "description": "desc",
+        "priority": "low",
+    })
+    sr_id = create_resp.json()["id"]
+    await client.post(f"/api/sr/drafts/{sr_id}/submit")
+
+    resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={"title": "New Title"})
+    assert resp.status_code == 400
