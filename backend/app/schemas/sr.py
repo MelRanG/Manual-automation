@@ -30,6 +30,11 @@ class SRDraftResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SRDraftListResponse(BaseModel):
+    items: list[SRDraftResponse]
+    total: int
+
+
 class SRDraftUpdate(BaseModel):
     title: str | None = None
     description: str | None = None

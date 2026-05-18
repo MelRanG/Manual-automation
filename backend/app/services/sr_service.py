@@ -212,8 +212,9 @@ async def list_sr_drafts(
         stmt = stmt.where(SRDraft.user_id == user_id)
     if status is not None:
         statuses = STATUS_MAP.get(status)
-        if statuses:
-            stmt = stmt.where(SRDraft.status.in_(statuses))
+        if statuses is None:
+            raise ValueError(f"Invalid status filter: {status}")
+        stmt = stmt.where(SRDraft.status.in_(statuses))
     count_stmt = select(func.count()).select_from(stmt.subquery())
     total = (await db.execute(count_stmt)).scalar_one()
     stmt = stmt.order_by(SRDraft.created_at.desc()).offset(skip).limit(limit)

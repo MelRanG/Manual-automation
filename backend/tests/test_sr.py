@@ -145,7 +145,10 @@ async def test_list_sr_drafts_status_filter_done(client: AsyncClient, test_user:
     assert resp.status_code == 200
     data = resp.json()
     assert "items" in data
-    assert all(item["status"] in ("done_synced", "done_no_proposal") for item in data["items"])
+    assert "total" in data
+    # done 상태 SR은 테스트 환경에서 생성되지 않으므로 0건 확인
+    assert data["total"] == 0
+    assert data["items"] == []
 
 
 @pytest.mark.asyncio(loop_scope="session")
