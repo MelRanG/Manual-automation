@@ -1,11 +1,83 @@
-import { useParams, Link } from "react-router-dom"
+import { useState, useRef, useEffect } from "react"
+import { useParams, Link, useNavigate } from "react-router-dom"
+import jsPDF from "jspdf"
 import { api } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 
 export function DocumentDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { data: doc } = useApi(() => api.getDocument(id!), [id])
   const { data: versions } = useApi(() => api.getVersions(id!), [id])
+
+  const [deleteStep, setDeleteStep] = useState<"idle" | "confirm">("idle")
+  const [deleting, setDeleting] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const exportRef = useRef<HTMLDivElement>(null)
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await api.deleteDocument(id!)
+      navigate("/documents")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleExport = async (format: "txt" | "md") => {
+    setExportOpen(false)
+    const resp = await api.exportDocument(id!, format)
+    if (!resp.ok) return
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${doc?.title ?? "document"}.${format}`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExportPdf = () => {
+    setExportOpen(false)
+    if (!doc || !versions || versions.length === 0) return
+    const pdf = new jsPDF()
+    const content = versions[0].content
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const margin = 20
+    const maxWidth = pageWidth - margin * 2
+
+    pdf.setFont("helvetica", "bold")
+    pdf.setFontSize(16)
+    pdf.text(doc.title, margin, 20)
+
+    pdf.setFont("helvetica", "normal")
+    pdf.setFontSize(10)
+    let y = 32
+
+    const lines = pdf.splitTextToSize(content, maxWidth) as string[]
+    for (const line of lines) {
+      if (y > 270) {
+        pdf.addPage()
+        y = 20
+      }
+      pdf.text(line, margin, y)
+      y += 6
+    }
+
+    pdf.save(`${doc.title}.pdf`)
+  }
 
   if (!doc) return (
     <div className="p-8 flex items-center justify-center h-full">
@@ -51,15 +123,82 @@ export function DocumentDetail() {
             </span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors">
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {/* 편집 */}
+          <Link
+            to={`/documents/${id}/edit`}
+            className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors"
+          >
             <span className="material-symbols-outlined text-base">edit</span>
             편집
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] transition-colors shadow-sm">
-            <span className="material-symbols-outlined text-base">download</span>
-            내보내기
-          </button>
+          </Link>
+
+          {/* 삭제 — 2단계 confirm */}
+          {deleteStep === "idle" ? (
+            <button
+              onClick={() => setDeleteStep("confirm")}
+              className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#444653] hover:bg-[#fff0f0] hover:border-[#ba1a1a] hover:text-[#ba1a1a] transition-colors"
+            >
+              <span className="material-symbols-outlined text-base">delete</span>
+              삭제
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-2 border border-[#ba1a1a] rounded-lg bg-[#fff0f0]">
+              <span className="text-xs text-[#ba1a1a] font-medium">정말 삭제할까요?</span>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-3 py-1 bg-[#ba1a1a] text-white text-xs rounded-md font-medium hover:bg-[#93000a] transition-colors disabled:opacity-50"
+              >
+                {deleting ? "삭제 중..." : "삭제"}
+              </button>
+              <button
+                onClick={() => setDeleteStep("idle")}
+                className="px-3 py-1 text-xs text-[#444653] hover:text-[#191c1e] transition-colors"
+              >
+                취소
+              </button>
+            </div>
+          )}
+
+          {/* 내보내기 드롭다운 */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setExportOpen(o => !o)}
+              className="flex items-center gap-2 px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] transition-colors shadow-sm"
+            >
+              <span className="material-symbols-outlined text-base">download</span>
+              내보내기
+              <span className="material-symbols-outlined text-sm">expand_more</span>
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-[#c4c5d5] rounded-lg shadow-lg z-10 overflow-hidden">
+                <button
+                  onClick={() => handleExport("txt")}
+                  className="w-full px-4 py-2.5 text-left text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base text-[#757684]">description</span>
+                  텍스트 (.txt)
+                </button>
+                <button
+                  onClick={() => handleExport("md")}
+                  className="w-full px-4 py-2.5 text-left text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base text-[#757684]">code</span>
+                  마크다운 (.md)
+                </button>
+                <button
+                  onClick={handleExportPdf}
+                  className="w-full px-4 py-2.5 text-left text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-base text-[#757684]">picture_as_pdf</span>
+                  PDF (.pdf)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
