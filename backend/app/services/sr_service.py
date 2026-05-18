@@ -87,9 +87,27 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
 
     draft.status = "submitted"
 
-    webhook_result = await deliver_webhook(db, draft)
-    await db.commit()
-    return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+    from app.services import jira_service
+    config = await jira_service.get_active_config(db)
+
+    if config:
+        try:
+            issue = await jira_service.create_jira_issue(config, draft)
+            draft.jira_issue_key = issue["key"]
+            draft.jira_issue_url = issue["url"]
+            draft.status = "jira_created"
+            await db.commit()
+            return {"sr_id": str(sr_id), "status": "jira_created", "jira_issue_key": issue["key"]}
+        except Exception as e:
+            logger.error(f"Jira issue creation failed: {e}")
+            # fallback: webhook 시도
+            webhook_result = await deliver_webhook(db, draft)
+            await db.commit()
+            return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+    else:
+        webhook_result = await deliver_webhook(db, draft)
+        await db.commit()
+        return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
 
 
 async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
