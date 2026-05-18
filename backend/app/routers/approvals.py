@@ -8,7 +8,7 @@ from app.db import get_db
 from app.models.document import Document
 from app.models.feedback import FeedbackReport, ProposedDocumentChange
 from app.routers.notifications import create_notification
-from app.schemas.approval import ApprovalAction, ApprovalRequestResponse
+from app.schemas.approval import ApprovalAction, ApprovalRequestResponse, ApprovalListResponse
 from app.services import approval_service
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
@@ -76,12 +76,15 @@ async def review_approval(
     return result
 
 
-@router.get("", response_model=list[ApprovalRequestResponse])
+@router.get("", response_model=ApprovalListResponse)
 async def list_pending_approvals(
     status: str = "pending",
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    return await approval_service.list_pending_approvals(db, status=status)
+    items, total = await approval_service.list_pending_approvals(db, status=status, skip=skip, limit=limit)
+    return ApprovalListResponse(items=items, total=total)
 
 
 @router.get("/{approval_id}", response_model=ApprovalRequestResponse)

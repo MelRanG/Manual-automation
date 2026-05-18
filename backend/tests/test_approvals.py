@@ -28,7 +28,7 @@ async def test_full_approval_workflow(client: AsyncClient, test_user: dict):
     # List pending approvals
     list_resp = await client.get("/api/approvals")
     assert list_resp.status_code == 200
-    assert any(a["id"] == approval_id for a in list_resp.json())
+    assert any(a["id"] == approval_id for a in list_resp.json()["items"])
 
     # Approve it
     review_resp = await client.post(f"/api/approvals/{approval_id}/review", json={
@@ -129,7 +129,7 @@ async def test_list_approvals_includes_proposed_change(client: AsyncClient, test
 
     list_resp = await client.get("/api/approvals")
     assert list_resp.status_code == 200
-    approvals = list_resp.json()
+    approvals = list_resp.json()["items"]
     assert len(approvals) > 0
     target = next((a for a in approvals if a["proposed_change_id"] == proposal_id), None)
     assert target is not None
@@ -165,7 +165,7 @@ async def test_playwright_manual_approval_flow(client: AsyncClient, test_user: d
 
     # Approvals 목록에서 playwright 수정안 확인
     list_resp = await client.get("/api/approvals")
-    approvals = list_resp.json()
+    approvals = list_resp.json()["items"]
     playwright_approval = next(
         (a for a in approvals
          if a["proposed_change"] and a["proposed_change"]["source_type"] == "playwright"),
@@ -185,3 +185,36 @@ async def test_playwright_manual_approval_flow(client: AsyncClient, test_user: d
     # 승인 후 job의 output_document_id가 설정됐는지 확인
     job_resp2 = await client.get(f"/api/manuals/jobs/{job_id}")
     assert job_resp2.json()["output_document_id"] is not None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_approvals_pagination(client: AsyncClient, test_user: dict):
+    # 응답이 { items, total } 형태인지 확인
+    resp = await client.get("/api/approvals?status=all&skip=0&limit=5")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert isinstance(data["items"], list)
+    assert isinstance(data["total"], int)
+    assert len(data["items"]) <= 5
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_approvals_status_processing(client: AsyncClient, test_user: dict):
+    # processing = pending + needs_review
+    resp = await client.get("/api/approvals?status=processing")
+    assert resp.status_code == 200
+    data = resp.json()
+    for item in data["items"]:
+        assert item["status"] in ("pending", "needs_review")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_approvals_status_completed(client: AsyncClient, test_user: dict):
+    # completed = approved + rejected
+    resp = await client.get("/api/approvals?status=completed")
+    assert resp.status_code == 200
+    data = resp.json()
+    for item in data["items"]:
+        assert item["status"] in ("approved", "rejected")

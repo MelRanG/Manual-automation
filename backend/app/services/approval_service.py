@@ -154,24 +154,35 @@ async def review_approval(
 
 
 async def list_pending_approvals(
-    db: AsyncSession, status: str = "pending"
-) -> list[ApprovalRequest]:
-    if status == "all":
-        stmt = (
-            select(ApprovalRequest)
-            .options(selectinload(ApprovalRequest.proposed_change))
-            .order_by(ApprovalRequest.created_at.asc())
-        )
-    else:
-        statuses = ["pending", "needs_review"] if status == "needs_review" else ["pending"]
-        stmt = (
-            select(ApprovalRequest)
-            .options(selectinload(ApprovalRequest.proposed_change))
-            .where(ApprovalRequest.status.in_(statuses))
-            .order_by(ApprovalRequest.created_at.asc())
-        )
+    db: AsyncSession, status: str = "pending", skip: int = 0, limit: int = 20
+) -> tuple[list[ApprovalRequest], int]:
+    from sqlalchemy import func
+
+    status_map = {
+        "processing": ["pending", "needs_review"],
+        "completed": ["approved", "rejected"],
+        "all": None,
+        "pending": ["pending"],
+        "needs_review": ["pending", "needs_review"],
+    }
+    statuses = status_map.get(status, ["pending"])
+
+    base = select(ApprovalRequest)
+    if statuses is not None:
+        base = base.where(ApprovalRequest.status.in_(statuses))
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    stmt = (
+        base
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .order_by(ApprovalRequest.created_at.asc())
+        .offset(skip)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total
 
 
 async def get_approval(db: AsyncSession, approval_id: uuid.UUID) -> ApprovalRequest | None:
