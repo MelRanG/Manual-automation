@@ -127,4 +127,31 @@ async def list_callback_logs(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(JiraCallbackLog).order_by(JiraCallbackLog.created_at.desc()).limit(50)
     )
-    return list(result.scalars().all())
+    logs = result.scalars().all()
+
+    sr_ids = [log.sr_draft_id for log in logs if log.sr_draft_id]
+    sr_titles: dict = {}
+    if sr_ids:
+        sr_result = await db.execute(
+            select(SRDraft.id, SRDraft.title).where(SRDraft.id.in_(sr_ids))
+        )
+        sr_titles = {row.id: row.title for row in sr_result}
+
+    items = []
+    for log in logs:
+        payload = log.payload or {}
+        issue_fields = payload.get("issue", {}).get("fields", {})
+        status_obj = issue_fields.get("status", {})
+        items.append(JiraCallbackLogResponse(
+            id=log.id,
+            jira_issue_key=log.jira_issue_key,
+            event_type=log.event_type,
+            sr_draft_id=log.sr_draft_id,
+            sr_title=sr_titles.get(log.sr_draft_id) if log.sr_draft_id else None,
+            jira_issue_summary=issue_fields.get("summary"),
+            jira_issue_status=status_obj.get("name"),
+            jira_issue_status_category=status_obj.get("statusCategory", {}).get("key"),
+            status=log.status,
+            created_at=log.created_at,
+        ))
+    return items

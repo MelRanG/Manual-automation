@@ -108,6 +108,20 @@ export function WebhookLogs() {
     return "bg-[#ffdad6] text-[#93000a]"
   }
 
+  const getJiraStatusStyle = (category: string | null) => {
+    if (category === "done") return "bg-[#d5e3fc] text-[#16a34a]"
+    if (category === "indeterminate") return "bg-[#dde1ff] text-[#00288e]"
+    if (category === "new") return "bg-[#e6e8ea] text-[#444653]"
+    return "bg-[#e6e8ea] text-[#444653]"
+  }
+
+  const formatEventType = (event: string) => {
+    if (event === "jira:issue_updated") return "이슈 업데이트"
+    if (event === "jira:issue_created") return "이슈 생성"
+    if (event === "jira:issue_deleted") return "이슈 삭제"
+    return event
+  }
+
   const getOutboundStatusStyle = (status: string) => {
     if (status === "delivered") return "bg-[#d5e3fc] text-[#16a34a]"
     if (status === "skipped") return "bg-[#e6e8ea] text-[#444653]"
@@ -225,42 +239,50 @@ export function WebhookLogs() {
             <p className="mt-4 text-sm text-[#757684]">Jira에서 수신된 콜백이 없습니다</p>
           </div>
         ) : (
-          <div className="bg-white border border-[#c4c5d5] rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-[#e0e3e5] bg-[#f7f9fb]">
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-[#444653]">이슈 키</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#444653]">이벤트</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#444653]">연결 SR</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#444653]">처리 결과</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#444653]">시간</th>
-                </tr>
-              </thead>
-              <tbody>
-                {callbackLogs.map(log => (
-                  <tr key={log.id} className="border-b border-[#e0e3e5] last:border-0 hover:bg-[#f7f9fb] transition-colors">
-                    <td className="px-6 py-3">
-                      <span className="text-sm font-mono font-semibold text-[#00288e]">{log.jira_issue_key}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-[#757684]">{log.event_type}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs text-[#757684] font-mono">{log.sr_draft_id ? log.sr_draft_id.slice(0, 8) + "..." : "-"}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getCallbackStatusStyle(log.status)}`}>
-                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                        {log.status === "processed" ? "처리됨" : log.status === "skipped" ? "건너뜀" : log.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[#757684]">
-                      {new Date(log.created_at).toLocaleString("ko-KR")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {callbackLogs.map(log => (
+              <div key={log.id} className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-[#e8f0fe] flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-lg text-[#1a56db]">webhook</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-mono font-bold text-[#00288e]">{log.jira_issue_key}</span>
+                        {log.jira_issue_status && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getJiraStatusStyle(log.jira_issue_status_category)}`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                            {log.jira_issue_status}
+                          </span>
+                        )}
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getCallbackStatusStyle(log.status)}`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {log.status === "processed" ? "처리됨" : log.status === "skipped" ? "건너뜀" : log.status}
+                        </span>
+                      </div>
+                      {log.jira_issue_summary && (
+                        <p className="text-sm font-medium text-[#191c1e] mt-1 truncate">{log.jira_issue_summary}</p>
+                      )}
+                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                        <span className="text-xs text-[#757684]">{formatEventType(log.event_type)}</span>
+                        {log.sr_title ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-[#444653]">
+                            <span className="material-symbols-outlined text-[12px]">confirmation_number</span>
+                            {log.sr_title}
+                          </span>
+                        ) : log.sr_draft_id ? (
+                          <span className="text-[11px] text-[#757684] font-mono">{log.sr_draft_id.slice(0, 8)}…</span>
+                        ) : (
+                          <span className="text-[11px] text-[#c4c5d5]">연결된 SR 없음</span>
+                        )}
+                        <span className="text-[11px] text-[#757684]">{new Date(log.created_at).toLocaleString("ko-KR")}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )
       )}

@@ -182,6 +182,10 @@ export interface JiraCallbackLog {
   jira_issue_key: string
   event_type: string
   sr_draft_id: string | null
+  sr_title: string | null
+  jira_issue_summary: string | null
+  jira_issue_status: string | null
+  jira_issue_status_category: string | null
   status: string
   created_at: string
 }

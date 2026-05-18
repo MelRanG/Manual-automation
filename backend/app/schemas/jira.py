@@ -32,6 +32,10 @@ class JiraCallbackLogResponse(BaseModel):
     jira_issue_key: str
     event_type: str
     sr_draft_id: uuid.UUID | None
+    sr_title: str | None = None
+    jira_issue_summary: str | None = None
+    jira_issue_status: str | None = None
+    jira_issue_status_category: str | None = None
     status: str
     created_at: datetime
 
