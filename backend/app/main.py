@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import auth, documents, users, chat, feedback, approvals, trust, sr, change_impact, manual, widget, notifications
+from app.routers import auth, documents, users, chat, feedback, approvals, trust, sr, change_impact, manual, widget, notifications, jira
 from app.seed import seed
 from app.services.document_service import UPLOAD_DIR
 
@@ -34,6 +34,7 @@ app.include_router(feedback.router)
 app.include_router(approvals.router)
 app.include_router(trust.router)
 app.include_router(sr.router)
+app.include_router(jira.router)
 app.include_router(change_impact.router)
 app.include_router(manual.router)
 app.include_router(widget.router)

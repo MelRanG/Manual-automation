@@ -65,3 +65,22 @@ def test_is_done_custom_status_names_no_match():
 def test_mask_token():
     assert jira_service.mask_token("abcdefgh") == "****efgh"
     assert jira_service.mask_token("ab") == "****"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_skipped_no_config(client):
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": "TEST-999",
+            "fields": {
+                "status": {
+                    "name": "Done",
+                    "statusCategory": {"key": "done"},
+                }
+            },
+        },
+    }
+    resp = await client.post("/api/jira/webhook", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "skipped"
