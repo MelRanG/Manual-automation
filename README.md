@@ -11,7 +11,7 @@
 docker compose up db -d
 
 # 백엔드 (포트 8000)
-cd backend && uv sync && uv run uvicorn app.main:app --reload --port 8000
+cd backend && uv sync && uv run alembic upgrade head && uv run uvicorn app.main:app --reload --port 8000
 
 # 프론트엔드 (포트 5173)
 cd frontend && pnpm install && pnpm dev
@@ -206,7 +206,6 @@ uv run alembic revision --autogenerate -m "설명"
 
 - **DOCX/XLSX/PPTX 파일 업로드**: 현재 바이너리를 UTF-8로 디코딩해서 저장 → 깨짐. 뷰어 미구현.
   - 방향: mammoth.js(DOCX) + SheetJS(XLSX) 클라이언트 렌더링, PPTX는 서버 변환 또는 미지원
-- **Jira 양방향 연동**: SR/변경사항 ↔ Jira 이슈 동기화 미구현
 - **임베딩/벡터 검색**: `EMBEDDING_MODEL=mock` 상태 — 실제 RAG는 동작하지 않음
 - **위젯**: `frontend/src/widget/` 에 embeddable 챗봇 위젯 코드 존재, 별도 번들 빌드
 
