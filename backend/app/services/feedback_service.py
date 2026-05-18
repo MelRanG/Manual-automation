@@ -92,6 +92,7 @@ async def generate_correction(
         diff=diff or "(no difference detected)",
         reasoning=f"AI correction based on feedback: {feedback.feedback_text[:200]}",
         confidence=0.8,
+        source_type="feedback",
         status="pending",
     )
     db.add(proposal)
@@ -109,7 +110,22 @@ async def list_feedback(
     if document_id:
         stmt = stmt.where(FeedbackReport.document_id == document_id)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    reports = list(result.scalars().all())
+
+    # document_title을 동적 속성으로 설정 (ORM 컬럼 아님)
+    doc_ids = {r.document_id for r in reports if r.document_id}
+    if doc_ids:
+        doc_result = await db.execute(
+            select(Document.id, Document.title).where(Document.id.in_(doc_ids))
+        )
+        title_map = {row.id: row.title for row in doc_result}
+        for report in reports:
+            report.__dict__["document_title"] = title_map.get(report.document_id)
+    else:
+        for report in reports:
+            report.__dict__["document_title"] = None
+
+    return reports
 
 
 async def get_proposed_change(
