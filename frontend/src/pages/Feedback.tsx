@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext"
 
 interface DocumentPickerDropdownProps {
   value: string
-  onChange: (id: string, title: string) => void
+  onChange: (id: string) => void
   onClear: () => void
 }
 
@@ -17,7 +17,9 @@ function DocumentPickerDropdown({ value, onChange, onClear }: DocumentPickerDrop
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    api.listDocuments(0, 100).then(res => setDocuments(res.documents))
+    api.listDocuments(0, 100)
+      .then(res => setDocuments(res.documents))
+      .catch((err) => console.error("문서 목록 로드 실패:", err))
   }, [])
 
   useEffect(() => {
@@ -77,7 +79,7 @@ function DocumentPickerDropdown({ value, onChange, onClear }: DocumentPickerDrop
               filtered.map(doc => (
                 <li
                   key={doc.id}
-                  onClick={() => { onChange(doc.id, doc.title); setOpen(false); setQuery("") }}
+                  onClick={() => { onChange(doc.id); setOpen(false); setQuery("") }}
                   className="px-4 py-3 cursor-pointer hover:bg-[#f0f0ff] border-b border-[#f0f0f5] last:border-0 transition-colors"
                 >
                   <p className="text-sm font-semibold text-[#1a1b25]">{doc.title}</p>
