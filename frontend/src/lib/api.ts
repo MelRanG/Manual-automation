@@ -72,6 +72,12 @@ export const api = {
     }),
   uploadDocument: (form: FormData) =>
     fetch(`${BASE}/documents/upload`, { method: 'POST', body: form }).then(r => r.json()),
+  updateDocument: (id: string, data: { title?: string; description?: string; content?: string; change_summary?: string }) =>
+    request<Document>(`/documents/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteDocument: (id: string) =>
+    request<{ message: string }>(`/documents/${id}`, { method: 'DELETE' }),
+  exportDocument: (id: string, format: 'txt' | 'md') =>
+    fetch(`${BASE}/documents/${id}/export?format=${format}`, { headers: getAuthHeaders() }),
 
   // Chat
   createSession: (userId: string, title?: string) =>
