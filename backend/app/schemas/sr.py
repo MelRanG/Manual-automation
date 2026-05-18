@@ -10,6 +10,7 @@ class SRDraftCreate(BaseModel):
     description: str
     priority: str = "medium"
     related_document_ids: list[uuid.UUID] | None = None
+    target_url: str | None = None
 
 
 class SRDraftResponse(BaseModel):
@@ -23,6 +24,7 @@ class SRDraftResponse(BaseModel):
     created_by_ai: bool
     jira_issue_key: str | None = None
     jira_issue_url: str | None = None
+    target_url: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
