@@ -83,9 +83,12 @@ async def review_approval(
             from app.models.manual import ManualGenerationJob
             from sqlalchemy import select as _select
 
+            prefix = "Playwright auto-generated manual for "
+            url_part = change.reasoning[len(prefix):] if change.reasoning.startswith(prefix) else change.reasoning
+            title = f"사용자 매뉴얼 - {url_part[:40]}"
             doc = Document(
                 id=uuid.uuid4(),
-                title=f"사용자 매뉴얼 - {change.reasoning.replace('Playwright auto-generated manual for ', '')[:40]}",
+                title=title,
                 description="Playwright 자동 생성 후 승인된 매뉴얼",
                 owner_id=reviewer_id,
                 status="active",
@@ -118,11 +121,16 @@ async def review_approval(
                 if job:
                     job.output_document_id = doc.id
         else:
+            if action == "edit_and_approve":
+                summary_prefix = f"Applied with reviewer edits: {comment or ''}"
+            else:
+                summary_prefix = "Applied approved correction: "
+            change_summary = f"{summary_prefix}{change.reasoning[:100]}"
             await create_new_version(
                 db,
                 change.document_id,
                 final_content,
-                change_summary=f"Applied {'with reviewer edits: ' + (comment or '') if action == 'edit_and_approve' else 'approved correction: '}{change.reasoning[:100]}",
+                change_summary=change_summary,
                 created_by=reviewer_id,
             )
     elif action == "request_review":
