@@ -172,3 +172,44 @@ async def test_delete_document(client: AsyncClient, test_user: dict):
 async def test_delete_document_not_found(client: AsyncClient):
     resp = await client.delete("/api/documents/00000000-0000-0000-0000-000000000000")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_export_document_txt(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/documents", json={
+        "title": "Export Me",
+        "owner_id": test_user["id"],
+    }, params={"content": "export content"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.get(f"/api/documents/{doc_id}/export?format=txt")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+    assert "attachment" in resp.headers["content-disposition"]
+    assert resp.text == "export content"
+
+
+@pytest.mark.asyncio
+async def test_export_document_md(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/documents", json={
+        "title": "Export MD",
+        "owner_id": test_user["id"],
+    }, params={"content": "# heading"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.get(f"/api/documents/{doc_id}/export?format=md")
+    assert resp.status_code == 200
+    assert "text/markdown" in resp.headers["content-type"]
+    assert resp.text == "# heading"
+
+
+@pytest.mark.asyncio
+async def test_export_document_invalid_format(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/documents", json={
+        "title": "Export Bad",
+        "owner_id": test_user["id"],
+    }, params={"content": "x"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.get(f"/api/documents/{doc_id}/export?format=docx")
+    assert resp.status_code == 400
