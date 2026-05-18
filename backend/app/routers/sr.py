@@ -50,9 +50,10 @@ async def update_sr_draft(
     try:
         return await sr_service.update_sr_draft(db, sr_id, data.model_dump(exclude_none=True))
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        if "not found" in msg:
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
 
 
 @router.get("/drafts", response_model=list[SRDraftResponse])

@@ -98,7 +98,8 @@ async def test_update_submitted_sr_fails(client: AsyncClient, test_user: dict):
         "priority": "low",
     })
     sr_id = create_resp.json()["id"]
-    await client.post(f"/api/sr/drafts/{sr_id}/submit")
+    submit_resp = await client.post(f"/api/sr/drafts/{sr_id}/submit")
+    assert submit_resp.status_code == 200
 
     resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={"title": "New Title"})
     assert resp.status_code == 400
