@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.models.jira import JiraCallbackLog
+from app.models.jira import JiraCallbackLog, JiraConfig
 from app.models.sr import SRDraft
 from app.schemas.jira import (
     JiraCallbackLogResponse,
@@ -55,8 +55,7 @@ async def save_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/config/test", response_model=JiraConnectionTestResult)
-async def test_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)):
-    from app.models.jira import JiraConfig
+async def test_config(data: JiraConfigUpsert):
     temp = JiraConfig(
         base_url=data.base_url,
         user_email=data.user_email,
