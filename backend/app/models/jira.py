@@ -28,3 +28,4 @@ class JiraCallbackLog(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("sr_drafts.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String(50), default="pending")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

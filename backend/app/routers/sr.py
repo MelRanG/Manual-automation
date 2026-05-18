@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.sr import WebhookDeliveryLog
-from app.schemas.sr import SRDraftCreate, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
+from app.schemas.sr import SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
 from app.services import sr_service
 
 router = APIRouter(prefix="/api/sr", tags=["service-requests"])
@@ -56,12 +56,19 @@ async def update_sr_draft(
         raise HTTPException(status_code=400, detail=msg)
 
 
-@router.get("/drafts", response_model=list[SRDraftResponse])
+@router.get("/drafts", response_model=SRDraftListResponse)
 async def list_sr_drafts(
     user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    return await sr_service.list_sr_drafts(db, user_id)
+    try:
+        items, total = await sr_service.list_sr_drafts(db, user_id, status, skip, limit)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"items": items, "total": total}
 
 
 @router.get("/webhook-logs")

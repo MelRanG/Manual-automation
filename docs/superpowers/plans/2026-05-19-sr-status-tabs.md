@@ -1,3 +1,241 @@
+# SR 상태 탭 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** SR 목록 페이지를 초안/진행중/완료 탭으로 분리하고 Approvals와 동일한 패턴으로 페이지네이션을 추가한다.
+
+**Architecture:** 백엔드 `list_sr_drafts()`에 status 필터와 페이지네이션을 추가하고, 프론트엔드 `ServiceRequests.tsx`를 Approvals와 동일한 탭+배지+페이지네이션 패턴으로 재구성한다.
+
+**Tech Stack:** Python FastAPI, SQLAlchemy async, pytest, React + TypeScript, Tailwind CSS
+
+---
+
+## 파일 구조
+
+| 파일 | 변경 유형 | 내용 |
+|---|---|---|
+| `backend/app/services/sr_service.py` | 수정 | `list_sr_drafts()` — status 필터, skip/limit, total 반환 |
+| `backend/app/routers/sr.py` | 수정 | `GET /api/sr/drafts` — 파라미터 추가, 응답 형식 변경 |
+| `backend/tests/test_sr.py` | 수정 | 필터/페이지네이션 테스트 5개 추가 |
+| `frontend/src/lib/api.ts` | 수정 | `listSRDrafts` 시그니처 변경, `SRListResponse` 타입 추가 |
+| `frontend/src/pages/ServiceRequests.tsx` | 수정 | 탭 3개 + 배지 + 페이지네이션 추가 |
+
+---
+
+### Task 1: 백엔드 — list_sr_drafts에 필터/페이지네이션 추가
+
+**Files:**
+- Modify: `backend/app/services/sr_service.py:195-200`
+- Modify: `backend/app/routers/sr.py:59-64`
+- Test: `backend/tests/test_sr.py`
+
+- [ ] **Step 1: 테스트 작성**
+
+`backend/tests/test_sr.py` 파일 끝에 추가:
+
+```python
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_status_filter_draft(client: AsyncClient, test_user: dict):
+    await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Draft Filter Test",
+        "description": "desc",
+        "priority": "medium",
+    })
+    resp = await client.get("/api/sr/drafts", params={"status": "draft"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert all(item["status"] == "draft" for item in data["items"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_status_filter_active(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Active Filter Test",
+        "description": "desc",
+        "priority": "medium",
+    })
+    sr_id = create_resp.json()["id"]
+    await client.post(f"/api/sr/drafts/{sr_id}/submit")
+
+    resp = await client.get("/api/sr/drafts", params={"status": "active"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert all(item["status"] in ("submitted", "jira_created") for item in data["items"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_status_filter_done(client: AsyncClient, test_user: dict):
+    resp = await client.get("/api/sr/drafts", params={"status": "done"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert all(item["status"] in ("done_synced", "done_no_proposal") for item in data["items"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_pagination(client: AsyncClient, test_user: dict):
+    resp = await client.get("/api/sr/drafts", params={"skip": 0, "limit": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert len(data["items"]) <= 2
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_total_count(client: AsyncClient, test_user: dict):
+    resp_all = await client.get("/api/sr/drafts")
+    total = resp_all.json()["total"]
+    resp_p1 = await client.get("/api/sr/drafts", params={"skip": 0, "limit": 1})
+    assert resp_p1.json()["total"] == total
+```
+
+- [ ] **Step 2: 테스트 실행 — 실패 확인**
+
+```bash
+cd backend
+uv run pytest tests/test_sr.py::test_list_sr_drafts_status_filter_draft -v
+```
+
+Expected: FAIL — `assert "items" in data` (현재 응답이 list이므로)
+
+- [ ] **Step 3: sr_service.py — list_sr_drafts 수정**
+
+`backend/app/services/sr_service.py`의 `list_sr_drafts` 함수를 아래로 교체:
+
+```python
+STATUS_MAP = {
+    "draft": ["draft"],
+    "active": ["submitted", "jira_created"],
+    "done": ["done_synced", "done_no_proposal"],
+}
+
+
+async def list_sr_drafts(
+    db: AsyncSession,
+    user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> tuple[list[SRDraft], int]:
+    from sqlalchemy import func
+    stmt = select(SRDraft)
+    if user_id:
+        stmt = stmt.where(SRDraft.user_id == user_id)
+    if status is not None:
+        statuses = STATUS_MAP.get(status)
+        if statuses:
+            stmt = stmt.where(SRDraft.status.in_(statuses))
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+    stmt = stmt.order_by(SRDraft.created_at.desc()).offset(skip).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total
+```
+
+파일 상단 `from sqlalchemy import select` 줄을 확인 — 이미 있으면 추가 불필요.
+
+- [ ] **Step 4: sr.py — 엔드포인트 수정**
+
+`backend/app/routers/sr.py`의 `list_sr_drafts` 엔드포인트를 아래로 교체:
+
+```python
+@router.get("/drafts")
+async def list_sr_drafts(
+    user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+):
+    items, total = await sr_service.list_sr_drafts(db, user_id, status, skip, limit)
+    return {"items": items, "total": total}
+```
+
+기존 `response_model=list[SRDraftResponse]` 제거 (dict 반환이므로).
+
+- [ ] **Step 5: 테스트 실행 — 통과 확인**
+
+```bash
+cd backend
+uv run pytest tests/test_sr.py -v
+```
+
+Expected: 기존 테스트 + 신규 5개 모두 PASS
+
+> 주의: 기존 `test_list_sr_drafts` 테스트가 `list` 응답을 기대하고 있으면 `resp.json()["items"]`로 수정 필요.
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add backend/app/services/sr_service.py backend/app/routers/sr.py backend/tests/test_sr.py
+git commit -m "feat: SR 목록 API — status 필터, skip/limit, total 응답 추가"
+```
+
+---
+
+### Task 2: 프론트엔드 — api.ts 타입 및 함수 수정
+
+**Files:**
+- Modify: `frontend/src/lib/api.ts`
+
+- [ ] **Step 1: SRListResponse 타입 추가 및 listSRDrafts 수정**
+
+`frontend/src/lib/api.ts`에서 `SRDraft` 타입 선언 아래에 추가:
+
+```ts
+export interface SRListResponse { items: SRDraft[]; total: number }
+```
+
+`listSRDrafts` 함수를 아래로 교체:
+
+```ts
+listSRDrafts: (params?: { status?: string; skip?: number; limit?: number; userId?: string }) => {
+  const query = new URLSearchParams()
+  if (params?.userId) query.set('user_id', params.userId)
+  if (params?.status) query.set('status', params.status)
+  if (params?.skip !== undefined) query.set('skip', String(params.skip))
+  if (params?.limit !== undefined) query.set('limit', String(params.limit))
+  const qs = query.toString()
+  return request<SRListResponse>(`/sr/drafts${qs ? `?${qs}` : ''}`)
+},
+```
+
+- [ ] **Step 2: 빌드 확인**
+
+```bash
+cd frontend
+pnpm typecheck
+```
+
+Expected: 에러 없음. (ServiceRequests.tsx에서 `api.listSRDrafts()` 반환값을 `SRDraft[]`로 쓰고 있으면 타입 에러 발생 — Task 3에서 수정)
+
+- [ ] **Step 3: 커밋**
+
+```bash
+git add frontend/src/lib/api.ts
+git commit -m "feat: api.ts — listSRDrafts 파라미터/반환타입 변경"
+```
+
+---
+
+### Task 3: 프론트엔드 — ServiceRequests.tsx 탭/배지/페이지네이션 추가
+
+**Files:**
+- Modify: `frontend/src/pages/ServiceRequests.tsx`
+
+Approvals.tsx 패턴을 그대로 따른다. 탭은 `draft | active | done` 3개, 배지는 `active` 건수만 별도 쿼리.
+
+- [ ] **Step 1: ServiceRequests.tsx 전체 교체**
+
+`frontend/src/pages/ServiceRequests.tsx`를 아래 내용으로 교체:
+
+```tsx
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { api, type SRDraft } from "@/lib/api"
@@ -269,7 +507,7 @@ export function ServiceRequests() {
                       <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
                       <div className="flex items-center gap-3 mt-2">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
-                          {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : sr.priority === "low" ? "낮음" : "최저"}
+                          {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : "낮음"}
                         </span>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getStatusStyle(sr.status)}`}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -327,3 +565,75 @@ export function ServiceRequests() {
     </div>
   )
 }
+```
+
+- [ ] **Step 2: 타입 체크**
+
+```bash
+cd frontend
+pnpm typecheck
+```
+
+Expected: 에러 없음
+
+- [ ] **Step 3: 린트**
+
+```bash
+cd frontend
+pnpm lint
+```
+
+Expected: 에러 없음
+
+- [ ] **Step 4: 커밋**
+
+```bash
+git add frontend/src/pages/ServiceRequests.tsx
+git commit -m "feat: SR 목록 — 초안/진행중/완료 탭, 배지, 페이지네이션 추가"
+```
+
+---
+
+### Task 4: 기존 test_list_sr_drafts 호환성 수정
+
+기존 테스트가 `list` 응답을 기대하므로 `items` 키로 접근하도록 수정.
+
+**Files:**
+- Modify: `backend/tests/test_sr.py`
+
+- [ ] **Step 1: 기존 test_list_sr_drafts 수정**
+
+`test_list_sr_drafts` 함수에서 응답 접근 방식 확인 후 수정:
+
+```python
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts(client: AsyncClient, test_user: dict):
+    await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "List Test",
+        "description": "desc",
+        "priority": "medium",
+    })
+    resp = await client.get("/api/sr/drafts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert any(item["title"] == "List Test" for item in data["items"])
+```
+
+- [ ] **Step 2: 전체 테스트 실행**
+
+```bash
+cd backend
+uv run pytest tests/test_sr.py -v
+```
+
+Expected: 모든 테스트 PASS
+
+- [ ] **Step 3: 커밋**
+
+```bash
+git add backend/tests/test_sr.py
+git commit -m "fix: test_list_sr_drafts — items/total 응답 구조에 맞게 수정"
+```

@@ -30,6 +30,7 @@ async def create_sr_draft(db: AsyncSession, data: SRDraftCreate) -> SRDraft:
         related_document_ids=[str(d) for d in data.related_document_ids] if data.related_document_ids else None,
         status="draft",
         created_by_ai=False,
+        target_url=data.target_url,
     )
     db.add(draft)
     await db.commit()
@@ -191,9 +192,31 @@ async def update_sr_draft(db: AsyncSession, sr_id: uuid.UUID, data: dict) -> SRD
     return draft
 
 
-async def list_sr_drafts(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[SRDraft]:
-    stmt = select(SRDraft).order_by(SRDraft.created_at.desc())
+STATUS_MAP = {
+    "draft": ["draft"],
+    "active": ["submitted", "jira_created"],
+    "done": ["done_synced", "done_no_proposal"],
+}
+
+
+async def list_sr_drafts(
+    db: AsyncSession,
+    user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> tuple[list[SRDraft], int]:
+    from sqlalchemy import func
+    stmt = select(SRDraft)
     if user_id:
         stmt = stmt.where(SRDraft.user_id == user_id)
+    if status is not None:
+        statuses = STATUS_MAP.get(status)
+        if statuses is None:
+            raise ValueError(f"Invalid status filter: {status}")
+        stmt = stmt.where(SRDraft.status.in_(statuses))
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+    stmt = stmt.order_by(SRDraft.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total

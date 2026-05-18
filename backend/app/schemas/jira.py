@@ -37,6 +37,7 @@ class JiraCallbackLogResponse(BaseModel):
     jira_issue_status: str | None = None
     jira_issue_status_category: str | None = None
     status: str
+    error_message: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

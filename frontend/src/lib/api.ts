@@ -119,8 +119,15 @@ export const api = {
     request<{ document_id: string; trust_score: number }>(`/trust/${documentId}/recalculate`, { method: 'POST' }),
 
   // SR
-  listSRDrafts: (userId?: string) =>
-    request<SRDraft[]>(`/sr/drafts${userId ? `?user_id=${userId}` : ''}`),
+  listSRDrafts: (params?: { status?: string; skip?: number; limit?: number; userId?: string }) => {
+    const query = new URLSearchParams()
+    if (params?.userId) query.set('user_id', params.userId)
+    if (params?.status) query.set('status', params.status)
+    if (params?.skip !== undefined) query.set('skip', String(params.skip))
+    if (params?.limit !== undefined) query.set('limit', String(params.limit))
+    const qs = query.toString()
+    return request<SRListResponse>(`/sr/drafts${qs ? `?${qs}` : ''}`)
+  },
   createSRDraft: (data: { user_id: string; title: string; description: string; priority: string }) =>
     request<SRDraft>('/sr/drafts', { method: 'POST', body: JSON.stringify(data) }),
   generateSR: (data: { user_id: string; document_id: string; issue_description: string }) =>
@@ -173,6 +180,7 @@ export interface ApprovalRequest { id: string; proposed_change_id: string; propo
 export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
 export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; created_at: string }
+export interface SRListResponse { items: SRDraft[]; total: number }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
 export interface ManualJob { id: string; user_id: string; target_url: string; login_url: string | null; status: string; output_document_id: string | null; screenshots: { step: number; filename: string | null; url: string; description: string }[] | null; error_message: string | null; created_at: string }
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
