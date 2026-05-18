@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { api, type ApprovalRequest } from "@/lib/api"
@@ -10,9 +11,15 @@ type ReviewMode = "approve" | "reject" | "edit_and_approve" | "request_review" |
 
 export function Approvals() {
   const { user } = useAuth()
-  const { data: approvalsData, refetch } = useApi(() => api.listApprovals({ status: "pending" }), [])
-  const approvals = approvalsData?.items ?? []
+  const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>("feedback")
+  const [statusFilter, setStatusFilter] = useState<"all" | "processing" | "completed">(() => {
+    const s = searchParams.get("status")
+    if (s === "processing" || s === "completed") return s
+    return "all"
+  })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
   const [reviewMode, setReviewMode] = useState<ReviewMode>(null)
   const [comment, setComment] = useState("")
@@ -21,12 +28,17 @@ export function Approvals() {
 
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
 
-  const feedbackApprovals = (approvals ?? []).filter(
-    a => a.proposed_change?.source_type === "feedback"
+  const { data: result, refetch } = useApi(
+    () => api.listApprovals({ status: statusFilter, skip: (page - 1) * pageSize, limit: pageSize }),
+    [statusFilter, page, pageSize]
   )
-  const playwrightApprovals = (approvals ?? []).filter(
-    a => a.proposed_change?.source_type === "playwright"
-  )
+
+  const approvals = result?.items ?? []
+  const total = result?.total ?? 0
+  const totalPages = Math.ceil(total / pageSize)
+
+  const feedbackApprovals = approvals.filter(a => a.proposed_change?.source_type === "feedback")
+  const playwrightApprovals = approvals.filter(a => a.proposed_change?.source_type === "playwright")
   const currentList = tab === "feedback" ? feedbackApprovals : playwrightApprovals
 
   const openReview = (id: string, proposedText: string) => {
@@ -42,6 +54,9 @@ export function Approvals() {
     setComment("")
     setEditedContent("")
   }
+
+  const handleTabChange = (t: Tab) => { setTab(t); setPage(1); closeReview() }
+  const handleFilterChange = (f: "all" | "processing" | "completed") => { setStatusFilter(f); setPage(1) }
 
   const handleSubmit = async (id: string) => {
     if (reviewMode === "request_review" && !comment.trim()) return
@@ -75,7 +90,7 @@ export function Approvals() {
       {/* 탭 */}
       <div className="flex gap-1 border-b border-[#e0e3e5]">
         <button
-          onClick={() => { setTab("feedback"); closeReview() }}
+          onClick={() => handleTabChange("feedback")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
             tab === "feedback"
               ? "border-[#00288e] text-[#00288e]"
@@ -91,7 +106,7 @@ export function Approvals() {
           )}
         </button>
         <button
-          onClick={() => { setTab("playwright"); closeReview() }}
+          onClick={() => handleTabChange("playwright")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
             tab === "playwright"
               ? "border-[#00288e] text-[#00288e]"
@@ -108,33 +123,123 @@ export function Approvals() {
         </button>
       </div>
 
+      {/* 상태 필터 */}
+      <div className="flex items-center gap-2 py-2">
+        {(["all", "processing", "completed"] as const).map((f) => {
+          const labels = { all: "전체", processing: "처리 중", completed: "완료" }
+          const isActive = statusFilter === f
+          return (
+            <button
+              key={f}
+              onClick={() => handleFilterChange(f)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                isActive
+                  ? "bg-[#00288e] text-white"
+                  : "bg-white border border-[#c4c5d5] text-[#444653] hover:border-[#00288e]"
+              }`}
+            >
+              {labels[f]}
+              {isActive && total > 0 && (
+                <span className="ml-1.5 opacity-80">{total}</span>
+              )}
+            </button>
+          )
+        })}
+        <span className="ml-auto text-xs text-[#757684]">총 {total}건</span>
+      </div>
+
       {currentList.length === 0 ? (
         <div className="text-center py-16">
           <span className="material-symbols-outlined text-5xl text-[#c4c5d5]">task_alt</span>
-          <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">모든 승인이 처리되었습니다</h3>
-          <p className="mt-2 text-sm text-[#757684]">현재 대기 중인 승인 요청이 없습니다</p>
+          <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">
+            {statusFilter === "completed" ? "완료된 항목이 없습니다" : "모든 승인이 처리되었습니다"}
+          </h3>
+          <p className="mt-2 text-sm text-[#757684]">
+            {statusFilter === "completed"
+              ? "아직 승인 또는 반려된 항목이 없습니다"
+              : "현재 대기 중인 승인 요청이 없습니다"}
+          </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {currentList.map((approval) => (
-            <ApprovalCard
-              key={approval.id}
-              approval={approval}
-              tab={tab}
-              isReviewing={reviewingId === approval.id}
-              reviewMode={reviewingId === approval.id ? reviewMode : null}
-              comment={comment}
-              editedContent={editedContent}
-              submitting={submitting}
-              onOpenReview={() => openReview(approval.id, approval.proposed_change?.proposed_text ?? "")}
-              onCloseReview={closeReview}
-              onSetReviewMode={setReviewMode}
-              onSetComment={setComment}
-              onSetEditedContent={setEditedContent}
-              onSubmit={() => handleSubmit(approval.id)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-4">
+            {currentList.map((approval) => (
+              <ApprovalCard
+                key={approval.id}
+                approval={approval}
+                tab={tab}
+                isReviewing={reviewingId === approval.id}
+                reviewMode={reviewingId === approval.id ? reviewMode : null}
+                comment={comment}
+                editedContent={editedContent}
+                submitting={submitting}
+                onOpenReview={() => openReview(approval.id, approval.proposed_change?.proposed_text ?? "")}
+                onCloseReview={closeReview}
+                onSetReviewMode={setReviewMode}
+                onSetComment={setComment}
+                onSetEditedContent={setEditedContent}
+                onSubmit={() => handleSubmit(approval.id)}
+              />
+            ))}
+          </div>
+
+          {/* 페이지네이션 */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#757684]">페이지당</span>
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                  className="text-xs border border-[#c4c5d5] rounded px-2 py-1 outline-none focus:border-[#00288e]"
+                >
+                  {[10, 20, 50].map(n => <option key={n} value={n}>{n}개</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2 py-1 text-xs border border-[#c4c5d5] rounded disabled:opacity-40 hover:border-[#00288e] transition-colors"
+                >
+                  ‹
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+                  .reduce<(number | "...")[]>((acc, n, i, arr) => {
+                    if (i > 0 && n - (arr[i - 1] as number) > 1) acc.push("...")
+                    acc.push(n)
+                    return acc
+                  }, [])
+                  .map((n, i) =>
+                    n === "..." ? (
+                      <span key={`ellipsis-${i}`} className="px-1 text-xs text-[#9a9bad]">…</span>
+                    ) : (
+                      <button
+                        key={n}
+                        onClick={() => setPage(n as number)}
+                        className={`w-7 h-7 text-xs rounded transition-colors ${
+                          page === n
+                            ? "bg-[#00288e] text-white border border-[#00288e]"
+                            : "border border-[#c4c5d5] text-[#444653] hover:border-[#00288e]"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    )
+                  )
+                }
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-2 py-1 text-xs border border-[#c4c5d5] rounded disabled:opacity-40 hover:border-[#00288e] transition-colors"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
