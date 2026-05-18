@@ -160,6 +160,22 @@ function ApprovalCard({
 }: CardProps) {
   const change = approval.proposed_change
 
+  const reviewModeLabels: Record<NonNullable<ReviewMode>, string> = {
+    approve: "승인",
+    reject: "반려",
+    edit_and_approve: "편집 후 승인",
+    request_review: "추가 확인 요청",
+  }
+
+  const playwrightTitle = (() => {
+    const prefix = "Playwright auto-generated manual for "
+    if (change?.reasoning?.startsWith(prefix)) {
+      return change.reasoning.slice(prefix.length, prefix.length + 50)
+    }
+    return change?.reasoning?.slice(0, 50) ?? "Playwright 매뉴얼"
+  })()
+  const cardTitle = tab === "playwright" ? playwrightTitle : `리비전 #${approval.proposed_change_id.slice(0, 8)}`
+
   return (
     <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-shadow hover:shadow-md ${
       isReviewing ? "border-[#00288e] ring-1 ring-[#dde1ff]" : "border-[#c4c5d5]"
@@ -176,14 +192,7 @@ function ApprovalCard({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-semibold text-[#191c1e]">
-                  {tab === "playwright"
-                    ? (() => {
-                        const prefix = "Playwright auto-generated manual for "
-                        return change?.reasoning?.startsWith(prefix)
-                          ? change.reasoning.slice(prefix.length, prefix.length + 50)
-                          : change?.reasoning?.slice(0, 50) ?? "Playwright 매뉴얼"
-                      })()
-                    : `리비전 #${approval.proposed_change_id.slice(0, 8)}`}
+                  {cardTitle}
                 </span>
                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                   approval.status === "pending" ? "bg-[#ffdbce] text-[#611e00]"
@@ -285,7 +294,7 @@ function ApprovalCard({
                     : reviewMode === "reject" ? "bg-[#ffdad6] text-[#93000a]"
                     : "bg-[#e6e8ea] text-[#444653]"
                   }`}>
-                    {reviewMode === "approve" ? "승인" : reviewMode === "reject" ? "반려" : reviewMode === "edit_and_approve" ? "편집 후 승인" : "추가 확인 요청"}
+                    {reviewMode ? reviewModeLabels[reviewMode] : ""}
                   </span>
                   <button onClick={() => onSetReviewMode(null)} className="text-xs text-[#757684] hover:text-[#191c1e]">← 다른 옵션</button>
                 </div>
