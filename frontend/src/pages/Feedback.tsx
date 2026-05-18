@@ -1,9 +1,11 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { api, type FeedbackReport, type ProposedChange } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 
 export function Feedback() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { data: feedback, refetch } = useApi(() => api.listFeedback(), [])
   const [showCreate, setShowCreate] = useState(false)
@@ -85,10 +87,16 @@ export function Feedback() {
       {result?.proposed_change && (
         <div className="bg-[#d5e3fc]/30 border border-[#d5e3fc] rounded-xl p-5 flex items-start gap-3">
           <span className="material-symbols-outlined text-lg text-[#16a34a]">check_circle</span>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-semibold text-[#191c1e]">AI 수정안이 생성되었습니다</p>
             <p className="text-xs text-[#444653] mt-1">승인 관리에서 검토할 수 있습니다.</p>
           </div>
+          <button
+            onClick={() => navigate("/approvals")}
+            className="px-3 py-1.5 text-xs font-medium text-[#00288e] border border-[#00288e]/40 rounded-lg hover:bg-[#dde1ff] transition-colors"
+          >
+            승인 관리로 이동
+          </button>
         </div>
       )}
 
@@ -116,7 +124,7 @@ export function Feedback() {
                     <p className="text-sm text-[#191c1e] line-clamp-2">{fb.feedback_text}</p>
                   </td>
                   <td className="px-4 py-3 text-xs text-[#757684]">
-                    {fb.document_id ? fb.document_id.slice(0, 8) + "..." : "-"}
+                    {fb.document_title ?? (fb.document_id ? fb.document_id.slice(0, 8) + "..." : "-")}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -125,13 +133,22 @@ export function Feedback() {
                       : "bg-[#e6e8ea] text-[#444653]"
                     }`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {fb.status === "processed" ? "처리됨" : fb.status === "pending" ? "대기중" : fb.status}
+                      {fb.status === "processed" ? "수정안 생성됨" : fb.status === "pending" ? "대기중" : fb.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-[#757684]">
                     {new Date(fb.created_at).toLocaleDateString("ko-KR")}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 flex items-center gap-1">
+                    {fb.status === "processed" && (
+                      <button
+                        onClick={() => navigate("/approvals")}
+                        className="p-1 text-[#00288e] hover:bg-[#dde1ff] transition-colors rounded"
+                        title="수정안 보기"
+                      >
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(fb.id)}
                       disabled={deleting === fb.id}
