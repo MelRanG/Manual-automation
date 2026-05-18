@@ -184,7 +184,7 @@ export function Feedback() {
             <p className="text-xs text-[#444653] mt-1">승인 관리에서 검토할 수 있습니다.</p>
           </div>
           <button
-            onClick={() => navigate("/approvals")}
+            onClick={() => navigate("/approvals?status=processing")}
             className="px-3 py-1.5 text-xs font-medium text-[#00288e] border border-[#00288e]/40 rounded-lg hover:bg-[#dde1ff] transition-colors"
           >
             승인 관리로 이동
@@ -234,7 +234,12 @@ export function Feedback() {
                   <td className="px-4 py-3 flex items-center gap-1">
                     {fb.status === "processed" && (
                       <button
-                        onClick={() => navigate("/approvals")}
+                        onClick={() => {
+                          const dest = (fb.proposed_change_status === "approved" || fb.proposed_change_status === "rejected")
+                            ? "/approvals?status=completed"
+                            : "/approvals?status=processing"
+                          navigate(dest)
+                        }}
                         className="p-1 text-[#00288e] hover:bg-[#dde1ff] transition-colors rounded"
                         title="수정안 보기"
                       >
