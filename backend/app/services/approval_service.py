@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.feedback import ProposedDocumentChange, ApprovalRequest
-from app.models.document import Document, DocumentVersion
 from app.services.document_service import create_new_version
 
 
@@ -70,31 +69,62 @@ async def review_approval(
     )
     change = change_result.scalar_one_or_none()
 
-    if action == "approved" and change:
-        approval.status = "approved"
-        change.status = "approved"
-        await db.flush()
-        await create_new_version(
-            db,
-            change.document_id,
-            change.proposed_text,
-            change_summary=f"Applied approved correction: {change.reasoning[:100]}",
-            created_by=reviewer_id,
-        )
-    elif action == "edit_and_approve" and change:
-        if not edited_content:
+    if action in ("approved", "edit_and_approve") and change:
+        if action == "edit_and_approve" and not edited_content:
             raise ValueError("edited_content is required for edit_and_approve")
+        final_content = edited_content if (action == "edit_and_approve" and edited_content) else change.proposed_text
         approval.status = "approved"
         change.status = "approved"
-        change.proposed_text = edited_content
         await db.flush()
-        await create_new_version(
-            db,
-            change.document_id,
-            edited_content,
-            change_summary=f"Applied with reviewer edits: {comment or change.reasoning[:100]}",
-            created_by=reviewer_id,
-        )
+
+        if change.source_type == "playwright":
+            # 신규 Document 생성
+            from app.models.document import Document, DocumentVersion
+            from app.models.manual import ManualGenerationJob
+            from sqlalchemy import select as _select
+
+            doc = Document(
+                id=uuid.uuid4(),
+                title=f"사용자 매뉴얼 - {change.reasoning.replace('Playwright auto-generated manual for ', '')[:40]}",
+                description="Playwright 자동 생성 후 승인된 매뉴얼",
+                owner_id=reviewer_id,
+                status="active",
+                priority="medium",
+                trust_score=1.0,
+            )
+            db.add(doc)
+            await db.flush()
+
+            version = DocumentVersion(
+                id=uuid.uuid4(),
+                document_id=doc.id,
+                version_number=1,
+                content=final_content,
+                created_by=reviewer_id,
+                change_summary="Approved Playwright auto-generated manual",
+            )
+            db.add(version)
+            await db.flush()
+            doc.current_version_id = version.id
+
+            # ManualJob.output_document_id 업데이트
+            if change.manual_job_id:
+                job_result = await db.execute(
+                    _select(ManualGenerationJob).where(
+                        ManualGenerationJob.id == change.manual_job_id
+                    )
+                )
+                job = job_result.scalar_one_or_none()
+                if job:
+                    job.output_document_id = doc.id
+        else:
+            await create_new_version(
+                db,
+                change.document_id,
+                final_content,
+                change_summary=f"Applied {'with reviewer edits: ' + (comment or '') if action == 'edit_and_approve' else 'approved correction: '}{change.reasoning[:100]}",
+                created_by=reviewer_id,
+            )
     elif action == "request_review":
         approval.status = "needs_review"
         if change:

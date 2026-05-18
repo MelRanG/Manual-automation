@@ -138,3 +138,50 @@ async def test_list_approvals_includes_proposed_change(client: AsyncClient, test
     assert "original_text" in target["proposed_change"]
     assert "proposed_text" in target["proposed_change"]
     assert "confidence" in target["proposed_change"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_playwright_manual_approval_flow(client: AsyncClient, test_user: dict):
+    # ManualJob 생성 (백그라운드 실행 없이 직접 서비스 호출)
+    from app.db import SessionLocal
+    from app.services import manual_service
+
+    async with SessionLocal() as db:
+        job = await manual_service.create_job(
+            db,
+            user_id=test_user["id"],
+            target_url="https://example.com",
+        )
+        job_id = job.id
+        await manual_service.run_generation(db, job_id)
+
+    # job 상태 확인
+    job_resp = await client.get(f"/api/manuals/jobs/{job_id}")
+    assert job_resp.status_code == 200
+    job_data = job_resp.json()
+    # 승인 전이므로 output_document_id가 None
+    assert job_data["output_document_id"] is None
+    assert job_data["status"] == "completed"
+
+    # Approvals 목록에서 playwright 수정안 확인
+    list_resp = await client.get("/api/approvals")
+    approvals = list_resp.json()
+    playwright_approval = next(
+        (a for a in approvals
+         if a["proposed_change"] and a["proposed_change"]["source_type"] == "playwright"),
+        None
+    )
+    assert playwright_approval is not None
+    approval_id = playwright_approval["id"]
+
+    # 승인
+    review_resp = await client.post(f"/api/approvals/{approval_id}/review", json={
+        "reviewer_id": test_user["id"],
+        "action": "approved",
+    })
+    assert review_resp.status_code == 200
+    assert review_resp.json()["status"] == "approved"
+
+    # 승인 후 job의 output_document_id가 설정됐는지 확인
+    job_resp2 = await client.get(f"/api/manuals/jobs/{job_id}")
+    assert job_resp2.json()["output_document_id"] is not None

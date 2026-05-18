@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.manual import ManualGenerationJob
-from app.models.document import Document, DocumentVersion
 from app.services.document_service import UPLOAD_DIR
 from app.services.llm_service import get_llm_provider
 
@@ -58,35 +57,36 @@ async def run_generation(db: AsyncSession, job_id: uuid.UUID) -> ManualGeneratio
         screenshots = await capture_screenshots(job)
         markdown = await generate_markdown(job, screenshots)
 
-        # Create document
-        doc = Document(
+        # 승인 흐름: ProposedChange + ApprovalRequest 생성 (Document는 승인 후 생성)
+        from app.models.feedback import ProposedDocumentChange, ApprovalRequest as ApprovalReq
+
+        proposed = ProposedDocumentChange(
             id=uuid.uuid4(),
-            title=f"User Manual - {job.target_url[:50]}",
-            description=f"Auto-generated user manual for {job.target_url}",
-            owner_id=job.user_id,
-            status="active",
-            priority="medium",
-            trust_score=1.0,
+            feedback_report_id=None,
+            document_id=None,
+            document_version_id=None,
+            manual_job_id=job.id,
+            original_text="",
+            proposed_text=markdown,
+            diff="",
+            reasoning=f"Playwright auto-generated manual for {job.target_url}",
+            confidence=1.0,
+            source_type="playwright",
+            status="pending",
         )
-        db.add(doc)
+        db.add(proposed)
         await db.flush()
 
-        version = DocumentVersion(
+        approval = ApprovalReq(
             id=uuid.uuid4(),
-            document_id=doc.id,
-            version_number=1,
-            content=markdown,
-            created_by=job.user_id,
-            change_summary="Auto-generated user manual",
+            proposed_change_id=proposed.id,
+            status="pending",
         )
-        db.add(version)
-        await db.flush()
-
-        doc.current_version_id = version.id
+        db.add(approval)
 
         job.status = "completed"
-        job.output_document_id = doc.id
         job.screenshots = [s for s in screenshots]
+        # output_document_id는 승인 후 설정
         await db.commit()
 
     except Exception as e:
