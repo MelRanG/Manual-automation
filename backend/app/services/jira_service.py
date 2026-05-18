@@ -127,6 +127,8 @@ async def _find_related_documents(db: AsyncSession, query: str) -> list[dict]:
         logger.warning(f"벡터 검색 실패, 키워드 폴백: {e}")
 
     keywords = query.split()[:5]
+    if not keywords:
+        return []
     conditions = [Document.title.ilike(f"%{kw}%") for kw in keywords]
     result = await db.execute(
         select(Document)
