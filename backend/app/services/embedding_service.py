@@ -37,17 +37,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 class BedrockEmbeddingProvider(EmbeddingProvider):
     def __init__(self):
         import boto3
-        from app.config import settings as _settings
         self.client = boto3.client(
             "bedrock-runtime",
-            region_name=_settings.aws_region,
-            aws_access_key_id=_settings.aws_access_key_id or None,
-            aws_secret_access_key=_settings.aws_secret_access_key or None,
+            region_name=settings.aws_region,
+            aws_access_key_id=settings.aws_access_key_id or None,
+            aws_secret_access_key=settings.aws_secret_access_key or None,
         )
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        import json
         import asyncio
+        import json
 
         def _embed_one(text: str) -> list[float]:
             body = json.dumps({"inputText": text})
@@ -59,12 +58,10 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
             )
             return json.loads(resp["body"].read())["embedding"]
 
-        loop = asyncio.get_event_loop()
-        results = []
-        for text in texts:
-            vec = await loop.run_in_executor(None, _embed_one, text)
-            results.append(vec)
-        return results
+        results = await asyncio.gather(
+            *(asyncio.to_thread(_embed_one, text) for text in texts)
+        )
+        return list(results)
 
 
 def get_embedding_provider() -> EmbeddingProvider:
