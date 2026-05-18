@@ -21,6 +21,7 @@ class FeedbackReportResponse(BaseModel):
     feedback_text: str
     status: str
     document_title: str | None = None
+    proposed_change_status: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -122,9 +122,23 @@ async def list_feedback(
         )
         title_map = {row.id: row.title for row in doc_result}
 
+    report_ids = [r.id for r in reports]
+    change_map: dict = {}
+    if report_ids:
+        change_result = await db.execute(
+            select(
+                ProposedDocumentChange.feedback_report_id,
+                ProposedDocumentChange.status,
+            ).where(ProposedDocumentChange.feedback_report_id.in_(report_ids))
+        )
+        change_map = {row.feedback_report_id: row.status for row in change_result}
+
     return [
         FeedbackReportResponse.model_validate(r, from_attributes=True).model_copy(
-            update={"document_title": title_map.get(r.document_id)}
+            update={
+                "document_title": title_map.get(r.document_id),
+                "proposed_change_status": change_map.get(r.id),
+            }
         )
         for r in reports
     ]
