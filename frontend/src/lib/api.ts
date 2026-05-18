@@ -131,6 +131,14 @@ export const api = {
     request<ManualJob[]>(`/manuals/jobs${userId ? `?user_id=${userId}` : ''}`),
   getManualJob: (id: string) => request<ManualJob>(`/manuals/jobs/${id}`),
 
+  // Jira
+  getJiraConfig: () => request<JiraConfig | null>('/jira/config'),
+  saveJiraConfig: (data: { base_url: string; user_email: string; api_token: string; project_key: string; is_active: boolean; trigger_status_names: string[] | null }) =>
+    request<JiraConfig>('/jira/config', { method: 'PUT', body: JSON.stringify(data) }),
+  testJiraConfig: (data: { base_url: string; user_email: string; api_token: string; project_key: string; is_active: boolean; trigger_status_names: string[] | null }) =>
+    request<{ success: boolean; message: string }>('/jira/config/test', { method: 'POST', body: JSON.stringify(data) }),
+  listJiraCallbackLogs: () => request<JiraCallbackLog[]>('/jira/callback-logs'),
+
   // Notifications
   listNotifications: () => request<Notification[]>('/notifications'),
   markNotificationRead: (id: string) =>
@@ -152,7 +160,26 @@ export interface FeedbackReport { id: string; user_id: string; document_id: stri
 export interface ProposedChange { id: string; feedback_report_id: string; document_id: string; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; status: string }
 export interface ApprovalRequest { id: string; proposed_change_id: string; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
 export interface TrustScore { id: string; title: string; trust_score: number }
-export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; created_at: string }
+export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; created_at: string }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
 export interface ManualJob { id: string; user_id: string; target_url: string; login_url: string | null; status: string; output_document_id: string | null; screenshots: { step: number; filename: string | null; url: string; description: string }[] | null; error_message: string | null; created_at: string }
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
+export interface JiraConfig {
+  id: string
+  base_url: string
+  user_email: string
+  api_token_masked: string
+  project_key: string
+  is_active: boolean
+  trigger_status_names: string[] | null
+  updated_at: string
+}
+
+export interface JiraCallbackLog {
+  id: string
+  jira_issue_key: string
+  event_type: string
+  sr_draft_id: string | null
+  status: string
+  created_at: string
+}
