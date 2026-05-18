@@ -48,3 +48,4 @@ class ProposedChangeResponse(BaseModel):
 class FeedbackWithProposalResponse(BaseModel):
     feedback: FeedbackReportResponse
     proposed_change: ProposedChangeResponse | None
+    approval_id: uuid.UUID | None = None
