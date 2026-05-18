@@ -56,12 +56,16 @@ async def update_sr_draft(
         raise HTTPException(status_code=400, detail=msg)
 
 
-@router.get("/drafts", response_model=list[SRDraftResponse])
+@router.get("/drafts")
 async def list_sr_drafts(
     user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
     db: AsyncSession = Depends(get_db),
 ):
-    return await sr_service.list_sr_drafts(db, user_id)
+    items, total = await sr_service.list_sr_drafts(db, user_id, status, skip, limit)
+    return {"items": items, "total": total}
 
 
 @router.get("/webhook-logs")
