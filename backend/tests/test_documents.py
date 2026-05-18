@@ -148,3 +148,27 @@ async def test_update_document_metadata_only(client: AsyncClient, test_user: dic
 
     versions_resp = await client.get(f"/api/documents/{doc_id}/versions")
     assert len(versions_resp.json()) == 1  # content 미변경이면 새 버전 없음
+
+
+@pytest.mark.asyncio
+async def test_delete_document(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/documents", json={
+        "title": "To Be Deleted",
+        "owner_id": test_user["id"],
+    }, params={"content": "content"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.delete(f"/api/documents/{doc_id}")
+    assert resp.status_code == 200
+    assert resp.json()["message"] == "archived"
+
+    # 목록에서 사라져야 함
+    list_resp = await client.get("/api/documents")
+    ids = [d["id"] for d in list_resp.json()["documents"]]
+    assert doc_id not in ids
+
+
+@pytest.mark.asyncio
+async def test_delete_document_not_found(client: AsyncClient):
+    resp = await client.delete("/api/documents/00000000-0000-0000-0000-000000000000")
+    assert resp.status_code == 404

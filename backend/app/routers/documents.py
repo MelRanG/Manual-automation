@@ -190,3 +190,15 @@ async def update_document(
     except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
+
+
+@router.delete("/{document_id}")
+async def delete_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await document_service.archive_document(db, document_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "archived"}
