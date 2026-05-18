@@ -14,6 +14,7 @@ export function ServiceRequests() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ title: "", description: "", priority: "medium" })
   const [saving, setSaving] = useState(false)
+  const [submittingId, setSubmittingId] = useState<string | null>(null)
 
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) return
@@ -30,8 +31,13 @@ export function ServiceRequests() {
   }
 
   const handleSubmit = async (id: string) => {
-    await api.submitSR(id)
-    refetch()
+    setSubmittingId(id)
+    try {
+      await api.submitSR(id)
+      refetch()
+    } finally {
+      setSubmittingId(null)
+    }
   }
 
   const handleEditStart = (sr: { id: string; title: string; description: string; priority: string }) => {
@@ -41,6 +47,7 @@ export function ServiceRequests() {
 
   const handleEditSave = async () => {
     if (!editingId) return
+    if (!editForm.title.trim() || !editForm.description.trim()) return
     setSaving(true)
     try {
       await api.updateSRDraft(editingId, editForm)
@@ -196,9 +203,13 @@ export function ServiceRequests() {
                       <button onClick={() => handleEditStart(sr)} className="flex items-center gap-1 px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#444653] hover:bg-[#f2f4f6] transition-colors">
                         <span className="material-symbols-outlined text-base">edit</span>
                       </button>
-                      <button onClick={() => handleSubmit(sr.id)} className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors">
+                      <button
+                        onClick={() => handleSubmit(sr.id)}
+                        disabled={submittingId === sr.id}
+                        className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] disabled:opacity-50 transition-colors"
+                      >
                         <span className="material-symbols-outlined text-base">send</span>
-                        제출
+                        {submittingId === sr.id ? "제출 중..." : "제출"}
                       </button>
                     </div>
                   )}
