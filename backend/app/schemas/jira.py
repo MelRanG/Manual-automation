@@ -21,6 +21,7 @@ class JiraConfigResponse(BaseModel):
     project_key: str
     is_active: bool
     trigger_status_names: list[str] | None
+    created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -30,7 +31,7 @@ class JiraCallbackLogResponse(BaseModel):
     id: uuid.UUID
     jira_issue_key: str
     event_type: str
-    sr_draft_id: str | None
+    sr_draft_id: uuid.UUID | None
     status: str
     created_at: datetime
 
