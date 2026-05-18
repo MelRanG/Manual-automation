@@ -3,6 +3,7 @@ import asyncio
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
@@ -1137,9 +1138,11 @@ async def seed_documents(db: AsyncSession) -> None:
         await db.flush()
 
         doc.current_version_id = version_id
-        await db.commit()
-
-        print(f"  Created document: {doc_data['title']}")
+        try:
+            await db.commit()
+            print(f"  Created document: {doc_data['title']}")
+        except IntegrityError:
+            await db.rollback()
 
 
 SEED_CHAT_SESSION_ID = uuid.UUID("20000000-0000-0000-0000-000000000001")
@@ -1192,8 +1195,11 @@ async def seed_chat(db: AsyncSession) -> None:
     for msg in messages:
         db.add(msg)
 
-    await db.commit()
-    print("  Created seed chat session")
+    try:
+        await db.commit()
+        print("  Created seed chat session")
+    except IntegrityError:
+        await db.rollback()
 
 
 async def seed_feedback(db: AsyncSession) -> None:
@@ -1230,8 +1236,11 @@ async def seed_feedback(db: AsyncSession) -> None:
     for fb in feedbacks:
         db.add(fb)
 
-    await db.commit()
-    print("  Created seed feedback reports")
+    try:
+        await db.commit()
+        print("  Created seed feedback reports")
+    except IntegrityError:
+        await db.rollback()
 
 
 async def seed():
@@ -1247,8 +1256,11 @@ async def seed():
                 department="Engineering",
             )
             db.add(user)
-            await db.commit()
-            print(f"Created demo user: admin@docops.ai")
+            try:
+                await db.commit()
+                print("Created demo user: admin@docops.ai")
+            except IntegrityError:
+                await db.rollback()
         else:
             print("Demo user already exists")
 
