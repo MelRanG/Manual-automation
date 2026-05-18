@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentVersion, DocumentChunk
 from app.models.feedback import FeedbackReport, ProposedDocumentChange
-from app.schemas.feedback import FeedbackReportCreate
+from app.schemas.feedback import FeedbackReportCreate, FeedbackReportResponse
 from app.services.llm_service import get_llm_provider
 
 CORRECTION_SYSTEM_PROMPT = """You are a documentation correction assistant.
@@ -105,9 +105,7 @@ async def generate_correction(
 
 async def list_feedback(
     db: AsyncSession, document_id: uuid.UUID | None = None
-) -> list["FeedbackReportResponse"]:
-    from app.schemas.feedback import FeedbackReportResponse
-
+) -> list[FeedbackReportResponse]:
     stmt = select(FeedbackReport).order_by(FeedbackReport.created_at.desc())
     if document_id:
         stmt = stmt.where(FeedbackReport.document_id == document_id)
@@ -115,7 +113,7 @@ async def list_feedback(
     reports = list(result.scalars().all())
 
     doc_ids = {r.document_id for r in reports if r.document_id}
-    title_map: dict = {}
+    title_map: dict[uuid.UUID, str] = {}
     if doc_ids:
         doc_result = await db.execute(
             select(Document.id, Document.title).where(Document.id.in_(doc_ids))
@@ -123,7 +121,7 @@ async def list_feedback(
         title_map = {row.id: row.title for row in doc_result}
 
     report_ids = [r.id for r in reports]
-    change_map: dict = {}
+    change_map: dict[uuid.UUID, str] = {}
     if report_ids:
         change_result = await db.execute(
             select(
