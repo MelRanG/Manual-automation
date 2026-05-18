@@ -100,6 +100,7 @@ export function ServiceRequests() {
             value={priority}
             onChange={e => setPriority(e.target.value)}
           >
+            <option value="lowest">최저</option>
             <option value="low">낮음</option>
             <option value="medium">보통</option>
             <option value="high">높음</option>
@@ -141,6 +142,7 @@ export function ServiceRequests() {
                     value={editForm.priority}
                     onChange={e => setEditForm(f => ({ ...f, priority: e.target.value }))}
                   >
+                    <option value="lowest">최저</option>
                     <option value="low">낮음</option>
                     <option value="medium">보통</option>
                     <option value="high">높음</option>
