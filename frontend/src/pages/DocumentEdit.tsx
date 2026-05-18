@@ -9,6 +9,7 @@ export function DocumentEdit() {
   const { data: doc } = useApi(() => api.getDocument(id!), [id])
   const { data: versions } = useApi(() => api.getVersions(id!), [id])
 
+  const metaInitialized = useRef(false)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [content, setContent] = useState("")
@@ -17,8 +18,10 @@ export function DocumentEdit() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // doc 최초 로드 시 제목·설명을 초기화 (이후 사용자 편집 유지)
   useEffect(() => {
-    if (doc) {
+    if (doc && !metaInitialized.current) {
+      metaInitialized.current = true
       setTitle(doc.title)
       setDescription(doc.description ?? "")
     }
