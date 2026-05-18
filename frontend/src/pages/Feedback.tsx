@@ -6,12 +6,11 @@ import { useAuth } from "@/contexts/AuthContext"
 
 interface DocumentPickerDropdownProps {
   value: string
-  title: string
   onChange: (id: string, title: string) => void
   onClear: () => void
 }
 
-function DocumentPickerDropdown({ value, title, onChange, onClear }: DocumentPickerDropdownProps) {
+function DocumentPickerDropdown({ value, onChange, onClear }: DocumentPickerDropdownProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [documents, setDocuments] = useState<Document[]>([])
@@ -41,7 +40,7 @@ function DocumentPickerDropdown({ value, title, onChange, onClear }: DocumentPic
       {value ? (
         <div className="flex items-center gap-2 px-3 py-2 border border-[#c4c5d5] rounded-lg bg-[#eeeeff]">
           <span className="material-symbols-outlined text-sm text-[#4a4bdc]">description</span>
-          <span className="flex-1 text-sm text-[#4a4bdc] font-medium truncate">{title || value}</span>
+          <span className="flex-1 text-sm text-[#4a4bdc] font-medium truncate">{documents.find(d => d.id === value)?.title ?? value}</span>
           <button
             type="button"
             onClick={onClear}
@@ -103,7 +102,6 @@ export function Feedback() {
   const [showCreate, setShowCreate] = useState(false)
   const [text, setText] = useState("")
   const [docId, setDocId] = useState("")
-  const [docTitle, setDocTitle] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [result, setResult] = useState<{ feedback: FeedbackReport; proposed_change: ProposedChange | null } | null>(null)
@@ -120,7 +118,6 @@ export function Feedback() {
       setResult(res)
       setText("")
       setDocId("")
-      setDocTitle("")
       refetch()
     } finally {
       setSubmitting(false)
@@ -158,9 +155,8 @@ export function Feedback() {
         <div className="bg-white border border-[#00288e]/30 rounded-xl p-6 shadow-sm space-y-4">
           <DocumentPickerDropdown
             value={docId}
-            title={docTitle}
-            onChange={(id, title) => { setDocId(id); setDocTitle(title) }}
-            onClear={() => { setDocId(""); setDocTitle("") }}
+            onChange={(id) => setDocId(id)}
+            onClear={() => setDocId("")}
           />
           <textarea
             className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
