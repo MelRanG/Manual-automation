@@ -264,21 +264,24 @@ SR 설명: {sr.description}
                     logger.warning(f"문서 {doc_info['document_id']} 수정안 생성 실패: {e}")
 
             if proposals_created > 0:
-                from app.routers.notifications import create_notification
-                from app.models.user import User
-                admin_result = await session.execute(
-                    select(User).where(User.role == "admin").limit(1)
-                )
-                admin = admin_result.scalar_one_or_none()
-                if admin:
-                    await create_notification(
-                        session,
-                        user_id=admin.id,
-                        type="jira_sr_proposals_ready",
-                        title=f"SR '{sr.title}' 완료 — 문서 수정안 {proposals_created}건 생성",
-                        message="Approvals 페이지에서 검토하세요.",
-                        document_id=None,
+                try:
+                    from app.routers.notifications import create_notification
+                    from app.models.user import User
+                    admin_result = await session.execute(
+                        select(User).where(User.role == "admin").limit(1)
                     )
+                    admin = admin_result.scalar_one_or_none()
+                    if admin:
+                        await create_notification(
+                            session,
+                            user_id=admin.id,
+                            type="jira_sr_proposals_ready",
+                            title=f"SR '{sr.title}' 완료 — 문서 수정안 {proposals_created}건 생성",
+                            message="Approvals 페이지에서 검토하세요.",
+                            document_id=None,
+                        )
+                except Exception as e:
+                    logger.warning(f"알림 전송 실패 (sr={sr_id}): {e}")
 
             sr.status = "done_synced" if proposals_created > 0 else "done_no_proposal"
             log.status = "processed"

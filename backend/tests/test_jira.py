@@ -195,7 +195,12 @@ async def test_process_jira_done_creates_proposals(client, db_session):
         "content": "기존 문서 내용", "distance": 0.2,
     }
 
-    with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]):
+    with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]), \
+         patch("app.services.llm_service.get_llm_provider") as mock_llm_factory:
+        from unittest.mock import AsyncMock
+        mock_llm = MagicMock()
+        mock_llm.generate = AsyncMock(return_value="수정된 문서 내용")
+        mock_llm_factory.return_value = mock_llm
         await jira_service.process_jira_done(sr.id, log.id, db=db_session)
 
     await db_session.refresh(log)
