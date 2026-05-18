@@ -27,6 +27,11 @@ export function WebhookLogs() {
   const [outboundLogs, setOutboundLogs] = useState<WebhookLog[]>([])
   const [retrying, setRetrying] = useState<string | null>(null)
 
+  const fetchLogs = () => {
+    api.listJiraCallbackLogs().then(setCallbackLogs).catch(() => {})
+    fetch('/api/sr/webhook-logs').then(r => r.json()).then(setOutboundLogs).catch(() => {})
+  }
+
   useEffect(() => {
     api.getJiraConfig().then(cfg => {
       if (cfg) {
@@ -43,11 +48,6 @@ export function WebhookLogs() {
     }).catch(() => {})
     fetchLogs()
   }, [])
-
-  const fetchLogs = () => {
-    api.listJiraCallbackLogs().then(setCallbackLogs).catch(() => {})
-    fetch('/api/sr/webhook-logs').then(r => r.json()).then(setOutboundLogs).catch(() => {})
-  }
 
   const parseStatusNames = (): string[] | null => {
     const trimmed = form.trigger_status_names.trim()

@@ -32,7 +32,7 @@ def _auth_header(config: JiraConfig) -> str:
 
 async def get_active_config(db: AsyncSession) -> JiraConfig | None:
     result = await db.execute(
-        select(JiraConfig).where(JiraConfig.is_active == True).limit(1)
+        select(JiraConfig).where(JiraConfig.is_active).limit(1)
     )
     return result.scalar_one_or_none()
 
