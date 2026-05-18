@@ -62,12 +62,13 @@ export function WebhookLogs() {
       const cfg = await api.saveJiraConfig({
         base_url: form.base_url,
         user_email: form.user_email,
-        api_token: form.api_token || config?.api_token_masked || "",
+        api_token: form.api_token,
         project_key: form.project_key,
         is_active: form.is_active,
         trigger_status_names: parseStatusNames(),
       })
       setConfig(cfg)
+      setForm(f => ({ ...f, api_token: "" }))
     } finally {
       setSaving(false)
     }
@@ -80,7 +81,7 @@ export function WebhookLogs() {
       const result = await api.testJiraConfig({
         base_url: form.base_url,
         user_email: form.user_email,
-        api_token: form.api_token || config?.api_token_masked || "",
+        api_token: form.api_token,
         project_key: form.project_key,
         is_active: form.is_active,
         trigger_status_names: parseStatusNames(),

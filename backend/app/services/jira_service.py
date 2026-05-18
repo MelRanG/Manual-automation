@@ -44,6 +44,8 @@ async def upsert_config(db: AsyncSession, data: dict) -> JiraConfig:
         config = JiraConfig(id=uuid.uuid4())
         db.add(config)
     for key, value in data.items():
+        if key == "api_token" and not value:
+            continue  # 빈 토큰은 기존 값 유지
         setattr(config, key, value)
     await db.commit()
     await db.refresh(config)
