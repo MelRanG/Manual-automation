@@ -19,6 +19,8 @@ class SRDraft(Base, UUIDMixin, TimestampMixin):
     related_document_ids: Mapped[list | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     created_by_ai: Mapped[bool] = mapped_column(default=True)
+    jira_issue_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    jira_issue_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     webhook_logs: Mapped[list["WebhookDeliveryLog"]] = relationship(
         back_populates="sr_draft"
