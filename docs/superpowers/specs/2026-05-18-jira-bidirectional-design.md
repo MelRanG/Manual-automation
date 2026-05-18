@@ -37,6 +37,7 @@ draft → submitted → jira_created → done_synced
 | `api_token` | Text | Jira API 토큰 (저장 시 마스킹) |
 | `project_key` | String(50) | 이슈 생성 대상 프로젝트 키 |
 | `is_active` | Boolean | 연동 활성화 여부 |
+| `trigger_status_names` | JSONB \| None | Done 트리거할 상태 이름 목록 (예: `["Done", "배포됨"]`). 비어있으면 `statusCategory.key == "done"` 전체 적용 |
 | `created_at` / `updated_at` | DateTime | |
 
 레코드는 항상 1개만 유지 (upsert).
@@ -93,7 +94,9 @@ draft → submitted → jira_created → done_synced
 7. JiraCallbackLog.status = "processed"
 ```
 
-Done 판정 기준: `statusCategory.key == "done"` (Jira 표준 필드)
+Done 판정 기준:
+- `trigger_status_names`가 설정된 경우: `status.name`이 목록에 포함되는지 확인
+- 미설정인 경우: `status.statusCategory.key == "done"` (Jira 표준, 회사별 커스텀 상태명과 무관하게 동작)
 
 ---
 
@@ -104,6 +107,7 @@ Done 판정 기준: `statusCategory.key == "done"` (Jira 표준 필드)
 ### 섹션 1 — Jira 연동 설정 카드 (상단)
 
 - 입력: Base URL, 이메일, API 토큰(비밀번호 타입), 프로젝트 키
+- 트리거 상태 이름: 쉼표 구분 입력 (예: `Done, 배포됨`). 비워두면 done 카테고리 전체 적용
 - 버튼: "저장", "연결 테스트"
 - 상태 배지: 미설정 / 연결됨 / 오류
 
