@@ -38,7 +38,7 @@ async def get_active_config(db: AsyncSession) -> JiraConfig | None:
 
 
 async def upsert_config(db: AsyncSession, data: dict) -> JiraConfig:
-    existing = await db.execute(select(JiraConfig).limit(1))
+    existing = await db.execute(select(JiraConfig).order_by(JiraConfig.created_at).limit(1))
     config = existing.scalar_one_or_none()
     if config is None:
         config = JiraConfig(id=uuid.uuid4())
