@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.schemas.feedback import ProposedChangeResponse
+
 
 class ApprovalAction(BaseModel):
     reviewer_id: uuid.UUID
@@ -14,6 +16,7 @@ class ApprovalAction(BaseModel):
 class ApprovalRequestResponse(BaseModel):
     id: uuid.UUID
     proposed_change_id: uuid.UUID
+    proposed_change: ProposedChangeResponse | None = None
     reviewer_id: uuid.UUID | None
     status: str
     comment: str | None

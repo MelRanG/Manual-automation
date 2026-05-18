@@ -109,3 +109,32 @@ async def test_proposed_change_has_source_type(client: AsyncClient, test_user: d
     proposed = fb_resp.json()["proposed_change"]
     assert proposed is not None
     assert proposed["source_type"] == "feedback"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_approvals_includes_proposed_change(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Include Proposed Change Test",
+        "owner_id": test_user["id"],
+    }, params={"content": "Some content to correct."})
+    doc_id = doc_resp.json()["id"]
+
+    fb_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "This needs correction",
+    })
+    proposal_id = fb_resp.json()["proposed_change"]["id"]
+    await client.post(f"/api/approvals/{proposal_id}")
+
+    list_resp = await client.get("/api/approvals")
+    assert list_resp.status_code == 200
+    approvals = list_resp.json()
+    assert len(approvals) > 0
+    target = next((a for a in approvals if a["proposed_change_id"] == proposal_id), None)
+    assert target is not None
+    assert target["proposed_change"] is not None
+    assert target["proposed_change"]["source_type"] == "feedback"
+    assert "original_text" in target["proposed_change"]
+    assert "proposed_text" in target["proposed_change"]
+    assert "confidence" in target["proposed_change"]

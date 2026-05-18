@@ -77,8 +77,11 @@ async def review_approval(
 
 
 @router.get("", response_model=list[ApprovalRequestResponse])
-async def list_pending_approvals(db: AsyncSession = Depends(get_db)):
-    return await approval_service.list_pending_approvals(db)
+async def list_pending_approvals(
+    status: str = "pending",
+    db: AsyncSession = Depends(get_db),
+):
+    return await approval_service.list_pending_approvals(db, status=status)
 
 
 @router.get("/{approval_id}", response_model=ApprovalRequestResponse)

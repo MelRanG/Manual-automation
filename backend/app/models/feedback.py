@@ -34,14 +34,17 @@ class FeedbackReport(Base, UUIDMixin, TimestampMixin):
 class ProposedDocumentChange(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "proposed_document_changes"
 
-    feedback_report_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("feedback_reports.id"), unique=True
+    feedback_report_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("feedback_reports.id"), unique=True, nullable=True
     )
-    document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id")
+    document_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id"), nullable=True
     )
-    document_version_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document_versions.id")
+    document_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_versions.id"), nullable=True
+    )
+    manual_job_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("manual_generation_jobs.id"), nullable=True
     )
     original_text: Mapped[str] = mapped_column(Text)
     proposed_text: Mapped[str] = mapped_column(Text)

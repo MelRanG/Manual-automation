@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.feedback import ProposedDocumentChange, ApprovalRequest
 from app.models.document import Document, DocumentVersion
@@ -27,8 +28,13 @@ async def create_approval_request(
     )
     db.add(request)
     await db.commit()
-    await db.refresh(request)
-    return request
+
+    result = await db.execute(
+        select(ApprovalRequest)
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == request.id)
+    )
+    return result.scalar_one()
 
 
 async def review_approval(
@@ -100,21 +106,40 @@ async def review_approval(
         approval.status = action
 
     await db.commit()
-    await db.refresh(approval)
-    return approval
 
-
-async def list_pending_approvals(db: AsyncSession) -> list[ApprovalRequest]:
-    result = await db.execute(
+    refreshed = await db.execute(
         select(ApprovalRequest)
-        .where(ApprovalRequest.status == "pending")
-        .order_by(ApprovalRequest.created_at.asc())
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == approval_id)
     )
+    return refreshed.scalar_one()
+
+
+async def list_pending_approvals(
+    db: AsyncSession, status: str = "pending"
+) -> list[ApprovalRequest]:
+    if status == "all":
+        stmt = (
+            select(ApprovalRequest)
+            .options(selectinload(ApprovalRequest.proposed_change))
+            .order_by(ApprovalRequest.created_at.asc())
+        )
+    else:
+        statuses = ["pending", "needs_review"] if status == "needs_review" else ["pending"]
+        stmt = (
+            select(ApprovalRequest)
+            .options(selectinload(ApprovalRequest.proposed_change))
+            .where(ApprovalRequest.status.in_(statuses))
+            .order_by(ApprovalRequest.created_at.asc())
+        )
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
 async def get_approval(db: AsyncSession, approval_id: uuid.UUID) -> ApprovalRequest | None:
     result = await db.execute(
-        select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+        select(ApprovalRequest)
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == approval_id)
     )
     return result.scalar_one_or_none()

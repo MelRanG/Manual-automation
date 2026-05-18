@@ -28,9 +28,9 @@ class FeedbackReportResponse(BaseModel):
 
 class ProposedChangeResponse(BaseModel):
     id: uuid.UUID
-    feedback_report_id: uuid.UUID
-    document_id: uuid.UUID
-    document_version_id: uuid.UUID
+    feedback_report_id: uuid.UUID | None
+    document_id: uuid.UUID | None
+    document_version_id: uuid.UUID | None
     original_text: str
     proposed_text: str
     diff: str
