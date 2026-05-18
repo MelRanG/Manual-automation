@@ -1,11 +1,20 @@
 import { useState } from "react"
-import { api } from "@/lib/api"
+import { useSearchParams } from "react-router-dom"
+import { api, type SRDraft } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
+import { useAuth } from "@/contexts/AuthContext"
 
-const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
+type Tab = "draft" | "active" | "done"
 
 export function ServiceRequests() {
-  const { data: drafts, refetch } = useApi(() => api.listSRDrafts(), [])
+  const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get("tab")
+    return (t === "active" || t === "done") ? t : "draft"
+  })
+  const [page, setPage] = useState(1)
+  const pageSize = 20
   const [showCreate, setShowCreate] = useState(false)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
@@ -16,11 +25,38 @@ export function ServiceRequests() {
   const [saving, setSaving] = useState(false)
   const [submittingId, setSubmittingId] = useState<string | null>(null)
 
+  const userId = user?.id ?? "00000000-0000-0000-0000-000000000001"
+
+  // 탭 배지용: active 건수 항상 별도 조회
+  const { data: activeData, refetch: refetchCount } = useApi(
+    () => api.listSRDrafts({ status: "active", skip: 0, limit: 500 }),
+    []
+  )
+  const activeCount = activeData?.total ?? 0
+
+  const { data: result, refetch: refetchMain } = useApi(
+    () => api.listSRDrafts({ status: tab, skip: (page - 1) * pageSize, limit: pageSize }),
+    [tab, page]
+  )
+
+  const items = result?.items ?? []
+  const total = result?.total ?? 0
+  const totalPages = Math.ceil(total / pageSize)
+
+  const refetch = () => { refetchMain(); refetchCount() }
+
+  const handleTabChange = (t: Tab) => {
+    setTab(t)
+    setPage(1)
+    setEditingId(null)
+    setSearchParams({ tab: t })
+  }
+
   const handleCreate = async () => {
     if (!title.trim() || !description.trim()) return
     setSubmitting(true)
     try {
-      await api.createSRDraft({ user_id: DEMO_USER_ID, title, description, priority })
+      await api.createSRDraft({ user_id: userId, title, description, priority })
       setTitle("")
       setDescription("")
       setShowCreate(false)
@@ -40,7 +76,7 @@ export function ServiceRequests() {
     }
   }
 
-  const handleEditStart = (sr: { id: string; title: string; description: string; priority: string }) => {
+  const handleEditStart = (sr: SRDraft) => {
     setEditingId(sr.id)
     setEditForm({ title: sr.title, description: sr.description, priority: sr.priority })
   }
@@ -63,6 +99,28 @@ export function ServiceRequests() {
     if (p === "high") return "bg-[#ffdbce] text-[#611e00]"
     return "bg-[#e6e8ea] text-[#444653]"
   }
+
+  const getStatusLabel = (s: string) => {
+    if (s === "done_synced") return "완료 동기화됨"
+    if (s === "done_no_proposal") return "완료 (문서 없음)"
+    if (s === "jira_created") return "Jira 생성됨"
+    if (s === "submitted") return "제출됨"
+    return "초안"
+  }
+
+  const getStatusStyle = (s: string) => {
+    if (s === "done_synced") return "bg-[#d5e3fc] text-[#16a34a]"
+    if (s === "done_no_proposal") return "bg-[#e6e8ea] text-[#444653]"
+    if (s === "jira_created") return "bg-[#e8f0fe] text-[#1a56db]"
+    if (s === "submitted") return "bg-[#d5e3fc] text-[#16a34a]"
+    return "bg-[#e6e8ea] text-[#444653]"
+  }
+
+  const TAB_LABELS: { key: Tab; label: string }[] = [
+    { key: "draft", label: "초안" },
+    { key: "active", label: "진행중" },
+    { key: "done", label: "완료" },
+  ]
 
   return (
     <div className="p-8 space-y-6">
@@ -115,14 +173,39 @@ export function ServiceRequests() {
         </div>
       )}
 
-      {(!drafts || drafts.length === 0) ? (
+      {/* 탭 */}
+      <div className="flex gap-1 border-b border-[#e6e8ea]">
+        {TAB_LABELS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => handleTabChange(key)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              tab === key
+                ? "border-[#00288e] text-[#00288e]"
+                : "border-transparent text-[#757684] hover:text-[#191c1e]"
+            }`}
+          >
+            {label}
+            {key === "active" && activeCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-[#00288e] text-white">
+                {activeCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* SR 목록 */}
+      {items.length === 0 ? (
         <div className="text-center py-16">
           <span className="material-symbols-outlined text-5xl text-[#c4c5d5]">confirmation_number</span>
-          <p className="mt-4 text-sm text-[#757684]">아직 서비스 요청이 없습니다</p>
+          <p className="mt-4 text-sm text-[#757684]">
+            {tab === "draft" ? "작성 중인 SR이 없습니다" : tab === "active" ? "진행 중인 SR이 없습니다" : "완료된 SR이 없습니다"}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {drafts.map((sr) => (
+          {items.map((sr) => (
             <div key={sr.id} className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
               {editingId === sr.id ? (
                 <div className="space-y-3">
@@ -188,13 +271,9 @@ export function ServiceRequests() {
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
                           {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : "낮음"}
                         </span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          sr.status === "done_synced" ? "bg-[#d5e3fc] text-[#16a34a]" :
-                          sr.status === "jira_created" ? "bg-[#e8f0fe] text-[#1a56db]" :
-                          sr.status === "submitted" ? "bg-[#d5e3fc] text-[#16a34a]" : "bg-[#e6e8ea] text-[#444653]"
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getStatusStyle(sr.status)}`}>
                           <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {sr.status === "done_synced" ? "완료 동기화됨" : sr.status === "jira_created" ? "Jira 생성됨" : sr.status === "submitted" ? "제출됨" : "초안"}
+                          {getStatusLabel(sr.status)}
                         </span>
                         <span className="text-[11px] text-[#757684]">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
                       </div>
@@ -219,6 +298,30 @@ export function ServiceRequests() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 페이지네이션 */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-[#757684]">전체 {total}건</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1.5 text-sm border border-[#c4c5d5] rounded-lg disabled:opacity-40 hover:bg-[#f2f4f6] transition-colors"
+            >
+              이전
+            </button>
+            <span className="text-sm text-[#444653]">{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1.5 text-sm border border-[#c4c5d5] rounded-lg disabled:opacity-40 hover:bg-[#f2f4f6] transition-colors"
+            >
+              다음
+            </button>
+          </div>
         </div>
       )}
     </div>
