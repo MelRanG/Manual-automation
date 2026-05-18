@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, String, Text
+import uuid
+
+from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,8 +21,10 @@ class JiraConfig(Base, UUIDMixin, TimestampMixin):
 class JiraCallbackLog(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "jira_callback_logs"
 
-    jira_issue_key: Mapped[str] = mapped_column(String(50))
+    jira_issue_key: Mapped[str] = mapped_column(String(50), index=True)
     event_type: Mapped[str] = mapped_column(String(100))
     payload: Mapped[dict] = mapped_column(JSONB)
-    sr_draft_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    sr_draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sr_drafts.id"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(50), default="pending")
