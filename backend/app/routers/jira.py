@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +14,6 @@ from app.schemas.jira import (
     JiraConnectionTestResult,
 )
 from app.services import jira_service
-from app.services.feedback_service import create_feedback, generate_correction
-from app.schemas.feedback import FeedbackReportCreate
 
 router = APIRouter(prefix="/api/jira", tags=["jira"])
 
@@ -72,7 +70,11 @@ async def test_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)
 
 
 @router.post("/webhook")
-async def receive_jira_webhook(payload: dict, db: AsyncSession = Depends(get_db)):
+async def receive_jira_webhook(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     issue_key = payload.get("issue", {}).get("key", "unknown")
     event_type = payload.get("webhookEvent", "unknown")
 
@@ -103,23 +105,10 @@ async def receive_jira_webhook(payload: dict, db: AsyncSession = Depends(get_db)
         return {"status": "skipped", "reason": "no SR found for issue key"}
 
     log.sr_draft_id = draft.id
-
-    # 연결된 문서마다 피드백 생성
-    doc_ids = draft.related_document_ids or []
-    SYSTEM_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
-    for doc_id in doc_ids:
-        feedback_data = FeedbackReportCreate(
-            user_id=SYSTEM_USER_ID,
-            document_id=uuid.UUID(str(doc_id)),
-            feedback_text=f"Jira 이슈 {issue_key}가 완료되어 문서 업데이트가 필요합니다.",
-        )
-        report = await create_feedback(db, feedback_data)
-        await generate_correction(db, report.id)
-
-    draft.status = "done_synced"
-    log.status = "processed"
     await db.commit()
-    return {"status": "processed", "sr_id": str(draft.id), "feedbacks_created": len(doc_ids)}
+
+    background_tasks.add_task(jira_service.process_jira_done, draft.id, log.id)
+    return {"status": "processing", "sr_id": str(draft.id)}
 
 
 @router.get("/callback-logs", response_model=list[JiraCallbackLogResponse])

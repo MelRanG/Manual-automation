@@ -30,6 +30,7 @@ async def create_sr_draft(db: AsyncSession, data: SRDraftCreate) -> SRDraft:
         related_document_ids=[str(d) for d in data.related_document_ids] if data.related_document_ids else None,
         status="draft",
         created_by_ai=False,
+        target_url=data.target_url,
     )
     db.add(draft)
     await db.commit()
