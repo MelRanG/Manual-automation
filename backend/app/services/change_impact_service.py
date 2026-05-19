@@ -134,9 +134,35 @@ async def generate_change_proposal_with_strategy(
     else:
         action_prompt = "기존 문서 내용을 SR 완료 사항에 맞게 부분 수정하세요. 변경된 부분만 업데이트하고 나머지는 유지합니다."
 
+    # SR에 target_url이 있으면 Playwright로 스크린샷 캡처
+    screenshots: list[dict] = []
+    if sr and sr.target_url:
+        from app.services.manual_service import capture_screenshots
+        from app.models.manual import ManualGenerationJob
+        dummy_job = ManualGenerationJob(
+            id=uuid.uuid4(),
+            user_id=sr.user_id,
+            target_url=sr.target_url,
+            status="running",
+        )
+        try:
+            screenshots = await capture_screenshots(dummy_job)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"SR Playwright capture failed: {e}")
+
+    screenshot_context = ""
+    if screenshots:
+        screenshot_context = "\n\n캡처된 화면 정보:\n" + "\n".join(
+            f"- Step {s['step']}: {s['description']} (URL: {s['url']})"
+            + (f"\n  페이지 텍스트: {s.get('page_text', '')[:300]}" if s.get("page_text") else "")
+            for s in screenshots
+        )
+
     prompt = f"""다음 서비스 요청(SR)이 완료되었습니다.
 SR 제목: {sr.title if sr else 'N/A'}
 SR 설명: {sr.description if sr else 'N/A'}
+{screenshot_context}
 
 현재 문서 내용:
 {version.content if version else 'N/A'}
@@ -147,6 +173,19 @@ SR 설명: {sr.description if sr else 'N/A'}
 
     llm = get_llm_provider()
     proposed_content = await llm.generate("당신은 기술 문서 작가입니다. SR 완료 내용을 반영해 문서를 현행화합니다.", prompt)
+
+    # 스크린샷이 있으면 마크다운 끝에 이미지 섹션 추가
+    if screenshots:
+        img_lines = ["\n\n---\n\n## 스크린샷\n"]
+        for s in screenshots:
+            fname = s.get("filename")
+            img_lines.append(f"### Step {s['step']}: {s['description']}")
+            if fname:
+                img_lines.append(f"![Step {s['step']}](/uploads/screenshots/{fname})")
+            else:
+                img_lines.append("*(캡처 없음)*")
+            img_lines.append("")
+        proposed_content = proposed_content + "\n".join(img_lines)
 
     diff = "\n".join(difflib.unified_diff(
         (version.content if version else "").splitlines(),

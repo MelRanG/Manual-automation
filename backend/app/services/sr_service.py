@@ -244,6 +244,16 @@ async def process_completed_sr(db: AsyncSession, event: CompletedSREvent):
         logger.info(f"SR {draft.id} already processed or processing")
         return
 
+    # description 또는 title에서 URL 추출해 target_url 저장 (없는 경우만)
+    if not draft.target_url:
+        import re as _re
+        url_match = _re.search(r'https?://[^\s,\]）)]+', draft.description or "")
+        if not url_match:
+            url_match = _re.search(r'https?://[^\s,\]）)]+', draft.title or "")
+        if url_match:
+            draft.target_url = url_match.group(0).rstrip(".")
+            await db.commit()
+
     llm = get_llm_provider()
 
     prompt = f"""서비스 요청(SR)이 완료되었습니다.

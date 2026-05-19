@@ -20,6 +20,7 @@ export function ServiceRequests() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState("medium")
+  const [targetUrl, setTargetUrl] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ title: "", description: "", priority: "medium" })
@@ -57,9 +58,13 @@ export function ServiceRequests() {
     if (!title.trim() || !description.trim()) return
     setSubmitting(true)
     try {
-      await api.createSRDraft({ user_id: userId, title, description, priority })
+      const normalizedUrl = targetUrl.trim()
+        ? (targetUrl.trim().startsWith("http") ? targetUrl.trim() : `https://${targetUrl.trim()}`)
+        : undefined
+      await api.createSRDraft({ user_id: userId, title, description, priority, target_url: normalizedUrl })
       setTitle("")
       setDescription("")
+      setTargetUrl("")
       setShowCreate(false)
       refetch()
     } finally {
@@ -167,6 +172,12 @@ export function ServiceRequests() {
             rows={3}
             value={description}
             onChange={e => setDescription(e.target.value)}
+          />
+          <input
+            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
+            placeholder="대상 URL (선택) — 입력 시 자동으로 스크린샷이 캡처됩니다"
+            value={targetUrl}
+            onChange={e => setTargetUrl(e.target.value)}
           />
           <select
             className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none bg-white"
@@ -282,6 +293,12 @@ export function ServiceRequests() {
                         )}
                       </div>
                       <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
+                      {sr.target_url && (
+                        <p className="text-xs text-[#757684] mt-0.5 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[12px]">screenshot_monitor</span>
+                          {sr.target_url}
+                        </p>
+                      )}
                       <div className="flex items-center gap-3 mt-2">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
                           {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : sr.priority === "low" ? "낮음" : "최저"}

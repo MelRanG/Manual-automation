@@ -140,7 +140,7 @@ export const api = {
     const qs = query.toString()
     return request<SRListResponse>(`/sr/drafts${qs ? `?${qs}` : ''}`)
   },
-  createSRDraft: (data: { user_id: string; title: string; description: string; priority: string }) =>
+  createSRDraft: (data: { user_id: string; title: string; description: string; priority: string; target_url?: string }) =>
     request<SRDraft>('/sr/drafts', { method: 'POST', body: JSON.stringify(data) }),
   generateSR: (data: { user_id: string; document_id: string; issue_description: string }) =>
     request<SRDraft>('/sr/generate', { method: 'POST', body: JSON.stringify(data) }),
@@ -205,7 +205,7 @@ export interface ProposedChange { id: string; feedback_report_id: string | null;
 export interface ApprovalRequest { id: string; proposed_change_id: string; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
 export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
-export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; created_at: string }
+export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; target_url: string | null; created_at: string }
 export interface SRListResponse { items: SRDraft[]; total: number }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; related_document_ids: string[] | null; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
 export interface ChangeProposal { id: string; impact_analysis_id: string; document_id: string; original_content: string; proposed_content: string; diff: string; status: string; created_at: string }
