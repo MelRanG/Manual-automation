@@ -1,4 +1,5 @@
 import hashlib
+import os
 from abc import ABC, abstractmethod
 
 from app.config import settings
@@ -37,6 +38,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 class BedrockEmbeddingProvider(EmbeddingProvider):
     def __init__(self):
         import boto3
+        if settings.aws_bearer_token_bedrock.get_secret_value():
+            os.environ["AWS_BEARER_TOKEN_BEDROCK"] = settings.aws_bearer_token_bedrock.get_secret_value()
         self.client = boto3.client(
             "bedrock-runtime",
             region_name=settings.aws_region,
