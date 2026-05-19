@@ -13,6 +13,7 @@ from app.schemas.jira import (
     JiraConfigUpsert,
     JiraConnectionTestResult,
 )
+from app.models.feedback import ApprovalRequest as ApprovalRequestModel
 from app.services import jira_service
 
 router = APIRouter(prefix="/api/jira", tags=["jira"])
@@ -106,7 +107,7 @@ async def receive_jira_webhook(
         await db.commit()
         return {"status": "skipped", "reason": "no SR found for issue key"}
 
-    if draft.status in ("done_synced", "done_no_proposal"):
+    if draft.status in ("done_synced", "done_no_proposal", "pending_doc_review", "pending_document_selection"):
         log.status = "skipped"
         await db.commit()
         return {"status": "skipped", "reason": "SR already processed"}
@@ -114,8 +115,6 @@ async def receive_jira_webhook(
     log.sr_draft_id = draft.id
     log.status = "processed"
     await db.commit()
-
-    from app.models.feedback import ApprovalRequest as ApprovalRequestModel
 
     approval = ApprovalRequestModel(
         id=uuid.uuid4(),
