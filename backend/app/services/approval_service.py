@@ -55,6 +55,9 @@ async def review_approval(
     if not approval:
         raise ValueError("Approval request not found")
 
+    if approval.approval_type == "doc_review":
+        raise ValueError("doc_review 타입은 /doc-review 엔드포인트를 사용하세요")
+
     if approval.status not in ("pending", "needs_review"):
         raise ValueError("Approval already reviewed")
 

@@ -313,7 +313,13 @@ function ApprovalCard({
     }
     return change?.reasoning?.slice(0, 50) ?? "Playwright 매뉴얼"
   })()
-  const cardTitle = tab === "playwright" ? playwrightTitle : `리비전 #${approval.proposed_change_id.slice(0, 8)}`
+  const cardTitle = tab === "playwright" ? playwrightTitle : (
+    approval.proposed_change_id
+      ? `리비전 #${approval.proposed_change_id.slice(0, 8)}`
+      : approval.sr_draft_id
+        ? `SR #${approval.sr_draft_id.slice(0, 8)}`
+        : `승인 #${approval.id.slice(0, 8)}`
+  )
 
   return (
     <div className={`bg-white border rounded-xl shadow-sm overflow-hidden transition-shadow hover:shadow-md ${
