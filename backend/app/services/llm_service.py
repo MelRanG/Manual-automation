@@ -36,12 +36,25 @@ class MockLLMProvider(LLMProvider):
 class BedrockLLMProvider(LLMProvider):
     def __init__(self):
         import anthropic
-        kwargs: dict = {"aws_region": settings.aws_region}
-        if settings.aws_access_key_id:
-            kwargs["aws_access_key"] = settings.aws_access_key_id
-            kwargs["aws_secret_key"] = settings.aws_secret_access_key
-        self.client = anthropic.AsyncAnthropicBedrock(**kwargs)
+        import httpx
         self.model = settings.bedrock_model_id
+
+        if settings.bedrock_gateway_url:
+            # 사내 LiteLLM 게이트웨이 방식: Virtual Key + base_url
+            self.client: anthropic.AsyncAnthropicBedrock = anthropic.AsyncAnthropicBedrock(
+                base_url=settings.bedrock_gateway_url,
+                aws_region=settings.aws_region,
+                api_key=settings.bedrock_api_key,
+                http_client=httpx.AsyncClient(verify=False),
+            )
+        else:
+            kwargs: dict = {"aws_region": settings.aws_region}
+            if settings.aws_access_key_id:
+                kwargs["aws_access_key"] = settings.aws_access_key_id
+                kwargs["aws_secret_key"] = settings.aws_secret_access_key
+            elif settings.aws_profile:
+                kwargs["aws_profile"] = settings.aws_profile
+            self.client = anthropic.AsyncAnthropicBedrock(**kwargs)
 
     async def generate(self, system_prompt: str, user_message: str, context: str = "") -> str:
         full_message = user_message

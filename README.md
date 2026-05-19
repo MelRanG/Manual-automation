@@ -42,11 +42,19 @@ DATABASE_URL=postgresql+asyncpg://docops:docops_dev@localhost:5600/docops
 # LLM: bedrock | anthropic | openai | mock
 LLM_PROVIDER=bedrock
 
-# Bedrock (AWS IAM 또는 키 직접 입력)
+# Bedrock — 방식 1: 사내 LiteLLM 게이트웨이 (권장)
+# BEDROCK_API_KEY는 get-gateway-token.sh 실행 결과값
+BEDROCK_GATEWAY_URL=https://awsllmgw.hist.co.kr/bedrock
+BEDROCK_API_KEY=sk-...
+AWS_REGION=us-east-1
+BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6
+
+# Bedrock — 방식 2: SSO 프로필 (BEDROCK_GATEWAY_URL 비워두면 이 값 사용)
+AWS_PROFILE=claude-code
+
+# Bedrock — 방식 3: 액세스 키 직접 입력 (AWS_PROFILE도 비워두면 이 값 사용)
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-AWS_REGION=us-east-1
-BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6-20251101-v1:0
 
 # 직접 API 키 쓸 경우
 ANTHROPIC_API_KEY=
