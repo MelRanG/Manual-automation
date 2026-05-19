@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -279,7 +280,6 @@ async def review_doc_review_approval(
             from app.schemas.sr import CompletedSREvent
             from app.services.sr_service import process_completed_sr
             from app.db import SessionLocal
-            import asyncio
 
             event = CompletedSREvent(
                 source="approval",
@@ -298,7 +298,6 @@ async def review_doc_review_approval(
         if action == "approve_manual" and draft:
             from app.services import manual_service
             from app.db import SessionLocal
-            import asyncio
 
             url = target_url or draft.target_url
             if url:
@@ -317,6 +316,8 @@ async def review_doc_review_approval(
     await db.commit()
 
     refreshed = await db.execute(
-        select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+        select(ApprovalRequest)
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == approval_id)
     )
     return refreshed.scalar_one()

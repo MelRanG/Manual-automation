@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -15,7 +16,7 @@ class ApprovalAction(BaseModel):
 
 class DocReviewAction(BaseModel):
     reviewer_id: uuid.UUID
-    action: str  # "reject" | "approve_doc" | "approve_manual"
+    action: Literal["reject", "approve_doc", "approve_manual"]
     target_url: str | None = None
 
 
