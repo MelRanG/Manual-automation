@@ -11,6 +11,14 @@ class DocumentCreate(BaseModel):
     priority: str = "medium"
 
 
+class DocumentUpdate(BaseModel):
+    """부분 업데이트 스키마. None 필드는 변경하지 않음."""
+    title: str | None = None
+    description: str | None = None
+    content: str | None = None
+    change_summary: str | None = None
+
+
 class DocumentVersionResponse(BaseModel):
     id: uuid.UUID
     document_id: uuid.UUID

@@ -60,10 +60,8 @@ async def test_approval_double_review(client: AsyncClient, test_user: dict):
         "document_id": doc_id,
         "feedback_text": "Fix it",
     })
-    proposal_id = fb_resp.json()["proposed_change"]["id"]
-
-    approval_resp = await client.post(f"/api/approvals/{proposal_id}")
-    approval_id = approval_resp.json()["id"]
+    approval_id = fb_resp.json()["approval_id"]
+    assert approval_id is not None
 
     # First review
     await client.post(f"/api/approvals/{approval_id}/review", json={
@@ -76,7 +74,7 @@ async def test_approval_double_review(client: AsyncClient, test_user: dict):
         "reviewer_id": test_user["id"],
         "action": "rejected",
     })
-    assert resp.status_code == 404  # "Approval already reviewed"
+    assert resp.status_code == 400  # "Approval already reviewed"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -93,10 +91,8 @@ async def test_invalid_approval_action(client: AsyncClient, test_user: dict):
         "document_id": doc_id,
         "feedback_text": "Fix it",
     })
-    proposal_id = fb_resp.json()["proposed_change"]["id"]
-
-    approval_resp = await client.post(f"/api/approvals/{proposal_id}")
-    approval_id = approval_resp.json()["id"]
+    approval_id = fb_resp.json()["approval_id"]
+    assert approval_id is not None
 
     resp = await client.post(f"/api/approvals/{approval_id}/review", json={
         "reviewer_id": test_user["id"],

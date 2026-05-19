@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.feedback import ProposedDocumentChange, ApprovalRequest
-from app.models.document import Document, DocumentVersion
 from app.services.document_service import create_new_version
 
 
@@ -27,8 +27,13 @@ async def create_approval_request(
     )
     db.add(request)
     await db.commit()
-    await db.refresh(request)
-    return request
+
+    result = await db.execute(
+        select(ApprovalRequest)
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == request.id)
+    )
+    return result.scalar_one()
 
 
 async def review_approval(
@@ -64,31 +69,70 @@ async def review_approval(
     )
     change = change_result.scalar_one_or_none()
 
-    if action == "approved" and change:
-        approval.status = "approved"
-        change.status = "approved"
-        await db.flush()
-        await create_new_version(
-            db,
-            change.document_id,
-            change.proposed_text,
-            change_summary=f"Applied approved correction: {change.reasoning[:100]}",
-            created_by=reviewer_id,
-        )
-    elif action == "edit_and_approve" and change:
-        if not edited_content:
+    if action in ("approved", "edit_and_approve") and change:
+        if action == "edit_and_approve" and not edited_content:
             raise ValueError("edited_content is required for edit_and_approve")
+        final_content = edited_content if (action == "edit_and_approve" and edited_content) else change.proposed_text
         approval.status = "approved"
         change.status = "approved"
-        change.proposed_text = edited_content
         await db.flush()
-        await create_new_version(
-            db,
-            change.document_id,
-            edited_content,
-            change_summary=f"Applied with reviewer edits: {comment or change.reasoning[:100]}",
-            created_by=reviewer_id,
-        )
+
+        if change.source_type == "playwright":
+            # 신규 Document 생성
+            from app.models.document import Document, DocumentVersion
+            from app.models.manual import ManualGenerationJob
+            from sqlalchemy import select as _select
+
+            prefix = "Playwright auto-generated manual for "
+            url_part = change.reasoning[len(prefix):] if change.reasoning.startswith(prefix) else change.reasoning
+            title = f"사용자 매뉴얼 - {url_part[:40]}"
+            doc = Document(
+                id=uuid.uuid4(),
+                title=title,
+                description="Playwright 자동 생성 후 승인된 매뉴얼",
+                owner_id=reviewer_id,
+                status="active",
+                priority="medium",
+                trust_score=1.0,
+            )
+            db.add(doc)
+            await db.flush()
+
+            version = DocumentVersion(
+                id=uuid.uuid4(),
+                document_id=doc.id,
+                version_number=1,
+                content=final_content,
+                created_by=reviewer_id,
+                change_summary="Approved Playwright auto-generated manual",
+            )
+            db.add(version)
+            await db.flush()
+            doc.current_version_id = version.id
+
+            # ManualJob.output_document_id 업데이트
+            if change.manual_job_id:
+                job_result = await db.execute(
+                    _select(ManualGenerationJob).where(
+                        ManualGenerationJob.id == change.manual_job_id
+                    )
+                )
+                job = job_result.scalar_one_or_none()
+                if job:
+                    job.output_document_id = doc.id
+        else:
+            if action == "edit_and_approve":
+                summary_prefix = f"Applied with reviewer edits: {comment or ''}"
+            else:
+                summary_prefix = "Applied approved correction: "
+            change_summary = f"{summary_prefix}{change.reasoning[:100]}"
+            await create_new_version(
+                db,
+                change.document_id,
+                final_content,
+                change_summary=change_summary,
+                created_by=reviewer_id,
+            )
     elif action == "request_review":
         approval.status = "needs_review"
         if change:
@@ -100,21 +144,51 @@ async def review_approval(
         approval.status = action
 
     await db.commit()
-    await db.refresh(approval)
-    return approval
 
-
-async def list_pending_approvals(db: AsyncSession) -> list[ApprovalRequest]:
-    result = await db.execute(
+    refreshed = await db.execute(
         select(ApprovalRequest)
-        .where(ApprovalRequest.status == "pending")
-        .order_by(ApprovalRequest.created_at.asc())
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == approval_id)
     )
-    return list(result.scalars().all())
+    return refreshed.scalar_one()
+
+
+async def list_pending_approvals(
+    db: AsyncSession, status: str = "pending", skip: int = 0, limit: int = 20
+) -> tuple[list[ApprovalRequest], int]:
+    from sqlalchemy import func
+
+    status_map = {
+        "processing": ["pending", "needs_review"],
+        "completed": ["approved", "rejected"],
+        "all": None,
+        "pending": ["pending"],
+        "needs_review": ["pending", "needs_review"],
+    }
+    statuses = status_map.get(status, ["pending"])
+
+    base = select(ApprovalRequest)
+    if statuses is not None:
+        base = base.where(ApprovalRequest.status.in_(statuses))
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    stmt = (
+        base
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .order_by(ApprovalRequest.created_at.asc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), total
 
 
 async def get_approval(db: AsyncSession, approval_id: uuid.UUID) -> ApprovalRequest | None:
     result = await db.execute(
-        select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+        select(ApprovalRequest)
+        .options(selectinload(ApprovalRequest.proposed_change))
+        .where(ApprovalRequest.id == approval_id)
     )
     return result.scalar_one_or_none()

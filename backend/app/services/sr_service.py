@@ -30,6 +30,7 @@ async def create_sr_draft(db: AsyncSession, data: SRDraftCreate) -> SRDraft:
         related_document_ids=[str(d) for d in data.related_document_ids] if data.related_document_ids else None,
         status="draft",
         created_by_ai=False,
+        target_url=data.target_url,
     )
     db.add(draft)
     await db.commit()
@@ -87,9 +88,37 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
 
     draft.status = "submitted"
 
-    webhook_result = await deliver_webhook(db, draft)
-    await db.commit()
-    return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+    from app.services import jira_service
+    config = await jira_service.get_active_config(db)
+
+    if config:
+        try:
+            issue = await jira_service.create_jira_issue(config, draft)
+            draft.jira_issue_key = issue["key"]
+            draft.jira_issue_url = issue["url"]
+            draft.status = "jira_created"
+            log = WebhookDeliveryLog(
+                id=uuid.uuid4(),
+                sr_draft_id=draft.id,
+                target_url=f"{config.base_url.rstrip('/')}/rest/api/3/issue",
+                payload={"summary": draft.title, "project": config.project_key},
+                response_status=201,
+                response_body=f"Jira issue created: {issue['key']}",
+                status="delivered",
+            )
+            db.add(log)
+            await db.commit()
+            return {"sr_id": str(sr_id), "status": "jira_created", "jira_issue_key": issue["key"]}
+        except Exception as e:
+            logger.error(f"Jira issue creation failed: {e}")
+            # fallback: webhook 시도
+            webhook_result = await deliver_webhook(db, draft)
+            await db.commit()
+            return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+    else:
+        webhook_result = await deliver_webhook(db, draft)
+        await db.commit()
+        return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
 
 
 async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
@@ -149,9 +178,45 @@ async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
         return {"status": "error", "error": str(e)}
 
 
-async def list_sr_drafts(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[SRDraft]:
-    stmt = select(SRDraft).order_by(SRDraft.created_at.desc())
+async def update_sr_draft(db: AsyncSession, sr_id: uuid.UUID, data: dict) -> SRDraft:
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise ValueError("SR draft not found")
+    if draft.status != "draft":
+        raise ValueError("SR is not in draft status")
+    for key, value in data.items():
+        setattr(draft, key, value)
+    await db.commit()
+    await db.refresh(draft)
+    return draft
+
+
+STATUS_MAP = {
+    "draft": ["draft"],
+    "active": ["submitted", "jira_created"],
+    "done": ["done_synced", "done_no_proposal"],
+}
+
+
+async def list_sr_drafts(
+    db: AsyncSession,
+    user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+) -> tuple[list[SRDraft], int]:
+    from sqlalchemy import func
+    stmt = select(SRDraft)
     if user_id:
         stmt = stmt.where(SRDraft.user_id == user_id)
+    if status is not None:
+        statuses = STATUS_MAP.get(status)
+        if statuses is None:
+            raise ValueError(f"Invalid status filter: {status}")
+        stmt = stmt.where(SRDraft.status.in_(statuses))
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+    stmt = stmt.order_by(SRDraft.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    return list(result.scalars().all()), total

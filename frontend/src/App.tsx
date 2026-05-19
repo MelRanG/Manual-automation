@@ -5,6 +5,7 @@ import { Login } from "@/pages/Login"
 import { Dashboard } from "@/pages/Dashboard"
 import { Documents } from "@/pages/Documents"
 import { DocumentDetail } from "@/pages/DocumentDetail"
+import { DocumentEdit } from "@/pages/DocumentEdit"
 import { Chat } from "@/pages/Chat"
 import { Feedback } from "@/pages/Feedback"
 import { Approvals } from "@/pages/Approvals"
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/documents" element={<Documents />} />
             <Route path="/documents/:id" element={<DocumentDetail />} />
+            <Route path="/documents/:id/edit" element={<DocumentEdit />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/feedback" element={<Feedback />} />
             <Route path="/approvals" element={<Approvals />} />

@@ -4,6 +4,12 @@ from app.schemas.document import (
     DocumentListResponse,
     DocumentVersionResponse,
 )
+from app.schemas.jira import (
+    JiraConfigUpsert,
+    JiraConfigResponse,
+    JiraCallbackLogResponse,
+    JiraConnectionTestResult,
+)
 from app.schemas.user import UserCreate, UserResponse
 
 __all__ = [
@@ -11,6 +17,10 @@ __all__ = [
     "DocumentResponse",
     "DocumentListResponse",
     "DocumentVersionResponse",
+    "JiraConfigUpsert",
+    "JiraConfigResponse",
+    "JiraCallbackLogResponse",
+    "JiraConnectionTestResult",
     "UserCreate",
     "UserResponse",
 ]

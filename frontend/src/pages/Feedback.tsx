@@ -1,9 +1,104 @@
-import { useState } from "react"
-import { api, type FeedbackReport, type ProposedChange } from "@/lib/api"
+import { useState, useEffect, useRef } from "react"
+import { useNavigate } from "react-router-dom"
+import { api, type Document, type FeedbackReport, type ProposedChange } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 
+interface DocumentPickerDropdownProps {
+  value: string
+  onChange: (id: string) => void
+  onClear: () => void
+}
+
+function DocumentPickerDropdown({ value, onChange, onClear }: DocumentPickerDropdownProps) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const [documents, setDocuments] = useState<Document[]>([])
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    api.listDocuments(0, 100)
+      .then(res => setDocuments(res.documents))
+      .catch((err) => console.error("문서 목록 로드 실패:", err))
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+        setQuery("")
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  const filtered = documents.filter(d =>
+    d.title.toLowerCase().includes(query.toLowerCase())
+  )
+
+  return (
+    <div ref={ref} className="relative">
+      {value ? (
+        <div className="flex items-center gap-2 px-3 py-2 border border-[#c4c5d5] rounded-lg bg-[#eeeeff]">
+          <span className="material-symbols-outlined text-sm text-[#4a4bdc]">description</span>
+          <span className="flex-1 text-sm text-[#4a4bdc] font-medium truncate">{documents.find(d => d.id === value)?.title ?? value}</span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[#9a9bad] hover:text-[#1a1b25] transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="w-full text-left px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#9a9bad] hover:border-[#00288e] transition-colors"
+        >
+          관련 문서 선택 (선택사항)
+        </button>
+      )}
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-[#4a4bdc] rounded-lg shadow-lg overflow-hidden">
+          <div className="px-3 py-2 border-b border-[#e4e5f0]">
+            <input
+              autoFocus
+              className="w-full text-sm outline-none placeholder-[#9a9bad]"
+              placeholder="문서 검색..."
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+          <ul className="max-h-60 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-4 py-3 text-sm text-[#9a9bad]">검색 결과가 없습니다</li>
+            ) : (
+              filtered.map(doc => (
+                <li
+                  key={doc.id}
+                  onClick={() => { onChange(doc.id); setOpen(false); setQuery("") }}
+                  className="px-4 py-3 cursor-pointer hover:bg-[#f0f0ff] border-b border-[#f0f0f5] last:border-0 transition-colors"
+                >
+                  <p className="text-sm font-semibold text-[#1a1b25]">{doc.title}</p>
+                  <p className="text-xs text-[#5a5b6e] mt-0.5 truncate">{doc.description ?? "설명 없음"}</p>
+                  <p className="text-[10px] text-[#9a9bad] mt-1">
+                    최근 수정 · {new Date(doc.updated_at).toLocaleDateString("ko-KR")}
+                  </p>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Feedback() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { data: feedback, refetch } = useApi(() => api.listFeedback(), [])
   const [showCreate, setShowCreate] = useState(false)
@@ -60,11 +155,10 @@ export function Feedback() {
 
       {showCreate && (
         <div className="bg-white border border-[#00288e]/30 rounded-xl p-6 shadow-sm space-y-4">
-          <input
-            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-            placeholder="문서 ID (선택)"
+          <DocumentPickerDropdown
             value={docId}
-            onChange={e => setDocId(e.target.value)}
+            onChange={(id) => setDocId(id)}
+            onClear={() => setDocId("")}
           />
           <textarea
             className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
@@ -85,10 +179,16 @@ export function Feedback() {
       {result?.proposed_change && (
         <div className="bg-[#d5e3fc]/30 border border-[#d5e3fc] rounded-xl p-5 flex items-start gap-3">
           <span className="material-symbols-outlined text-lg text-[#16a34a]">check_circle</span>
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-semibold text-[#191c1e]">AI 수정안이 생성되었습니다</p>
             <p className="text-xs text-[#444653] mt-1">승인 관리에서 검토할 수 있습니다.</p>
           </div>
+          <button
+            onClick={() => navigate("/approvals?status=processing")}
+            className="px-3 py-1.5 text-xs font-medium text-[#00288e] border border-[#00288e]/40 rounded-lg hover:bg-[#dde1ff] transition-colors"
+          >
+            승인 관리로 이동
+          </button>
         </div>
       )}
 
@@ -116,7 +216,7 @@ export function Feedback() {
                     <p className="text-sm text-[#191c1e] line-clamp-2">{fb.feedback_text}</p>
                   </td>
                   <td className="px-4 py-3 text-xs text-[#757684]">
-                    {fb.document_id ? fb.document_id.slice(0, 8) + "..." : "-"}
+                    {fb.document_title ?? (fb.document_id ? fb.document_id.slice(0, 8) + "..." : "-")}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -125,13 +225,27 @@ export function Feedback() {
                       : "bg-[#e6e8ea] text-[#444653]"
                     }`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {fb.status === "processed" ? "처리됨" : fb.status === "pending" ? "대기중" : fb.status}
+                      {fb.status === "processed" ? "수정안 생성됨" : fb.status === "pending" ? "대기중" : fb.status}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-[#757684]">
                     {new Date(fb.created_at).toLocaleDateString("ko-KR")}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 flex items-center gap-1">
+                    {fb.status === "processed" && (
+                      <button
+                        onClick={() => {
+                          const dest = (fb.proposed_change_status === "approved" || fb.proposed_change_status === "rejected")
+                            ? "/approvals?status=completed"
+                            : "/approvals?status=processing"
+                          navigate(dest)
+                        }}
+                        className="p-1 text-[#00288e] hover:bg-[#dde1ff] transition-colors rounded"
+                        title="수정안 보기"
+                      >
+                        <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(fb.id)}
                       disabled={deleting === fb.id}

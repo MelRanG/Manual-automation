@@ -34,7 +34,39 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         return [item.embedding for item in response.data]
 
 
+class BedrockEmbeddingProvider(EmbeddingProvider):
+    def __init__(self):
+        import boto3
+        self.client = boto3.client(
+            "bedrock-runtime",
+            region_name=settings.aws_region,
+            aws_access_key_id=settings.aws_access_key_id or None,
+            aws_secret_access_key=settings.aws_secret_access_key or None,
+        )
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        import asyncio
+        import json
+
+        def _embed_one(text: str) -> list[float]:
+            body = json.dumps({"inputText": text})
+            resp = self.client.invoke_model(
+                modelId="amazon.titan-embed-text-v2:0",
+                body=body,
+                contentType="application/json",
+                accept="application/json",
+            )
+            return json.loads(resp["body"].read())["embedding"]
+
+        results = await asyncio.gather(
+            *(asyncio.to_thread(_embed_one, text) for text in texts)
+        )
+        return list(results)
+
+
 def get_embedding_provider() -> EmbeddingProvider:
+    if settings.embedding_model == "bedrock":
+        return BedrockEmbeddingProvider()
     if settings.embedding_model == "openai":
         return OpenAIEmbeddingProvider()
     return MockEmbeddingProvider()

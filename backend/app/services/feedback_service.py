@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentVersion, DocumentChunk
 from app.models.feedback import FeedbackReport, ProposedDocumentChange
-from app.schemas.feedback import FeedbackReportCreate
+from app.schemas.feedback import FeedbackReportCreate, FeedbackReportResponse
 from app.services.llm_service import get_llm_provider
 
 CORRECTION_SYSTEM_PROMPT = """You are a documentation correction assistant.
@@ -92,6 +92,7 @@ async def generate_correction(
         diff=diff or "(no difference detected)",
         reasoning=f"AI correction based on feedback: {feedback.feedback_text[:200]}",
         confidence=0.8,
+        source_type="feedback",
         status="pending",
     )
     db.add(proposal)
@@ -104,12 +105,41 @@ async def generate_correction(
 
 async def list_feedback(
     db: AsyncSession, document_id: uuid.UUID | None = None
-) -> list[FeedbackReport]:
+) -> list[FeedbackReportResponse]:
     stmt = select(FeedbackReport).order_by(FeedbackReport.created_at.desc())
     if document_id:
         stmt = stmt.where(FeedbackReport.document_id == document_id)
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    reports = list(result.scalars().all())
+
+    doc_ids = {r.document_id for r in reports if r.document_id}
+    title_map: dict[uuid.UUID, str] = {}
+    if doc_ids:
+        doc_result = await db.execute(
+            select(Document.id, Document.title).where(Document.id.in_(doc_ids))
+        )
+        title_map = {row.id: row.title for row in doc_result}
+
+    report_ids = [r.id for r in reports]
+    change_map: dict[uuid.UUID, str] = {}
+    if report_ids:
+        change_result = await db.execute(
+            select(
+                ProposedDocumentChange.feedback_report_id,
+                ProposedDocumentChange.status,
+            ).where(ProposedDocumentChange.feedback_report_id.in_(report_ids))
+        )
+        change_map = {row.feedback_report_id: row.status for row in change_result}
+
+    return [
+        FeedbackReportResponse.model_validate(r, from_attributes=True).model_copy(
+            update={
+                "document_title": title_map.get(r.document_id),
+                "proposed_change_status": change_map.get(r.id),
+            }
+        )
+        for r in reports
+    ]
 
 
 async def get_proposed_change(

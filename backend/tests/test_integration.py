@@ -32,10 +32,9 @@ async def test_full_document_lifecycle(client: AsyncClient, test_user: dict):
     assert proposal is not None
     proposal_id = proposal["id"]
 
-    # 4. Create approval request
-    approval_resp = await client.post(f"/api/approvals/{proposal_id}")
-    assert approval_resp.status_code == 201
-    approval_id = approval_resp.json()["id"]
+    # 4. Approval was auto-created by feedback endpoint
+    approval_id = fb_resp.json()["approval_id"]
+    assert approval_id is not None
 
     # 5. Approve it
     review_resp = await client.post(f"/api/approvals/{approval_id}/review", json={

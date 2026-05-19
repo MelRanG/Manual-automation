@@ -46,6 +46,13 @@ async def client(engine) -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest_asyncio.fixture(loop_scope="session")
+async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
+        yield session
+
+
+@pytest_asyncio.fixture(loop_scope="session")
 async def test_user(client: AsyncClient) -> dict:
     resp = await client.post("/api/users", json={
         "name": "Test User",

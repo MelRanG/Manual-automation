@@ -57,11 +57,17 @@ async def get_document(db: AsyncSession, document_id: uuid.UUID) -> Document | N
 async def list_documents(
     db: AsyncSession, skip: int = 0, limit: int = 20
 ) -> tuple[list[Document], int]:
-    count_result = await db.execute(select(func.count(Document.id)))
+    base_filter = Document.status != "archived"
+
+    count_result = await db.execute(select(func.count(Document.id)).where(base_filter))
     total = count_result.scalar_one()
 
     result = await db.execute(
-        select(Document).order_by(Document.created_at.desc()).offset(skip).limit(limit)
+        select(Document)
+        .where(base_filter)
+        .order_by(Document.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
     return list(result.scalars().all()), total
 
@@ -105,6 +111,45 @@ async def create_new_version(
 
     await chunk_and_embed_version(db, version)
     return version
+
+
+async def update_document(
+    db: AsyncSession,
+    document_id: uuid.UUID,
+    title: str | None = None,
+    description: str | None = None,
+    content: str | None = None,
+    change_summary: str | None = None,
+) -> Document:
+    doc = await get_document(db, document_id)
+    if not doc:
+        raise ValueError("Document not found")
+
+    if title is not None:
+        doc.title = title
+    if description is not None:
+        doc.description = description
+
+    await db.flush()
+
+    if content is not None:
+        await create_new_version(db, document_id, content, change_summary=change_summary)
+        await db.refresh(doc)
+    else:
+        await db.commit()
+        await db.refresh(doc)
+
+    return doc
+
+
+async def archive_document(db: AsyncSession, document_id: uuid.UUID) -> Document:
+    doc = await get_document(db, document_id)
+    if not doc:
+        raise ValueError("Document not found")
+    doc.status = "archived"
+    await db.commit()
+    await db.refresh(doc)
+    return doc
 
 
 async def get_document_versions(

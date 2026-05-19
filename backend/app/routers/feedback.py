@@ -14,7 +14,7 @@ from app.schemas.feedback import (
     ProposedChangeResponse,
     FeedbackWithProposalResponse,
 )
-from app.services import feedback_service
+from app.services import feedback_service, approval_service
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
@@ -26,8 +26,11 @@ async def create_feedback(
 ):
     report = await feedback_service.create_feedback(db, data)
     proposal = None
+    approval = None
     if data.document_id:
         proposal = await feedback_service.generate_correction(db, report.id)
+        if proposal:
+            approval = await approval_service.create_approval_request(db, proposal.id)
         await db.refresh(report)
 
         # 문서 소유자에게 알림
@@ -47,6 +50,7 @@ async def create_feedback(
     return FeedbackWithProposalResponse(
         feedback=report,
         proposed_change=proposal,
+        approval_id=approval.id if approval else None,
     )
 
 

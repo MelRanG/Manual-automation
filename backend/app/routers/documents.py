@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.models.document import Document
 from app.models.feedback import FeedbackReport, ApprovalRequest
 from app.schemas.document import (
     DocumentCreate,
+    DocumentUpdate,
     DocumentResponse,
     DocumentListResponse,
     DocumentVersionResponse,
@@ -169,3 +170,61 @@ async def create_version(
         db, document_id, content, change_summary=change_summary, source_file_url=file_url
     )
     return version
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def update_document(
+    document_id: uuid.UUID,
+    data: DocumentUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        doc = await document_service.update_document(
+            db,
+            document_id,
+            title=data.title,
+            description=data.description,
+            content=data.content,
+            change_summary=data.change_summary,
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+
+@router.delete("/{document_id}")
+async def delete_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await document_service.archive_document(db, document_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"message": "archived"}
+
+
+@router.get("/{document_id}/export")
+async def export_document(
+    document_id: uuid.UUID,
+    format: str = "txt",
+    db: AsyncSession = Depends(get_db),
+):
+    if format not in ("txt", "md"):
+        raise HTTPException(status_code=400, detail="format must be txt or md")
+
+    doc = await document_service.get_document(db, document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    versions = await document_service.get_document_versions(db, document_id)
+    content = versions[0].content if versions else ""
+
+    safe_title = doc.title.replace("/", "_").replace("\\", "_").replace('"', "_")
+    media_type = "text/plain" if format == "txt" else "text/markdown"
+
+    return Response(
+        content=content,
+        media_type=f"{media_type}; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_title}.{format}"'},
+    )

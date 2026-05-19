@@ -11,7 +11,7 @@
 docker compose up db -d
 
 # 백엔드 (포트 8000)
-cd backend && uv sync && uv run uvicorn app.main:app --reload --port 8000
+cd backend && uv sync && uv run alembic upgrade head && uv run uvicorn app.main:app --reload --port 8000
 
 # 프론트엔드 (포트 5173)
 cd frontend && pnpm install && pnpm dev
@@ -52,7 +52,8 @@ BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6-20251101-v1:0
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 
-# 기타
+# 임베딩: bedrock | mock
+# bedrock: amazon.titan-embed-text-v2:0 (AWS_ACCESS_KEY_ID 등 Bedrock 설정 필요)
 EMBEDDING_MODEL=mock
 SECRET_KEY=dev-secret-key-change-in-production
 ```
@@ -118,6 +119,11 @@ JWT 없음. **이메일만 입력**하면 로그인.
 | POST | `/api/manuals/jobs` | 매뉴얼 생성 잡 등록 |
 | GET | `/api/notifications` | 알림 목록 |
 | GET | `/api/notifications/stream` | SSE 실시간 알림 |
+| GET | `/api/jira/config` | Jira 연동 설정 조회 |
+| PUT | `/api/jira/config` | Jira 연동 설정 저장 |
+| POST | `/api/jira/config/test` | Jira 연결 테스트 |
+| POST | `/api/jira/webhook` | Jira Done 웹훅 수신 → 문서 자동 현행화 |
+| GET | `/api/jira/callback-logs` | Jira 웹훅 수신 로그 목록 |
 
 전체 Swagger: `http://localhost:8000/docs`
 
@@ -206,8 +212,7 @@ uv run alembic revision --autogenerate -m "설명"
 
 - **DOCX/XLSX/PPTX 파일 업로드**: 현재 바이너리를 UTF-8로 디코딩해서 저장 → 깨짐. 뷰어 미구현.
   - 방향: mammoth.js(DOCX) + SheetJS(XLSX) 클라이언트 렌더링, PPTX는 서버 변환 또는 미지원
-- **Jira 양방향 연동**: SR/변경사항 ↔ Jira 이슈 동기화 미구현
-- **임베딩/벡터 검색**: `EMBEDDING_MODEL=mock` 상태 — 실제 RAG는 동작하지 않음
+- **임베딩/벡터 검색**: 기본값 `EMBEDDING_MODEL=mock` — AWS 배포 시 `bedrock`으로 변경 (Titan Embed v2 사용)
 - **위젯**: `frontend/src/widget/` 에 embeddable 챗봇 위젯 코드 존재, 별도 번들 빌드
 
 ---

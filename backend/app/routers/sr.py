@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.sr import WebhookDeliveryLog
-from app.schemas.sr import SRDraftCreate, SRDraftResponse, SRGenerateRequest
+from app.schemas.sr import SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
 from app.services import sr_service
 
 router = APIRouter(prefix="/api/sr", tags=["service-requests"])
@@ -41,12 +41,34 @@ async def submit_sr(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/drafts", response_model=list[SRDraftResponse])
-async def list_sr_drafts(
-    user_id: uuid.UUID | None = None,
+@router.patch("/drafts/{sr_id}", response_model=SRDraftResponse)
+async def update_sr_draft(
+    sr_id: uuid.UUID,
+    data: SRDraftUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    return await sr_service.list_sr_drafts(db, user_id)
+    try:
+        return await sr_service.update_sr_draft(db, sr_id, data.model_dump(exclude_none=True))
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg:
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+
+
+@router.get("/drafts", response_model=SRDraftListResponse)
+async def list_sr_drafts(
+    user_id: uuid.UUID | None = None,
+    status: str | None = None,
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        items, total = await sr_service.list_sr_drafts(db, user_id, status, skip, limit)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"items": items, "total": total}
 
 
 @router.get("/webhook-logs")

@@ -39,7 +39,7 @@ async def test_generate_sr_draft(client: AsyncClient, test_user: dict):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_submit_sr_no_webhook(client: AsyncClient, test_user: dict):
+async def test_submit_sr(client: AsyncClient, test_user: dict):
     create_resp = await client.post("/api/sr/drafts", json={
         "user_id": test_user["id"],
         "title": "Submit Test",
@@ -51,8 +51,8 @@ async def test_submit_sr_no_webhook(client: AsyncClient, test_user: dict):
     resp = await client.post(f"/api/sr/drafts/{sr_id}/submit")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "submitted"
-    assert data["webhook"]["status"] == "skipped"
+    # Jira config 유무에 따라 경로가 달라짐: jira_created(직접 연동) 또는 submitted(webhook 폴백)
+    assert data["status"] in ("jira_created", "submitted")
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -65,4 +65,104 @@ async def test_list_sr_drafts(client: AsyncClient, test_user: dict):
     })
     resp = await client.get("/api/sr/drafts", params={"user_id": test_user["id"]})
     assert resp.status_code == 200
-    assert len(resp.json()) >= 1
+    assert len(resp.json()["items"]) >= 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_update_sr_draft(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Original Title",
+        "description": "Original description",
+        "priority": "low",
+    })
+    sr_id = create_resp.json()["id"]
+
+    resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={
+        "title": "Updated Title",
+        "priority": "high",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Updated Title"
+    assert data["priority"] == "high"
+    assert data["description"] == "Original description"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_update_submitted_sr_fails(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "To Submit",
+        "description": "desc",
+        "priority": "low",
+    })
+    sr_id = create_resp.json()["id"]
+    submit_resp = await client.post(f"/api/sr/drafts/{sr_id}/submit")
+    assert submit_resp.status_code == 200
+
+    resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={"title": "New Title"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_status_filter_draft(client: AsyncClient, test_user: dict):
+    await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Draft Filter Test",
+        "description": "desc",
+        "priority": "medium",
+    })
+    resp = await client.get("/api/sr/drafts", params={"status": "draft"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert all(item["status"] == "draft" for item in data["items"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_status_filter_active(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Active Filter Test",
+        "description": "desc",
+        "priority": "medium",
+    })
+    sr_id = create_resp.json()["id"]
+    await client.post(f"/api/sr/drafts/{sr_id}/submit")
+
+    resp = await client.get("/api/sr/drafts", params={"status": "active"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert all(item["status"] in ("submitted", "jira_created") for item in data["items"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_status_filter_done(client: AsyncClient, test_user: dict):
+    resp = await client.get("/api/sr/drafts", params={"status": "done"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert data["total"] == len(data["items"])
+    assert all(item["status"] in ("done_synced", "done_no_proposal") for item in data["items"])
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_pagination(client: AsyncClient, test_user: dict):
+    resp = await client.get("/api/sr/drafts", params={"skip": 0, "limit": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert len(data["items"]) <= 2
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sr_drafts_total_count(client: AsyncClient, test_user: dict):
+    resp_all = await client.get("/api/sr/drafts")
+    total = resp_all.json()["total"]
+    resp_p1 = await client.get("/api/sr/drafts", params={"skip": 0, "limit": 1})
+    assert resp_p1.json()["total"] == total

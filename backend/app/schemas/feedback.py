@@ -20,6 +20,8 @@ class FeedbackReportResponse(BaseModel):
     chat_message_id: uuid.UUID | None
     feedback_text: str
     status: str
+    document_title: str | None = None
+    proposed_change_status: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -27,14 +29,16 @@ class FeedbackReportResponse(BaseModel):
 
 class ProposedChangeResponse(BaseModel):
     id: uuid.UUID
-    feedback_report_id: uuid.UUID
-    document_id: uuid.UUID
-    document_version_id: uuid.UUID
+    feedback_report_id: uuid.UUID | None
+    document_id: uuid.UUID | None
+    document_version_id: uuid.UUID | None
+    manual_job_id: uuid.UUID | None = None
     original_text: str
     proposed_text: str
     diff: str
     reasoning: str
     confidence: float
+    source_type: str
     status: str
     created_at: datetime
 
@@ -44,3 +48,4 @@ class ProposedChangeResponse(BaseModel):
 class FeedbackWithProposalResponse(BaseModel):
     feedback: FeedbackReportResponse
     proposed_change: ProposedChangeResponse | None
+    approval_id: uuid.UUID | None = None

@@ -72,6 +72,12 @@ export const api = {
     }),
   uploadDocument: (form: FormData) =>
     fetch(`${BASE}/documents/upload`, { method: 'POST', body: form }).then(r => r.json()),
+  updateDocument: (id: string, data: { title?: string; description?: string; content?: string; change_summary?: string }) =>
+    request<Document>(`/documents/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteDocument: (id: string) =>
+    request<{ message: string }>(`/documents/${id}`, { method: 'DELETE' }),
+  exportDocument: (id: string, format: 'txt' | 'md') =>
+    fetch(`${BASE}/documents/${id}/export?format=${format}`, { headers: getAuthHeaders() }),
 
   // Chat
   createSession: (userId: string, title?: string) =>
@@ -100,7 +106,10 @@ export const api = {
   // Approvals
   createApproval: (proposedChangeId: string) =>
     request<ApprovalRequest>(`/approvals/${proposedChangeId}`, { method: 'POST' }),
-  listApprovals: () => request<ApprovalRequest[]>('/approvals'),
+  listApprovals: (params: { status?: string; skip?: number; limit?: number } = {}) => {
+    const { status = "pending", skip = 0, limit = 20 } = params
+    return request<ApprovalListResponse>(`/approvals?status=${status}&skip=${skip}&limit=${limit}`)
+  },
   reviewApproval: (id: string, data: { reviewer_id: string; action: string; comment?: string; edited_content?: string }) =>
     request<ApprovalRequest>(`/approvals/${id}/review`, { method: 'POST', body: JSON.stringify(data) }),
 
@@ -110,14 +119,23 @@ export const api = {
     request<{ document_id: string; trust_score: number }>(`/trust/${documentId}/recalculate`, { method: 'POST' }),
 
   // SR
-  listSRDrafts: (userId?: string) =>
-    request<SRDraft[]>(`/sr/drafts${userId ? `?user_id=${userId}` : ''}`),
+  listSRDrafts: (params?: { status?: string; skip?: number; limit?: number; userId?: string }) => {
+    const query = new URLSearchParams()
+    if (params?.userId) query.set('user_id', params.userId)
+    if (params?.status) query.set('status', params.status)
+    if (params?.skip !== undefined) query.set('skip', String(params.skip))
+    if (params?.limit !== undefined) query.set('limit', String(params.limit))
+    const qs = query.toString()
+    return request<SRListResponse>(`/sr/drafts${qs ? `?${qs}` : ''}`)
+  },
   createSRDraft: (data: { user_id: string; title: string; description: string; priority: string }) =>
     request<SRDraft>('/sr/drafts', { method: 'POST', body: JSON.stringify(data) }),
   generateSR: (data: { user_id: string; document_id: string; issue_description: string }) =>
     request<SRDraft>('/sr/generate', { method: 'POST', body: JSON.stringify(data) }),
   submitSR: (id: string) =>
     request<{ sr_id: string; status: string; webhook: { status: string } }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
+  updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string }) =>
+    request<SRDraft>(`/sr/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Change Impact
   analyzeImpact: (data: { source_type: string; source_id: string; related_document_ids?: string[] }) =>
@@ -130,6 +148,14 @@ export const api = {
   listManualJobs: (userId?: string) =>
     request<ManualJob[]>(`/manuals/jobs${userId ? `?user_id=${userId}` : ''}`),
   getManualJob: (id: string) => request<ManualJob>(`/manuals/jobs/${id}`),
+
+  // Jira
+  getJiraConfig: () => request<JiraConfig | null>('/jira/config'),
+  saveJiraConfig: (data: { base_url: string; user_email: string; api_token: string; project_key: string; is_active: boolean; trigger_status_names: string[] | null }) =>
+    request<JiraConfig>('/jira/config', { method: 'PUT', body: JSON.stringify(data) }),
+  testJiraConfig: (data: { base_url: string; user_email: string; api_token: string; project_key: string; is_active: boolean; trigger_status_names: string[] | null }) =>
+    request<{ success: boolean; message: string }>('/jira/config/test', { method: 'POST', body: JSON.stringify(data) }),
+  listJiraCallbackLogs: () => request<JiraCallbackLog[]>('/jira/callback-logs'),
 
   // Notifications
   listNotifications: () => request<Notification[]>('/notifications'),
@@ -148,11 +174,36 @@ export interface ChatMessage { id: string; session_id: string; role: string; con
 export interface AskResponse { message_id: string; content: string; citations: Citation[]; warnings?: DocumentWarning[] }
 export interface DocumentWarning { document_id: string; title: string; reason: "trust_score_low" | "stale" }
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }
-export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; status: string; created_at: string }
-export interface ProposedChange { id: string; feedback_report_id: string; document_id: string; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; status: string }
-export interface ApprovalRequest { id: string; proposed_change_id: string; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
+export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; status: string; document_title: string | null; proposed_change_status: string | null; created_at: string }
+export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright"; status: string }
+export interface ApprovalRequest { id: string; proposed_change_id: string; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
+export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
-export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; created_at: string }
+export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; created_at: string }
+export interface SRListResponse { items: SRDraft[]; total: number }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
 export interface ManualJob { id: string; user_id: string; target_url: string; login_url: string | null; status: string; output_document_id: string | null; screenshots: { step: number; filename: string | null; url: string; description: string }[] | null; error_message: string | null; created_at: string }
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
+export interface JiraConfig {
+  id: string
+  base_url: string
+  user_email: string
+  api_token_masked: string
+  project_key: string
+  is_active: boolean
+  trigger_status_names: string[] | null
+  updated_at: string
+}
+
+export interface JiraCallbackLog {
+  id: string
+  jira_issue_key: string
+  event_type: string
+  sr_draft_id: string | null
+  sr_title: string | null
+  jira_issue_summary: string | null
+  jira_issue_status: string | null
+  jira_issue_status_category: string | null
+  status: string
+  created_at: string
+}
