@@ -6,7 +6,7 @@ import { api, type ApprovalRequest } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 
-type Tab = "feedback" | "playwright" | "jira_sr"
+type Tab = "feedback" | "playwright" | "jira_sr" | "doc_review"
 type ReviewMode = "approve" | "reject" | "edit_and_approve" | "request_review" | null
 
 export function Approvals() {
@@ -23,6 +23,7 @@ export function Approvals() {
   const [comment, setComment] = useState("")
   const [editedContent, setEditedContent] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [docReviewTargetUrl, setDocReviewTargetUrl] = useState<Record<string, string>>({})
 
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
 
@@ -35,6 +36,7 @@ export function Approvals() {
   const feedbackProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "feedback").length
   const playwrightProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "playwright").length
   const jiraSrProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "jira_sr").length
+  const docReviewProcessingCount = processingItems.filter(a => a.approval_type === "doc_review").length
 
   const { data: result, refetch: refetchMain } = useApi(
     () => api.listApprovals({ status: statusFilter, skip: (page - 1) * pageSize, limit: pageSize }),
@@ -48,10 +50,17 @@ export function Approvals() {
   const feedbackApprovals = approvals.filter(a => a.proposed_change?.source_type === "feedback")
   const playwrightApprovals = approvals.filter(a => a.proposed_change?.source_type === "playwright")
   const jiraSrApprovals = approvals.filter(a => a.proposed_change?.source_type === "jira_sr")
-  const currentList = tab === "feedback" ? feedbackApprovals : tab === "playwright" ? playwrightApprovals : jiraSrApprovals
+  const docReviewApprovals = approvals.filter(a => a.approval_type === "doc_review")
+  const currentList = tab === "feedback" ? feedbackApprovals
+    : tab === "playwright" ? playwrightApprovals
+    : tab === "jira_sr" ? jiraSrApprovals
+    : docReviewApprovals
 
   const tabTotal = statusFilter === "processing"
-    ? (tab === "feedback" ? feedbackProcessingCount : tab === "playwright" ? playwrightProcessingCount : jiraSrProcessingCount)
+    ? (tab === "feedback" ? feedbackProcessingCount
+      : tab === "playwright" ? playwrightProcessingCount
+      : tab === "jira_sr" ? jiraSrProcessingCount
+      : docReviewProcessingCount)
     : total
 
   const openReview = (id: string, proposedText: string) => {
@@ -152,6 +161,22 @@ export function Approvals() {
             </span>
           )}
         </button>
+        <button
+          onClick={() => handleTabChange("doc_review")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            tab === "doc_review"
+              ? "border-[#00288e] text-[#00288e]"
+              : "border-transparent text-[#757684] hover:text-[#191c1e]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">fact_check</span>
+          문서 작성 검토
+          {docReviewProcessingCount > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 bg-[#e8f0fe] text-[#00288e] text-[10px] font-bold rounded-full">
+              {docReviewProcessingCount}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* 상태 필터 */}
@@ -179,7 +204,107 @@ export function Approvals() {
         <span className="ml-auto text-xs text-[#757684]">총 {tabTotal}건</span>
       </div>
 
-      {currentList.length === 0 ? (
+      {tab === "doc_review" ? (
+        <div className="space-y-3">
+          {currentList.length === 0 && (
+            <div className="text-center py-12 text-[#757684]">검토할 항목이 없습니다.</div>
+          )}
+          {currentList.map(approval => {
+            const isReviewing = reviewingId === approval.id
+            return (
+              <div key={approval.id} className="bg-white rounded-xl border border-[#e0e3e5] p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <span className="text-xs font-medium text-[#00288e] bg-[#e8f0fe] px-2 py-0.5 rounded">문서 작성 검토</span>
+                    <p className="mt-1 font-medium text-[#191c1e]">
+                      {approval.sr_draft_id ? `SR #${approval.sr_draft_id.slice(0, 8)}` : `승인 #${approval.id.slice(0, 8)}`}
+                    </p>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    approval.status === "pending" ? "bg-[#fff3e0] text-[#e65100]"
+                    : approval.status === "approved" ? "bg-[#e8f5e9] text-[#2e7d32]"
+                    : "bg-[#fce4ec] text-[#c62828]"
+                  }`}>{approval.status}</span>
+                </div>
+
+                {approval.status === "pending" && (
+                  <>
+                    {!isReviewing ? (
+                      <button
+                        onClick={() => { setReviewingId(approval.id); setReviewMode(null) }}
+                        className="text-sm text-[#00288e] hover:underline"
+                      >
+                        검토하기
+                      </button>
+                    ) : (
+                      <div className="space-y-3 border-t border-[#e0e3e5] pt-3">
+                        <p className="text-sm text-[#444653]">이 SR 완료 건에 대해 문서 작성이 필요한가요?</p>
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="text"
+                            placeholder="사용자 매뉴얼 캡처 URL (매뉴얼 포함 승인 시 필요)"
+                            value={docReviewTargetUrl[approval.id] ?? ""}
+                            onChange={e => setDocReviewTargetUrl(prev => ({ ...prev, [approval.id]: e.target.value }))}
+                            className="text-sm border border-[#e0e3e5] rounded px-3 py-1.5 w-full"
+                          />
+                          <div className="flex gap-2 flex-wrap">
+                            <button
+                              disabled={submitting}
+                              onClick={async () => {
+                                setSubmitting(true)
+                                try {
+                                  await api.reviewDocApproval(approval.id, { reviewer_id: reviewerId, action: "reject" })
+                                  closeReview()
+                                  refetch()
+                                } finally { setSubmitting(false) }
+                              }}
+                              className="px-3 py-1.5 text-sm rounded border border-[#e0e3e5] text-[#757684] hover:bg-[#f2f4f6]"
+                            >
+                              거부 (문서 불필요)
+                            </button>
+                            <button
+                              disabled={submitting}
+                              onClick={async () => {
+                                setSubmitting(true)
+                                try {
+                                  await api.reviewDocApproval(approval.id, { reviewer_id: reviewerId, action: "approve_doc" })
+                                  closeReview()
+                                  refetch()
+                                } finally { setSubmitting(false) }
+                              }}
+                              className="px-3 py-1.5 text-sm rounded bg-[#00288e] text-white hover:bg-[#001a6b]"
+                            >
+                              문서 작성 승인
+                            </button>
+                            <button
+                              disabled={submitting || !docReviewTargetUrl[approval.id]?.trim()}
+                              onClick={async () => {
+                                setSubmitting(true)
+                                try {
+                                  await api.reviewDocApproval(approval.id, {
+                                    reviewer_id: reviewerId,
+                                    action: "approve_manual",
+                                    target_url: docReviewTargetUrl[approval.id],
+                                  })
+                                  closeReview()
+                                  refetch()
+                                } finally { setSubmitting(false) }
+                              }}
+                              className="px-3 py-1.5 text-sm rounded bg-[#1a6b3c] text-white hover:bg-[#0d4a28] disabled:opacity-40"
+                            >
+                              사용자 매뉴얼 포함 승인
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : currentList.length === 0 ? (
         <div className="text-center py-16">
           <span className="material-symbols-outlined text-5xl text-[#c4c5d5]">task_alt</span>
           <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">
