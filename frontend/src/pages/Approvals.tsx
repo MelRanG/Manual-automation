@@ -48,6 +48,10 @@ export function Approvals() {
   const playwrightApprovals = approvals.filter(a => a.proposed_change?.source_type === "playwright")
   const currentList = tab === "feedback" ? feedbackApprovals : playwrightApprovals
 
+  const tabTotal = statusFilter === "processing"
+    ? (tab === "feedback" ? feedbackProcessingCount : playwrightProcessingCount)
+    : total
+
   const openReview = (id: string, proposedText: string) => {
     setReviewingId(id)
     setReviewMode(null)
@@ -148,13 +152,13 @@ export function Approvals() {
               }`}
             >
               {labels[f]}
-              {isActive && total > 0 && (
-                <span className="ml-1.5 opacity-80">{total}</span>
+              {isActive && tabTotal > 0 && (
+                <span className="ml-1.5 opacity-80">{tabTotal}</span>
               )}
             </button>
           )
         })}
-        <span className="ml-auto text-xs text-[#757684]">총 {total}건</span>
+        <span className="ml-auto text-xs text-[#757684]">총 {tabTotal}건</span>
       </div>
 
       {currentList.length === 0 ? (
