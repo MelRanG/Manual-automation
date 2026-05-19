@@ -167,6 +167,34 @@ SR 설명: {sr.description if sr else 'N/A'}
     )
     db.add(proposal)
 
+    # 승인 큐(ApprovalRequest)에 연결되도록 ProposedDocumentChange + ApprovalRequest 생성
+    from app.models.feedback import ProposedDocumentChange, ApprovalRequest as ApprovalRequestModel
+
+    reasoning_text = sr.title if sr else "변경 영향 분석 수정안"
+    if strategy in ("create_new", "create_new_doc"):
+        reasoning_text = f"[create_new_doc] {reasoning_text}"
+
+    bridge_change = ProposedDocumentChange(
+        id=uuid.uuid4(),
+        document_id=document_id,
+        original_text=version.content if version else "",
+        proposed_text=proposed_content,
+        diff=diff or "(no difference)",
+        reasoning=reasoning_text,
+        confidence=0.75,
+        source_type="jira_sr",
+        status="pending",
+    )
+    db.add(bridge_change)
+    await db.flush()
+
+    approval_entry = ApprovalRequestModel(
+        id=uuid.uuid4(),
+        proposed_change_id=bridge_change.id,
+        status="pending",
+    )
+    db.add(approval_entry)
+
     analysis.status = "pending_review"
     if sr:
         sr.status = "done_synced"
