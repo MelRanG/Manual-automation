@@ -25,12 +25,12 @@ def upgrade() -> None:
     op.alter_column('approval_requests', 'proposed_change_id',
                existing_type=sa.UUID(),
                nullable=True)
-    op.create_foreign_key(None, 'approval_requests', 'sr_drafts', ['sr_draft_id'], ['id'])
+    op.create_foreign_key('fk_approval_requests_sr_draft_id', 'approval_requests', 'sr_drafts', ['sr_draft_id'], ['id'])
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint(None, 'approval_requests', type_='foreignkey')
+    op.drop_constraint('fk_approval_requests_sr_draft_id', 'approval_requests', type_='foreignkey')
     op.alter_column('approval_requests', 'proposed_change_id',
                existing_type=sa.UUID(),
                nullable=False)
