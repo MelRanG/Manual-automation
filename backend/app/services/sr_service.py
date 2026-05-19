@@ -200,7 +200,7 @@ async def update_sr_draft(db: AsyncSession, sr_id: uuid.UUID, data: dict) -> SRD
 
 STATUS_MAP = {
     "draft": ["draft"],
-    "active": ["submitted", "jira_created", "pending_document_selection"],
+    "active": ["submitted", "jira_created", "pending_document_selection", "pending_doc_review"],
     "done": ["done_synced", "done_no_proposal"],
 }
 

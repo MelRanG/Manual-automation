@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +13,7 @@ from app.schemas.jira import (
     JiraConfigUpsert,
     JiraConnectionTestResult,
 )
-from app.schemas.sr import CompletedSREvent
-from app.services import jira_service, sr_service
+from app.services import jira_service
 
 router = APIRouter(prefix="/api/jira", tags=["jira"])
 
@@ -73,7 +72,6 @@ async def test_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)
 @router.post("/webhook")
 async def receive_jira_webhook(
     payload: dict,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     issue_key = payload.get("issue", {}).get("key", "unknown")
@@ -117,22 +115,18 @@ async def receive_jira_webhook(
     log.status = "processed"
     await db.commit()
 
-    event = CompletedSREvent(
-        source="jira",
-        external_issue_key=issue_key,
-        status="Done",
-        title=payload.get("issue", {}).get("fields", {}).get("summary"),
-        description=payload.get("issue", {}).get("fields", {}).get("description"),
-        raw_payload=payload,
+    from app.models.feedback import ApprovalRequest as ApprovalRequestModel
+
+    approval = ApprovalRequestModel(
+        id=uuid.uuid4(),
+        approval_type="doc_review",
+        sr_draft_id=draft.id,
+        status="pending",
     )
-
-    async def _bg_task(evt: CompletedSREvent):
-        from app.db import SessionLocal
-        async with SessionLocal() as session:
-            await sr_service.process_completed_sr(session, evt)
-
-    background_tasks.add_task(_bg_task, event)
-    return {"status": "processing", "sr_id": str(draft.id)}
+    db.add(approval)
+    draft.status = "pending_doc_review"
+    await db.commit()
+    return {"status": "pending_doc_review", "sr_id": str(draft.id), "approval_id": str(approval.id)}
 
 
 @router.get("/callback-logs", response_model=list[JiraCallbackLogResponse])
