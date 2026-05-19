@@ -65,8 +65,12 @@ class ProposedDocumentChange(Base, UUIDMixin, TimestampMixin):
 class ApprovalRequest(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "approval_requests"
 
-    proposed_change_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("proposed_document_changes.id"), unique=True
+    proposed_change_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("proposed_document_changes.id"), unique=True, nullable=True
+    )
+    approval_type: Mapped[str] = mapped_column(String(50), default="document_change")
+    sr_draft_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sr_drafts.id"), nullable=True
     )
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
@@ -75,6 +79,6 @@ class ApprovalRequest(Base, UUIDMixin, TimestampMixin):
     comment: Mapped[str | None] = mapped_column(Text)
     reviewed_at: Mapped[str | None] = mapped_column(String(50))
 
-    proposed_change: Mapped["ProposedDocumentChange"] = relationship(
+    proposed_change: Mapped["ProposedDocumentChange | None"] = relationship(
         back_populates="approval_request"
     )
