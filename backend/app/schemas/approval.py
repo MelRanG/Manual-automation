@@ -15,7 +15,9 @@ class ApprovalAction(BaseModel):
 
 class ApprovalRequestResponse(BaseModel):
     id: uuid.UUID
-    proposed_change_id: uuid.UUID
+    proposed_change_id: uuid.UUID | None
+    approval_type: str
+    sr_draft_id: uuid.UUID | None
     proposed_change: ProposedChangeResponse | None = None
     reviewer_id: uuid.UUID | None
     status: str
