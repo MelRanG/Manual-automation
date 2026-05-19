@@ -45,7 +45,7 @@
 
 - `receive_jira_webhook()`에서 `background_tasks.add_task(_bg_task, event)` 제거
 - 대신 `ApprovalRequest` 생성 (type: `"doc_review"`, sr_draft_id 포함)
-- SR status → `"pending_doc_review"` 로 업데이트
+- SR status → `"pending_doc_review"` 로 업데이트 (기존 `STATUS_MAP`에 추가 필요)
 
 ### 3. `approval_service.py` — doc_review 타입 승인 처리 추가
 
@@ -74,7 +74,7 @@
 - 세 개 액션 버튼:
   - **거부** → `action: "reject"`
   - **문서 작성 승인** → `action: "approve_doc"`
-  - **사용자 매뉴얼 포함 승인** → `action: "approve_manual"`
+  - **사용자 매뉴얼 포함 승인** → `action: "approve_manual"` (SR의 `target_url` 사용; 없으면 URL 입력 필드 표시)
 
 ---
 
