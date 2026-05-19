@@ -212,6 +212,9 @@ async def ask_question(
 async def ask_question_stream(
     db: AsyncSession, session_id: uuid.UUID, question: str
 ) -> AsyncGenerator[str, None]:
+    # TODO: 현재 각 요청이 단일 메시지로 처리됨 (대화 히스토리 미전달).
+    # change_request 모드에서 멀티턴으로 정보를 수집하려면 이전 메시지들을
+    # LLM context에 포함해야 함. 현재는 단일 메시지에 모든 필수 정보가 포함된 경우만 동작.
     session = await get_session(db, session_id)
     if not session:
         raise ValueError("Session not found")
