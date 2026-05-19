@@ -8,7 +8,7 @@ from app.db import get_db
 from app.models.document import Document
 from app.models.feedback import FeedbackReport, ProposedDocumentChange
 from app.routers.notifications import create_notification
-from app.schemas.approval import ApprovalAction, ApprovalRequestResponse, ApprovalListResponse
+from app.schemas.approval import ApprovalAction, ApprovalRequestResponse, ApprovalListResponse, DocReviewAction
 from app.services import approval_service
 
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
@@ -73,6 +73,24 @@ async def review_approval(
                     document_id=change.document_id,
                 )
 
+    return result
+
+
+@router.post("/{approval_id}/doc-review", response_model=ApprovalRequestResponse)
+async def review_doc_approval(
+    approval_id: uuid.UUID,
+    data: DocReviewAction,
+    db: AsyncSession = Depends(get_db),
+):
+    valid_actions = ("reject", "approve_doc", "approve_manual")
+    if data.action not in valid_actions:
+        raise HTTPException(status_code=400, detail=f"Action must be one of: {valid_actions}")
+    try:
+        result = await approval_service.review_doc_review_approval(
+            db, approval_id, data.reviewer_id, data.action, data.target_url
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return result
 
 

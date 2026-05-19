@@ -13,6 +13,12 @@ class ApprovalAction(BaseModel):
     edited_content: str | None = None
 
 
+class DocReviewAction(BaseModel):
+    reviewer_id: uuid.UUID
+    action: str  # "reject" | "approve_doc" | "approve_manual"
+    target_url: str | None = None
+
+
 class ApprovalRequestResponse(BaseModel):
     id: uuid.UUID
     proposed_change_id: uuid.UUID | None

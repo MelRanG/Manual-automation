@@ -124,6 +124,8 @@ export const api = {
   },
   reviewApproval: (id: string, data: { reviewer_id: string; action: string; comment?: string; edited_content?: string }) =>
     request<ApprovalRequest>(`/approvals/${id}/review`, { method: 'POST', body: JSON.stringify(data) }),
+  reviewDocApproval: (id: string, data: { reviewer_id: string; action: string; target_url?: string }) =>
+    request<ApprovalRequest>(`/approvals/${id}/doc-review`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Trust
   listTrustScores: () => request<TrustScore[]>('/trust'),

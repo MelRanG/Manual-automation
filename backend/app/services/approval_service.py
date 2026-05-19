@@ -229,3 +229,94 @@ async def get_approval(db: AsyncSession, approval_id: uuid.UUID) -> ApprovalRequ
         .where(ApprovalRequest.id == approval_id)
     )
     return result.scalar_one_or_none()
+
+
+async def review_doc_review_approval(
+    db: AsyncSession,
+    approval_id: uuid.UUID,
+    reviewer_id: uuid.UUID,
+    action: str,
+    target_url: str | None = None,
+) -> ApprovalRequest:
+    """doc_review 타입 승인 처리.
+    action: "reject" | "approve_doc" | "approve_manual"
+    """
+    from app.models.sr import SRDraft
+
+    valid_actions = ("reject", "approve_doc", "approve_manual")
+    if action not in valid_actions:
+        raise ValueError(f"action must be one of {valid_actions}")
+
+    result = await db.execute(
+        select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+    )
+    approval = result.scalar_one_or_none()
+    if not approval:
+        raise ValueError("Approval not found")
+    if approval.approval_type != "doc_review":
+        raise ValueError("This approval is not a doc_review type")
+    if approval.status != "pending":
+        raise ValueError("Approval already reviewed")
+
+    sr_result = await db.execute(
+        select(SRDraft).where(SRDraft.id == approval.sr_draft_id)
+    )
+    draft = sr_result.scalar_one_or_none()
+
+    approval.reviewer_id = reviewer_id
+    approval.reviewed_at = datetime.now(timezone.utc).isoformat()
+
+    if action == "reject":
+        approval.status = "rejected"
+        if draft:
+            draft.status = "done_no_proposal"
+
+    elif action in ("approve_doc", "approve_manual"):
+        approval.status = "approved"
+        await db.flush()
+
+        if draft:
+            from app.schemas.sr import CompletedSREvent
+            from app.services.sr_service import process_completed_sr
+            from app.db import SessionLocal
+            import asyncio
+
+            event = CompletedSREvent(
+                source="approval",
+                external_issue_key=draft.jira_issue_key,
+                status="Done",
+                title=draft.title,
+                description=draft.description,
+            )
+
+            async def _run():
+                async with SessionLocal() as session:
+                    await process_completed_sr(session, event)
+
+            asyncio.create_task(_run())
+
+        if action == "approve_manual" and draft:
+            from app.services import manual_service
+            from app.db import SessionLocal
+            import asyncio
+
+            url = target_url or draft.target_url
+            if url:
+                async def _run_manual():
+                    async with SessionLocal() as session:
+                        job = await manual_service.create_job(
+                            session,
+                            user_id=reviewer_id,
+                            target_url=url,
+                            source_sr_id=draft.id,
+                        )
+                        await manual_service.run_generation(session, job.id)
+
+                asyncio.create_task(_run_manual())
+
+    await db.commit()
+
+    refreshed = await db.execute(
+        select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
+    )
+    return refreshed.scalar_one()
