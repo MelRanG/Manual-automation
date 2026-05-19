@@ -34,14 +34,17 @@ docker compose up --build -d   # 전체 빌드 및 실행
 
 **현재 상태**: SR 메뉴 선택 후 채팅은 되지만 자동 SR 생성 기준이 불명확.
 
+**결정된 방식**: 기존 `change_request` 모드 개선 (별도 전용 플로우 없음)
+
 **목표**:
-- 챗봇에서 SR 메뉴 선택 → 챗봇이 SR 형식에 맞춰 사용자에게 정보 수집 (대화형)
-- 사용자가 필수 항목(제목, 내용, 우선순위 등)을 형식에 맞게 입력했을 때만 SR 생성
-- SR 메뉴 선택했다고 무조건 SR이 생성되면 안 됨 — AI가 정보 충족 여부 판단 후 생성
+- `change_request` 모드에서 메시지 전송 시 LLM이 필수 정보(제목, 내용, 우선순위) 충족 여부 판단
+- 정보 부족 시 → 추가 질문으로 응답 (sr_proposal 블록 없음)
+- 정보 충족 시 → 기존대로 sr_proposal 블록 생성 → SR 자동 등록
+- 기존 스트리밍 파이프라인 유지, 프롬프트 + 충족 판단 로직만 수정
 - SR 생성 후 Jira 자동 등록 확인 (현재 Jira 미연동이므로 임시 시뮬레이터로 테스트)
 
 **관련 파일**:
-- `backend/app/services/chat_service.py` — SR 생성 판단 로직 추가 필요
+- `backend/app/services/chat_service.py` — change_request 프롬프트 및 충족 판단 로직 수정
 - `backend/app/services/sr_service.py` — SR → Jira 연동
 - `frontend/src/pages/Chat.tsx`
 
@@ -51,14 +54,18 @@ docker compose up --build -d   # 전체 빌드 및 실행
 
 **현재 상태**: Jira 웹훅 수신은 구현됨. 완료 처리 시 문서 반영 플로우 미구현.
 
+**결정된 방식**: 앱 내 승인 큐를 통한 수동 승인
+
 **목표**:
-- Jira 이슈에 "문서 작성 필요 여부" 커스텀 필드 추가 (사람이 판단해서 입력)
-- Jira 이슈 완료 시 웹훅 콜백 수신 → 문서 작성 필요 여부 확인
-- 필요하면 자동으로 문서 작성 플로우 진입
+- Jira 이슈 완료 웹훅 수신 → AI 자동 판단 없이 `ApprovalRequest` 생성 → 앱 내 승인 큐에 "문서 작성 검토" 항목 등록
+- 사람이 앱의 Approvals 페이지에서 검토 후 승인/거부
+- 승인 시 문서 작성 플로우(업무 3) 진입, 거부 시 SR 완료 처리
 
 **관련 파일**:
 - `backend/app/routers/jira.py` — 웹훅 수신 처리
 - `backend/app/services/jira_service.py`
+- `backend/app/services/approval_service.py` — ApprovalRequest 생성
+- `frontend/src/pages/Approvals.tsx` — 문서 작성 검토 타입 항목 추가
 
 ---
 
@@ -67,7 +74,7 @@ docker compose up --build -d   # 전체 빌드 및 실행
 **현재 상태**: Change Impact 분석 → 수정안 생성 → 적용까지 구현됨. 자동 트리거 미연결.
 
 **목표**:
-- Jira 완료 웹훅 수신 → 문서 작성 필요 판정 → 관련 문서 자동 검색 → 수정/신규 판단 → 수정안 생성 → 자동 등록 또는 승인 큐 대기
+- 업무 2 승인 큐에서 사람이 승인 시 → 관련 문서 자동 검색(RAG) → 수정/신규 판단 → 수정안 생성 → 문서함 자동 등록
 - 등록된 문서는 즉시 청킹/임베딩 → RAG 검색 대상으로 포함
 
 **관련 파일**:
@@ -80,16 +87,19 @@ docker compose up --build -d   # 전체 빌드 및 실행
 
 **현재 상태**: 수동으로 URL 입력 시 Playwright 캡처 가능. 자동 트리거 미연결.
 
-**목표**:
-- Jira 티켓에 "사용자 매뉴얼 필요 여부" 구분 필드 추가 (또는 처음 SR 생성 시 포함 여부 결정)
-- 필요 시 Playwright로 화면 캡처 + AI 매뉴얼 자동 생성 → 문서함 자동 등록
+**결정된 방식**: 앱 내 승인 큐에서 선택 (업무 2 승인 시 옵션으로 포함)
 
-**판단 필요 사항**:
-- 사용자 매뉴얼 필요 여부를 SR 생성 시점에 포함할지, Jira 티켓 완료 시 판단할지 기획 결정 필요
+**목표**:
+- 업무 2 승인 큐에서 사람이 검토할 때 세 가지 옵션 제공:
+  1. **거부** — 문서 작성 불필요, SR 완료 처리
+  2. **문서 수정/생성 승인** — change impact 분석 → 문서 자동 등록 플로우 진입
+  3. **사용자 매뉴얼 포함 승인** — 위 + Playwright 캡처 자동 트리거
+- 필요 시 Playwright로 화면 캡처 + AI 매뉴얼 자동 생성 → 문서함 자동 등록
 
 **관련 파일**:
 - `backend/app/services/manual_service.py`
 - `backend/app/routers/manuals.py` (또는 sr.py에서 트리거)
+- `frontend/src/pages/Approvals.tsx` — 승인 옵션 UI 추가
 
 ---
 
