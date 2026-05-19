@@ -6,7 +6,7 @@ import { api, type ApprovalRequest } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 
-type Tab = "feedback" | "playwright"
+type Tab = "feedback" | "playwright" | "jira_sr"
 type ReviewMode = "approve" | "reject" | "edit_and_approve" | "request_review" | null
 
 export function Approvals() {
@@ -34,6 +34,7 @@ export function Approvals() {
   const processingItems = processingData?.items ?? []
   const feedbackProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "feedback").length
   const playwrightProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "playwright").length
+  const jiraSrProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "jira_sr").length
 
   const { data: result, refetch: refetchMain } = useApi(
     () => api.listApprovals({ status: statusFilter, skip: (page - 1) * pageSize, limit: pageSize }),
@@ -46,10 +47,11 @@ export function Approvals() {
 
   const feedbackApprovals = approvals.filter(a => a.proposed_change?.source_type === "feedback")
   const playwrightApprovals = approvals.filter(a => a.proposed_change?.source_type === "playwright")
-  const currentList = tab === "feedback" ? feedbackApprovals : playwrightApprovals
+  const jiraSrApprovals = approvals.filter(a => a.proposed_change?.source_type === "jira_sr")
+  const currentList = tab === "feedback" ? feedbackApprovals : tab === "playwright" ? playwrightApprovals : jiraSrApprovals
 
   const tabTotal = statusFilter === "processing"
-    ? (tab === "feedback" ? feedbackProcessingCount : playwrightProcessingCount)
+    ? (tab === "feedback" ? feedbackProcessingCount : tab === "playwright" ? playwrightProcessingCount : jiraSrProcessingCount)
     : total
 
   const openReview = (id: string, proposedText: string) => {
@@ -131,6 +133,22 @@ export function Approvals() {
           {playwrightProcessingCount > 0 && (
             <span className="ml-1 px-1.5 py-0.5 bg-[#ffdbce] text-[#611e00] text-[10px] font-bold rounded-full">
               {playwrightProcessingCount}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => handleTabChange("jira_sr")}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            tab === "jira_sr"
+              ? "border-[#00288e] text-[#00288e]"
+              : "border-transparent text-[#757684] hover:text-[#191c1e]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">task</span>
+          Jira SR 반영
+          {jiraSrProcessingCount > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 bg-[#ffdbce] text-[#611e00] text-[10px] font-bold rounded-full">
+              {jiraSrProcessingCount}
             </span>
           )}
         </button>

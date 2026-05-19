@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -214,3 +216,77 @@ async def test_export_document_invalid_format(client: AsyncClient, test_user: di
 
     resp = await client.get(f"/api/documents/{doc_id}/export?format=docx")
     assert resp.status_code == 400
+
+
+# === Phase 1: 문서 메타데이터 필드 테스트 ===
+# 페르소나: 김운영 — SR 기반으로 자동 생성된 문서에 메타데이터가 포함되는지 확인
+# 페르소나: 박문서 — 문서 목록에서 메타데이터 필드가 올바르게 노출되는지 확인
+
+
+@pytest.mark.asyncio
+async def test_create_document_with_metadata(client: AsyncClient, test_user: dict):
+    """김운영: SR 기반 문서 생성 시 메타데이터 필드 포함"""
+    # related_sr_id는 FK이므로 실제 SR을 먼저 생성
+    sr_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "VPN 설정 변경 요청",
+        "description": "WireGuard로 전환",
+        "priority": "high",
+    })
+    assert sr_resp.status_code == 201
+    sr_id = sr_resp.json()["id"]
+
+    resp = await client.post("/api/documents", json={
+        "title": "VPN 접속 매뉴얼",
+        "description": "김운영 요청으로 자동 생성된 VPN 접속 가이드",
+        "owner_id": test_user["id"],
+        "document_type": "user_manual",
+        "domain": "infrastructure",
+        "audience": "operator",
+        "source_type": "jira_sr",
+        "related_sr_id": sr_id,
+        "jira_issue_key": "INFRA-42",
+    }, params={"content": "# VPN 접속 매뉴얼\n1단계..."})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["document_type"] == "user_manual"
+    assert data["domain"] == "infrastructure"
+    assert data["audience"] == "operator"
+    assert data["source_type"] == "jira_sr"
+    assert data["related_sr_id"] == sr_id
+    assert data["jira_issue_key"] == "INFRA-42"
+
+
+@pytest.mark.asyncio
+async def test_create_document_without_metadata(client: AsyncClient, test_user: dict):
+    """박문서: 기존 방식으로 생성해도 동작 (하위 호환)"""
+    resp = await client.post("/api/documents", json={
+        "title": "일반 문서",
+        "owner_id": test_user["id"],
+    }, params={"content": "내용"})
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["document_type"] is None
+    assert data["domain"] is None
+    assert data["source_type"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_document_metadata(client: AsyncClient, test_user: dict):
+    """박문서: 기존 문서에 메타데이터 추가 업데이트"""
+    create_resp = await client.post("/api/documents", json={
+        "title": "메타없는 문서",
+        "owner_id": test_user["id"],
+    }, params={"content": "content"})
+    doc_id = create_resp.json()["id"]
+
+    resp = await client.patch(f"/api/documents/{doc_id}", json={
+        "document_type": "operation_guide",
+        "domain": "security",
+        "audience": "developer",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["document_type"] == "operation_guide"
+    assert data["domain"] == "security"
+    assert data["audience"] == "developer"

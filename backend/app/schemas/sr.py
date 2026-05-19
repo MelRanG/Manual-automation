@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SRDraftCreate(BaseModel):
@@ -56,3 +56,17 @@ class WebhookDeliveryResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class CompletedSREvent(BaseModel):
+    source: str
+    event_type: str = "sr_completed"
+    external_issue_key: str | None = None
+    status: str
+    title: str | None = None
+    description: str | None = None
+    completion_summary: str | None = None
+    changed_screen: str | None = None
+    changed_user_flow: str | None = None
+    raw_payload: dict | None = None
+    received_at: datetime = Field(default_factory=datetime.utcnow)

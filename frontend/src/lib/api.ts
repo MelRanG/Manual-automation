@@ -25,12 +25,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+export interface SRDraftCreated {
+  id: string
+  title: string
+  description: string
+  priority: string
+}
+
 export interface StreamEvent {
   type: 'token' | 'citations' | 'done'
   token?: string
   citations?: Citation[]
   warnings?: DocumentWarning[]
   messageId?: string
+  sr_draft?: SRDraftCreated
 }
 
 async function* askStream(path: string, question: string): AsyncGenerator<StreamEvent> {
@@ -49,8 +57,8 @@ async function* askStream(path: string, question: string): AsyncGenerator<Stream
       const data = JSON.parse(event.data)
       yield { type: 'citations', citations: data.citations, warnings: data.warnings }
     } else if (event.event === 'done') {
-      const { message_id } = JSON.parse(event.data)
-      yield { type: 'done', messageId: message_id }
+      const data = JSON.parse(event.data)
+      yield { type: 'done', messageId: data.message_id, sr_draft: data.sr_draft }
     }
   }
 }
@@ -66,14 +74,18 @@ export const api = {
     request<{ documents: Document[]; total: number }>(`/documents?skip=${skip}&limit=${limit}`),
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getVersions: (id: string) => request<DocumentVersion[]>(`/documents/${id}/versions`),
-  createDocument: (data: { title: string; description?: string; owner_id?: string }, content: string) =>
+  createDocument: (data: { title: string; description?: string; owner_id?: string; source_type?: string }, content: string) =>
     request<Document>(`/documents?content=${encodeURIComponent(content)}`, {
       method: 'POST', body: JSON.stringify(data),
     }),
   uploadDocument: (form: FormData) =>
     fetch(`${BASE}/documents/upload`, { method: 'POST', body: form }).then(r => r.json()),
-  updateDocument: (id: string, data: { title?: string; description?: string; content?: string; change_summary?: string }) =>
+  updateDocument: (id: string, data: { title?: string; description?: string; content?: string; change_summary?: string; tags?: string[] }) =>
     request<Document>(`/documents/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  suggestTags: (id: string) =>
+    request<{ tags: string[] }>(`/documents/${id}/suggest-tags`, { method: 'POST' }),
+  suggestTagsForContent: (data: { title: string; description?: string; content?: string }) =>
+    request<{ tags: string[] }>('/documents/suggest-tags-for-content', { method: 'POST', body: JSON.stringify(data) }),
   deleteDocument: (id: string) =>
     request<{ message: string }>(`/documents/${id}`, { method: 'DELETE' }),
   exportDocument: (id: string, format: 'txt' | 'md') =>
@@ -134,6 +146,8 @@ export const api = {
     request<SRDraft>('/sr/generate', { method: 'POST', body: JSON.stringify(data) }),
   submitSR: (id: string) =>
     request<{ sr_id: string; status: string; webhook: { status: string } }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
+  completeSRLocal: (id: string) =>
+    request<{ status: string; message: string }>(`/sr/drafts/${id}/complete-local`, { method: 'POST' }),
   updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string }) =>
     request<SRDraft>(`/sr/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
@@ -141,6 +155,18 @@ export const api = {
   analyzeImpact: (data: { source_type: string; source_id: string; related_document_ids?: string[] }) =>
     request<ImpactAnalysis>('/change-impact/analyze', { method: 'POST', body: JSON.stringify(data) }),
   listAnalyses: () => request<ImpactAnalysis[]>('/change-impact'),
+  recommendStrategy: (analysisId: string, documentId: string) =>
+    request<{ recommended_strategy: string; confidence: number; reasoning: string }>(`/change-impact/${analysisId}/recommend-strategy`, {
+      method: 'POST', body: JSON.stringify({ document_id: documentId })
+    }),
+  generateProposalForDocument: (analysisId: string, documentId: string, strategy: string) =>
+    request<ChangeProposal>(`/change-impact/${analysisId}/proposals`, {
+      method: 'POST', body: JSON.stringify({ document_id: documentId, strategy })
+    }),
+  listProposals: (analysisId: string) =>
+    request<ChangeProposal[]>(`/change-impact/${analysisId}/proposals`),
+  applyProposal: (analysisId: string, proposalId: string) =>
+    request<{ status: string; document_id: string }>(`/change-impact/${analysisId}/proposals/${proposalId}/apply`, { method: 'POST' }),
 
   // Manual Generation
   createManualJob: (data: { user_id: string; target_url: string; login_id?: string; login_pw?: string; login_url?: string; scenario_steps?: string[]; source_sr_id?: string }) =>
@@ -167,7 +193,7 @@ export const api = {
 
 // Types
 export interface User { id: string; name: string; email: string; role: string; department: string | null; created_at: string }
-export interface Document { id: string; title: string; description: string | null; owner_id: string | null; status: string; priority: string; trust_score: number; view_count: number; created_at: string; updated_at: string; current_version_id: string | null }
+export interface Document { id: string; title: string; description: string | null; owner_id: string | null; status: string; priority: string; trust_score: number; view_count: number; created_at: string; updated_at: string; current_version_id: string | null; document_type: string | null; domain: string | null; audience: string | null; source_type: string | null; source_file_url: string | null; related_sr_id: string | null; jira_issue_key: string | null; tags: string[] | null }
 export interface DocumentVersion { id: string; document_id: string; version_number: number; content: string; source_file_url: string | null; change_summary: string | null; created_at: string }
 export interface ChatSession { id: string; user_id: string; title: string | null; created_at: string }
 export interface ChatMessage { id: string; session_id: string; role: string; content: string; created_at: string }
@@ -175,13 +201,14 @@ export interface AskResponse { message_id: string; content: string; citations: C
 export interface DocumentWarning { document_id: string; title: string; reason: "trust_score_low" | "stale" }
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }
 export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; status: string; document_title: string | null; proposed_change_status: string | null; created_at: string }
-export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright"; status: string }
+export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright" | "jira_sr"; status: string }
 export interface ApprovalRequest { id: string; proposed_change_id: string; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
 export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
 export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; created_at: string }
 export interface SRListResponse { items: SRDraft[]; total: number }
-export interface ImpactAnalysis { id: string; source_type: string; source_id: string; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
+export interface ImpactAnalysis { id: string; source_type: string; source_id: string; related_document_ids: string[] | null; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
+export interface ChangeProposal { id: string; impact_analysis_id: string; document_id: string; original_content: string; proposed_content: string; diff: string; status: string; created_at: string }
 export interface ManualJob { id: string; user_id: string; target_url: string; login_url: string | null; status: string; output_document_id: string | null; screenshots: { step: number; filename: string | null; url: string; description: string }[] | null; error_message: string | null; created_at: string }
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
 export interface JiraConfig {

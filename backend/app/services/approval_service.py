@@ -94,6 +94,8 @@ async def review_approval(
                 status="active",
                 priority="medium",
                 trust_score=1.0,
+                document_type="user_manual",
+                source_type="playwright",
             )
             db.add(doc)
             await db.flush()
@@ -120,6 +122,38 @@ async def review_approval(
                 job = job_result.scalar_one_or_none()
                 if job:
                     job.output_document_id = doc.id
+
+        elif change.source_type == "jira_sr" and "[create_new_doc]" in (change.reasoning or ""):
+            # Jira SR 전략이 create_new_doc인 경우 — 신규 문서 생성
+            from app.models.document import Document, DocumentVersion
+
+            title = f"SR 기반 신규 문서 - {change.reasoning[len('[create_new_doc] '):][:50]}"
+            doc = Document(
+                id=uuid.uuid4(),
+                title=title,
+                description="Jira SR 완료 시 자동 생성된 문서",
+                owner_id=reviewer_id,
+                status="active",
+                priority="medium",
+                trust_score=1.0,
+                document_type="operation_guide",
+                source_type="jira_sr",
+            )
+            db.add(doc)
+            await db.flush()
+
+            version = DocumentVersion(
+                id=uuid.uuid4(),
+                document_id=doc.id,
+                version_number=1,
+                content=final_content,
+                created_by=reviewer_id,
+                change_summary="Jira SR 완료로 자동 생성된 문서 (승인됨)",
+            )
+            db.add(version)
+            await db.flush()
+            doc.current_version_id = version.id
+
         else:
             if action == "edit_and_approve":
                 summary_prefix = f"Applied with reviewer edits: {comment or ''}"

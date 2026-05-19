@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.jira import JiraConfig, JiraCallbackLog
 from app.models.sr import SRDraft
-from app.services.manual_service import capture_screenshots
 from app.services.search_service import search_similar_chunks
 
 logger = logging.getLogger(__name__)
@@ -179,27 +178,11 @@ async def process_jira_done(
             sr.related_document_ids = [str(d["document_id"]) for d in related_docs]
             await session.flush()
 
-            # Playwright 캡처 (target_url 있을 때만)
-            page_context = ""
-            if sr.target_url:
-                try:
-                    from app.models.manual import ManualGenerationJob
-                    mock_job = ManualGenerationJob(
-                        target_url=sr.target_url,
-                        user_id=sr.user_id,
-                        login_id=None, login_pw=None,
-                        login_url=None, scenario_steps=None,
-                    )
-                    screenshots = await capture_screenshots(mock_job)
-                    page_context = "\n".join(
-                        s.get("page_text", "")[:500]
-                        for s in screenshots if s.get("page_text")
-                    )
-                except Exception as e:
-                    logger.warning(f"Playwright 캡처 스킵 (sr={sr_id}): {e}")
-
-            # 각 문서마다 수정안 생성
             from app.services.llm_service import get_llm_provider
+            from app.services.document_reflection_service import (
+                judge_document_reflection,
+                judge_manual_generation,
+            )
             from app.models.feedback import ProposedDocumentChange, ApprovalRequest
             from app.models.document import Document, DocumentVersion
 
@@ -219,16 +202,49 @@ async def process_jira_done(
                         continue
                     original = version.content
 
+                    # Phase 2: LLM 판단 — 반영 필요성 + 전략
+                    judgment = await judge_document_reflection(
+                        llm,
+                        sr_title=sr.title,
+                        sr_description=sr.description,
+                        sr_priority=sr.priority,
+                        doc_title=doc_info.get("document_title", ""),
+                        doc_content=original,
+                    )
+
+                    if not judgment.needs_update or judgment.strategy == "no_action":
+                        logger.info(
+                            f"문서 {doc_id} 반영 불필요: {judgment.reasoning}"
+                        )
+                        continue
+
+                    # 전략별 프롬프트 구성
+                    if judgment.strategy == "add_section":
+                        action_prompt = (
+                            "기존 문서 끝에 새 섹션을 추가하여 SR 내용을 반영하세요. "
+                            "기존 내용은 그대로 유지합니다."
+                        )
+                    elif judgment.strategy == "create_new_doc":
+                        action_prompt = (
+                            "SR 내용을 바탕으로 완전히 새로운 문서를 작성하세요. "
+                            "기존 문서와 별개의 독립 문서입니다."
+                        )
+                    else:
+                        action_prompt = (
+                            "기존 문서 내용을 SR 완료 사항에 맞게 수정하세요. "
+                            "변경된 부분만 업데이트하고 나머지는 유지합니다."
+                        )
+
                     prompt = f"""다음 서비스 요청(SR)이 Jira에서 완료되었습니다.
 SR 제목: {sr.title}
 SR 설명: {sr.description}
 
 현재 문서 내용:
 {original[:3000]}
-"""
-                    if page_context:
-                        prompt += f"\n현재 시스템 화면 텍스트:\n{page_context[:1000]}"
-                    prompt += "\n\n위 SR 내용을 반영해 문서를 수정한 전체 내용을 작성하세요."
+
+작업 지시: {action_prompt}
+
+위 내용을 반영한 전체 문서를 작성하세요."""
 
                     proposed_text = await llm.generate(
                         "당신은 기술 문서 작가입니다. SR 완료 내용을 반영해 문서를 현행화합니다.",
@@ -244,8 +260,8 @@ SR 설명: {sr.description}
                         original_text=original,
                         proposed_text=proposed_text,
                         diff="",
-                        reasoning=f"Jira SR 완료: {sr.title}",
-                        confidence=0.8,
+                        reasoning=f"[{judgment.strategy}] {judgment.reasoning}",
+                        confidence=judgment.confidence,
                         source_type="jira_sr",
                         status="pending",
                     )
@@ -262,6 +278,35 @@ SR 설명: {sr.description}
 
                 except Exception as e:
                     logger.warning(f"문서 {doc_info['document_id']} 수정안 생성 실패: {e}")
+
+            # Phase 2: 매뉴얼 자동생성 판단
+            if sr.target_url:
+                try:
+                    manual_judgment = await judge_manual_generation(
+                        llm,
+                        sr_title=sr.title,
+                        sr_description=sr.description,
+                        target_url=sr.target_url,
+                    )
+                    if manual_judgment.needs_manual_generation:
+                        from app.models.manual import ManualGenerationJob
+                        manual_job = ManualGenerationJob(
+                            id=uuid.uuid4(),
+                            user_id=sr.user_id,
+                            target_url=sr.target_url,
+                            source_sr_id=sr.id,
+                            status="pending",
+                            login_id=None,
+                            login_pw=None,
+                            login_url=None,
+                            scenario_steps=None,
+                        )
+                        session.add(manual_job)
+                        logger.info(
+                            f"매뉴얼 생성 작업 등록 (sr={sr_id}): {manual_judgment.reasoning}"
+                        )
+                except Exception as e:
+                    logger.warning(f"매뉴얼 생성 판단/등록 실패 (sr={sr_id}): {e}")
 
             if proposals_created > 0:
                 try:

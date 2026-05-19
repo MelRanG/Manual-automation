@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { useSearchParams, useNavigate } from "react-router-dom"
 import { api, type SRDraft } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
@@ -8,6 +8,7 @@ type Tab = "draft" | "active" | "done"
 
 export function ServiceRequests() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>(() => {
     const t = searchParams.get("tab")
@@ -76,6 +77,19 @@ export function ServiceRequests() {
     }
   }
 
+  const handleLocalComplete = async (id: string) => {
+    setSubmittingId(id)
+    try {
+      await api.completeSRLocal(id)
+      refetch()
+      navigate("/change-impact")
+    } catch (e: any) {
+      alert("실패: " + e.message)
+    } finally {
+      setSubmittingId(null)
+    }
+  }
+
   const handleEditStart = (sr: SRDraft) => {
     setEditingId(sr.id)
     setEditForm({ title: sr.title, description: sr.description, priority: sr.priority })
@@ -103,15 +117,16 @@ export function ServiceRequests() {
   const getStatusLabel = (s: string) => {
     if (s === "done_synced") return "완료 동기화됨"
     if (s === "done_no_proposal") return "완료 (문서 없음)"
+    if (s === "pending_document_selection") return "문서 반영 대기"
     if (s === "jira_created") return "Jira 생성됨"
     if (s === "submitted") return "제출됨"
     return "초안"
   }
 
   const getStatusStyle = (s: string) => {
-    if (s === "done_synced") return "bg-[#d5e3fc] text-[#16a34a]"
+    if (s === "done_synced" || s === "done_pending_selection") return "bg-[#d5e3fc] text-[#16a34a]"
     if (s === "done_no_proposal") return "bg-[#e6e8ea] text-[#444653]"
-    if (s === "jira_created") return "bg-[#e8f0fe] text-[#1a56db]"
+    if (s === "jira_created" || s === "pending_document_selection") return "bg-[#e8f0fe] text-[#1a56db]"
     if (s === "submitted") return "bg-[#d5e3fc] text-[#16a34a]"
     return "bg-[#e6e8ea] text-[#444653]"
   }
@@ -293,6 +308,27 @@ export function ServiceRequests() {
                         {submittingId === sr.id ? "제출 중..." : "제출"}
                       </button>
                     </div>
+                  )}
+                  {tab === "active" && sr.status !== "pending_document_selection" && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleLocalComplete(sr.id)}
+                        disabled={submittingId === sr.id}
+                        className="flex items-center gap-2 px-3 py-1.5 border border-[#1a56db] text-[#1a56db] rounded-lg text-xs font-semibold hover:bg-[#e8f0fe] disabled:opacity-50 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                        {submittingId === sr.id ? "처리 중..." : "완료 처리 (시뮬레이터)"}
+                      </button>
+                    </div>
+                  )}
+                  {tab === "active" && sr.status === "pending_document_selection" && (
+                    <button
+                      onClick={() => navigate("/change-impact")}
+                      className="flex items-center gap-2 px-3 py-1.5 border border-[#e6a817] text-[#92600a] rounded-lg text-xs font-semibold hover:bg-[#fff3dc] transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                      문서 반영 대기 →
+                    </button>
                   )}
                 </div>
               )}

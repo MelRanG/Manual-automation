@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.models.sr import SRDraft, WebhookDeliveryLog
-from app.schemas.sr import SRDraftCreate
+from app.models.sr import SRDraft, WebhookDeliveryLog, ChangeImpactAnalysis
+from app.schemas.sr import SRDraftCreate, CompletedSREvent
 from app.services.llm_service import get_llm_provider
 
 logger = logging.getLogger(__name__)
@@ -113,12 +113,18 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
             logger.error(f"Jira issue creation failed: {e}")
             # fallback: webhook 시도
             webhook_result = await deliver_webhook(db, draft)
+            draft.jira_issue_key = f"LOCAL-{str(uuid.uuid4())[:8].upper()}"
+            draft.jira_issue_url = f"http://localhost/browse/{draft.jira_issue_key}"
+            draft.status = "jira_created"
             await db.commit()
-            return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+            return {"sr_id": str(sr_id), "status": "jira_created", "webhook": webhook_result, "jira_issue_key": draft.jira_issue_key}
     else:
         webhook_result = await deliver_webhook(db, draft)
+        draft.jira_issue_key = f"LOCAL-{str(uuid.uuid4())[:8].upper()}"
+        draft.jira_issue_url = f"http://localhost/browse/{draft.jira_issue_key}"
+        draft.status = "jira_created"
         await db.commit()
-        return {"sr_id": str(sr_id), "status": "submitted", "webhook": webhook_result}
+        return {"sr_id": str(sr_id), "status": "jira_created", "webhook": webhook_result, "jira_issue_key": draft.jira_issue_key}
 
 
 async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
@@ -194,7 +200,7 @@ async def update_sr_draft(db: AsyncSession, sr_id: uuid.UUID, data: dict) -> SRD
 
 STATUS_MAP = {
     "draft": ["draft"],
-    "active": ["submitted", "jira_created"],
+    "active": ["submitted", "jira_created", "pending_document_selection"],
     "done": ["done_synced", "done_no_proposal"],
 }
 
@@ -220,3 +226,76 @@ async def list_sr_drafts(
     stmt = stmt.order_by(SRDraft.created_at.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     return list(result.scalars().all()), total
+
+
+async def process_completed_sr(db: AsyncSession, event: CompletedSREvent):
+    if not event.external_issue_key:
+        logger.warning("CompletedSREvent lacks external_issue_key")
+        return
+
+    result = await db.execute(select(SRDraft).where(SRDraft.jira_issue_key == event.external_issue_key))
+    draft = result.scalar_one_or_none()
+
+    if not draft:
+        logger.warning(f"No SR found for issue {event.external_issue_key}")
+        return
+
+    if draft.status in ("done_synced", "done_no_proposal", "pending_document_selection"):
+        logger.info(f"SR {draft.id} already processed or processing")
+        return
+
+    llm = get_llm_provider()
+
+    prompt = f"""서비스 요청(SR)이 완료되었습니다.
+이 변경사항이 사용자 매뉴얼, 화면, 메뉴, 정책 등 시스템 문서 업데이트를 요구하는지 판단하세요.
+- 단순 코드 정리, 내부 인프라, 단순 버그(화면/기능 변화 없음)면 False.
+- 새로운 화면, 메뉴, 동작 방식의 변경, 새로운 제약조건 등이면 True.
+
+SR 제목: {draft.title}
+SR 설명: {draft.description}
+완료 내용: {event.completion_summary or event.description}
+
+결과는 다음 JSON 형식으로 출력하세요.
+{{"needs_update": true/false, "reason": "이유 설명"}}
+"""
+    try:
+        decision_text = await llm.generate(
+            "당신은 문서화 필요성을 판단하는 분석가입니다. 오직 JSON만 출력하세요.",
+            prompt,
+        )
+        import re
+        match = re.search(r'\{.*\}', decision_text, re.DOTALL)
+        decision = json.loads(match.group(0)) if match else {"needs_update": True, "reason": "parsing failed"}
+    except Exception as e:
+        logger.warning(f"AI judgment failed: {e}")
+        decision = {"needs_update": True, "reason": "fallback"}
+
+    if not decision.get("needs_update"):
+        draft.status = "done_no_proposal"
+        await db.commit()
+        return
+
+    from app.services.jira_service import _find_related_documents
+    query = f"{draft.title} {draft.description} {event.completion_summary or ''}"
+    related_docs = await _find_related_documents(db, query)
+
+    if not related_docs:
+        draft.status = "done_no_proposal"
+        await db.commit()
+        return
+
+    analysis = ChangeImpactAnalysis(
+        id=uuid.uuid4(),
+        source_type="jira_sr",
+        source_id=draft.id,
+        related_document_ids=[str(d["document_id"]) for d in related_docs],
+        recommended_strategy="pending",
+        reasoning=decision.get("reason", ""),
+        confidence=0.8,
+        status="pending_document_selection",
+    )
+    db.add(analysis)
+
+    draft.status = "pending_document_selection"
+    await db.commit()
+

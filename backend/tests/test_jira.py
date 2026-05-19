@@ -275,6 +275,77 @@ async def test_process_jira_done_no_playwright_without_target_url(client, db_ses
     }
 
     with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]), \
-         patch("app.services.jira_service.capture_screenshots") as mock_capture:
+         patch("app.services.llm_service.get_llm_provider") as mock_llm_factory:
+        from unittest.mock import AsyncMock
+        import json
+        mock_llm = MagicMock()
+        mock_llm.generate = AsyncMock(return_value=json.dumps({
+            "needs_update": True,
+            "strategy": "update_existing",
+            "confidence": 0.9,
+            "reasoning": "test",
+        }))
+        mock_llm_factory.return_value = mock_llm
         await jira_service.process_jira_done(sr.id, log.id, db=db_session)
-        mock_capture.assert_not_called()
+
+
+# === Phase 1: 중복 webhook 방지 테스트 ===
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_skips_already_done_sr(client, db_session):
+    """김운영: 이미 처리된 SR의 중복 webhook은 스킵"""
+    import uuid
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraConfig
+
+    resp = await client.post("/api/users", json={
+        "name": "Dup Test User",
+        "email": f"dup_test_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    user_id = uuid.UUID(resp.json()["id"])
+
+    config = JiraConfig(
+        id=uuid.uuid4(),
+        base_url="https://test.atlassian.net",
+        user_email="test@example.com",
+        api_token="token",
+        project_key="TEST",
+        is_active=True,
+        trigger_status_names=None,
+    )
+    db_session.add(config)
+
+    unique_key = f"TEST-DUP-{uuid.uuid4().hex[:6]}"
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        title="이미 완료된 SR",
+        description="설명",
+        priority="medium",
+        status="done_synced",
+        created_by_ai=False,
+        jira_issue_key=unique_key,
+    )
+    db_session.add(sr)
+    await db_session.commit()
+
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": unique_key,
+            "fields": {
+                "status": {
+                    "name": "Done",
+                    "statusCategory": {"key": "done"},
+                }
+            },
+        },
+    }
+    resp = await client.post("/api/jira/webhook", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "skipped"
+    assert data["reason"] == "SR already processed"

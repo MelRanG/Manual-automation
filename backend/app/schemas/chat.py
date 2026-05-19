@@ -39,7 +39,16 @@ class CitationResponse(BaseModel):
     chunk_id: str
 
 
+class SRDraftResponse(BaseModel):
+    id: str
+    title: str
+    description: str
+    priority: str
+
+
 class AskQuestionResponse(BaseModel):
     message_id: str
     content: str
     citations: list[CitationResponse]
+    warnings: list[dict] = []
+    sr_draft: SRDraftResponse | None = None

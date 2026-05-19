@@ -35,6 +35,7 @@ class MockLLMProvider(LLMProvider):
 
 class BedrockLLMProvider(LLMProvider):
     def __init__(self):
+        import os
         import anthropic
         import httpx
         self.model = settings.bedrock_model_id
@@ -48,13 +49,20 @@ class BedrockLLMProvider(LLMProvider):
                 http_client=httpx.AsyncClient(verify=False),
             )
         else:
-            kwargs: dict = {"aws_region": settings.aws_region}
-            if settings.aws_access_key_id:
-                kwargs["aws_access_key"] = settings.aws_access_key_id
-                kwargs["aws_secret_key"] = settings.aws_secret_access_key
-            elif settings.aws_profile:
-                kwargs["aws_profile"] = settings.aws_profile
-            self.client = anthropic.AsyncAnthropicBedrock(**kwargs)
+            # 직접 AWS 키 방식 — 시스템 환경변수 ANTHROPIC_BEDROCK_BASE_URL이
+            # 설정되어 있으면 SDK가 자동으로 게이트웨이를 사용하므로 임시 제거
+            saved_base_url = os.environ.pop("ANTHROPIC_BEDROCK_BASE_URL", None)
+            try:
+                kwargs: dict = {"aws_region": settings.aws_region}
+                if settings.aws_access_key_id:
+                    kwargs["aws_access_key"] = settings.aws_access_key_id
+                    kwargs["aws_secret_key"] = settings.aws_secret_access_key
+                elif settings.aws_profile:
+                    kwargs["aws_profile"] = settings.aws_profile
+                self.client = anthropic.AsyncAnthropicBedrock(**kwargs)
+            finally:
+                if saved_base_url is not None:
+                    os.environ["ANTHROPIC_BEDROCK_BASE_URL"] = saved_base_url
 
     async def generate(self, system_prompt: str, user_message: str, context: str = "") -> str:
         full_message = user_message

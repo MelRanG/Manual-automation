@@ -25,6 +25,18 @@ class Document(Base, UUIDMixin, TimestampMixin):
     view_count: Mapped[int] = mapped_column(Integer, default=0)
     last_reviewed_at: Mapped[str | None] = mapped_column(String(50))
 
+    # Phase 1: 문서 메타데이터
+    document_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    domain: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    audience: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_file_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    related_sr_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sr_drafts.id"), nullable=True
+    )
+    jira_issue_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    tags: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
     owner: Mapped["User | None"] = relationship(back_populates="documents")  # noqa: F821
     versions: Mapped[list["DocumentVersion"]] = relationship(
         back_populates="document", foreign_keys="DocumentVersion.document_id"

@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react"
 import { api, type ChatSession, type ChatMessage, type Citation, type DocumentWarning } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 
+type ChatMode = "question" | "change_request"
+
 export function Chat() {
   const { user } = useAuth()
   const [sessions, setSessions] = useState<ChatSession[]>([])
@@ -16,6 +18,8 @@ export function Chat() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null)
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
+  const [chatMode, setChatMode] = useState<ChatMode>("question")
+  const [srCreated, setSrCreated] = useState<{id: string; title: string} | null>(null)
   const messagesEnd = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -62,11 +66,14 @@ export function Chat() {
 
   const sendMessage = async () => {
     if (!input.trim() || !activeSession) return
-    const question = input
+    const question = chatMode === "change_request"
+      ? `[변경 요청] ${input}`
+      : input
     setInput("")
     setLoading(true)
+    setSrCreated(null)
 
-    const userMsg: ChatMessage = { id: "user-" + Date.now(), session_id: activeSession, role: "user", content: question, created_at: new Date().toISOString() }
+    const userMsg: ChatMessage = { id: "user-" + Date.now(), session_id: activeSession, role: "user", content: input, created_at: new Date().toISOString() }
     const botMsg: ChatMessage = { id: "streaming", session_id: activeSession, role: "assistant", content: "", created_at: new Date().toISOString() }
     setMessages(prev => [...prev, userMsg, botMsg])
 
@@ -82,11 +89,13 @@ export function Chat() {
           setWarnings(event.warnings || [])
         } else if (event.type === "done") {
           messageId = event.messageId || ""
+          if (event.sr_draft) {
+            setSrCreated({ id: event.sr_draft.id, title: event.sr_draft.title })
+          }
         }
       }
       setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId, content } : m))
-      // 세션 제목 갱신
-      setSessions(prev => prev.map(s => s.id === activeSession && !s.title ? { ...s, title: question.slice(0, 50) } : s))
+      setSessions(prev => prev.map(s => s.id === activeSession && !s.title ? { ...s, title: input.slice(0, 50) } : s))
     } catch {
       setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: "오류가 발생했습니다. 다시 시도해주세요." } : m))
     } finally {
@@ -191,6 +200,40 @@ export function Chat() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col bg-[#f7f9fb] relative">
+        {/* Mode Tabs */}
+        {activeSession && (
+          <div className="bg-white border-b border-[#c4c5d5] px-6 py-2 flex items-center gap-1">
+            <button
+              onClick={() => setChatMode("question")}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
+                chatMode === "question"
+                  ? "bg-[#00288e] text-white shadow-sm"
+                  : "text-[#444653] hover:bg-[#f2f4f6]"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">help</span>
+              질문하기
+            </button>
+            <button
+              onClick={() => setChatMode("change_request")}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
+                chatMode === "change_request"
+                  ? "bg-[#b45309] text-white shadow-sm"
+                  : "text-[#444653] hover:bg-[#f2f4f6]"
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">edit_note</span>
+              변경 요청하기
+            </button>
+            {srCreated && (
+              <div className="ml-auto flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-3 py-1.5 rounded-lg">
+                <span className="material-symbols-outlined text-sm">check_circle</span>
+                SR 생성됨: {srCreated.title.slice(0, 30)}
+              </div>
+            )}
+          </div>
+        )}
+
         {!activeSession ? (
           <div className="flex-1 flex flex-col items-center justify-center py-8">
             <div className="w-16 h-16 rounded-2xl bg-[#d5e3fc] flex items-center justify-center shadow-sm">
@@ -353,7 +396,7 @@ export function Chat() {
                   </button>
                   <textarea
                     className="flex-1 max-h-32 min-h-[44px] bg-transparent border-none focus:ring-0 resize-none text-base text-[#191c1e] py-2 px-2 outline-none"
-                    placeholder="문서 내용에 대해 질문해보세요..."
+                    placeholder={chatMode === "change_request" ? "어떤 변경이 필요한지 설명해주세요..." : "문서 내용에 대해 질문해보세요..."}
                     rows={1}
                     value={input}
                     onChange={e => setInput(e.target.value)}

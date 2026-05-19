@@ -13,7 +13,8 @@ from app.schemas.jira import (
     JiraConfigUpsert,
     JiraConnectionTestResult,
 )
-from app.services import jira_service
+from app.schemas.sr import CompletedSREvent
+from app.services import jira_service, sr_service
 
 router = APIRouter(prefix="/api/jira", tags=["jira"])
 
@@ -95,7 +96,10 @@ async def receive_jira_webhook(
         return {"status": "skipped"}
 
     sr_result = await db.execute(
-        select(SRDraft).where(SRDraft.jira_issue_key == issue_key)
+        select(SRDraft)
+        .where(SRDraft.jira_issue_key == issue_key)
+        .order_by(SRDraft.created_at.desc())
+        .limit(1)
     )
     draft = sr_result.scalar_one_or_none()
 
@@ -104,10 +108,30 @@ async def receive_jira_webhook(
         await db.commit()
         return {"status": "skipped", "reason": "no SR found for issue key"}
 
+    if draft.status in ("done_synced", "done_no_proposal"):
+        log.status = "skipped"
+        await db.commit()
+        return {"status": "skipped", "reason": "SR already processed"}
+
     log.sr_draft_id = draft.id
+    log.status = "processed"
     await db.commit()
 
-    background_tasks.add_task(jira_service.process_jira_done, draft.id, log.id)
+    event = CompletedSREvent(
+        source="jira",
+        external_issue_key=issue_key,
+        status="Done",
+        title=payload.get("issue", {}).get("fields", {}).get("summary"),
+        description=payload.get("issue", {}).get("fields", {}).get("description"),
+        raw_payload=payload,
+    )
+
+    async def _bg_task(evt: CompletedSREvent):
+        from app.db import SessionLocal
+        async with SessionLocal() as session:
+            await sr_service.process_completed_sr(session, evt)
+
+    background_tasks.add_task(_bg_task, event)
     return {"status": "processing", "sr_id": str(draft.id)}
 
 

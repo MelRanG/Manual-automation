@@ -12,7 +12,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        timeout: 120000,
+        proxyTimeout: 120000,
+      },
       '/uploads': 'http://localhost:8000',
     },
   },

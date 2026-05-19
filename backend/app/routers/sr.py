@@ -105,3 +105,33 @@ async def retry_webhook(log_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     webhook_result = await sr_service.deliver_webhook(db, draft)
     await db.commit()
     return webhook_result
+
+
+@router.post("/drafts/{sr_id}/complete-local")
+async def complete_sr_local(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    from app.models.sr import SRDraft
+    from app.schemas.sr import CompletedSREvent
+
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+
+    if draft.status not in ("submitted", "jira_created", "draft"):
+        raise HTTPException(status_code=400, detail="Cannot complete SR in current status")
+
+    event = CompletedSREvent(
+        source="jira_simulator",
+        external_issue_key=draft.jira_issue_key or f"LOCAL-{str(uuid.uuid4())[:8].upper()}",
+        status="Done",
+        title=draft.title,
+        description=draft.description,
+    )
+    
+    if not draft.jira_issue_key:
+        draft.jira_issue_key = event.external_issue_key
+        await db.commit()
+        await db.refresh(draft)
+
+    await sr_service.process_completed_sr(db, event)
+    return {"status": "success", "message": "Local completion processing started"}

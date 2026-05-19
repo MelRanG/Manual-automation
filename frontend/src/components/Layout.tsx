@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useNotifications } from "@/hooks/useNotifications"
+import { useManualJob } from "@/contexts/ManualJobContext"
 import { NotificationBell } from "@/components/NotificationBell"
 import { ToastContainer } from "@/components/Toast"
 
@@ -48,6 +49,7 @@ export function Layout() {
   const { user, logout } = useAuth()
   const { notifications, unreadCount, newNotification, markRead, markAllRead, clearNew } =
     useNotifications(user?.id)
+  const { runningJob, clearJob } = useManualJob()
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   // 새 알림이 오면 토스트 표시
@@ -165,6 +167,21 @@ export function Layout() {
             </div>
           </div>
         </header>
+        {runningJob && (
+          <div className="shrink-0 bg-[#00288e] text-white px-6 py-2 flex items-center gap-3 text-sm">
+            <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
+            <span className="flex-1">
+              <span className="font-medium">매뉴얼 생성 중</span>
+              <span className="text-white/70 ml-2">{runningJob.targetUrl}</span>
+            </span>
+            <Link to="/manuals" className="text-white/80 hover:text-white underline text-xs">
+              상태 보기
+            </Link>
+            <button onClick={clearJob} className="text-white/60 hover:text-white ml-2" title="알림 숨기기">
+              ✕
+            </button>
+          </div>
+        )}
         <main className="flex-1 overflow-auto">
           <Outlet />
         </main>

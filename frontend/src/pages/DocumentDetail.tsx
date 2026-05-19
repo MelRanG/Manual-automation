@@ -118,6 +118,24 @@ export function DocumentDetail() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-[#191c1e] leading-tight">{doc.title}</h1>
           {doc.description && <p className="text-sm text-[#444653] mt-2">{doc.description}</p>}
+          {doc.tags && doc.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {doc.tags.map(tag => {
+                const depth = tag.split("/").length
+                const colorClass = depth === 1 ? "bg-[#dde1ff] text-[#00288e]" : depth === 2 ? "bg-[#d5e3fc] text-[#1a56db]" : "bg-[#e8f0fe] text-[#444653]"
+                return (
+                  <span key={tag} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${colorClass}`}>
+                    {tag.split("/").map((part, i) => (
+                      <span key={i} className="flex items-center gap-0.5">
+                        {i > 0 && <span className="opacity-40 text-[10px]">/</span>}
+                        {part}
+                      </span>
+                    ))}
+                  </span>
+                )
+              })}
+            </div>
+          )}
           <div className="flex items-center gap-4 mt-3">
             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
               doc.status === "active"
@@ -301,6 +319,44 @@ export function DocumentDetail() {
                 <span className="text-[#757684]">우선순위</span>
                 <span className="text-[#191c1e]">{doc.priority || "보통"}</span>
               </div>
+              {doc.document_type && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-[#757684]">문서 유형</span>
+                  <span className="text-[#191c1e]">{doc.document_type === "user_manual" ? "사용자 매뉴얼" : doc.document_type === "operation_guide" ? "운영 가이드" : doc.document_type}</span>
+                </div>
+              )}
+              {doc.domain && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-[#757684]">도메인</span>
+                  <span className="text-[#191c1e]">{doc.domain}</span>
+                </div>
+              )}
+              {doc.audience && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-[#757684]">대상</span>
+                  <span className="text-[#191c1e]">{doc.audience === "operator" ? "운영자" : doc.audience === "developer" ? "개발자" : doc.audience}</span>
+                </div>
+              )}
+              {(doc.source_type || doc.source_file_url || doc.jira_issue_key) && (
+                <div className="flex justify-between text-xs gap-2">
+                  <span className="text-[#757684] shrink-0">출처</span>
+                  <span className="text-[#191c1e] text-right break-all">
+                    {doc.source_type === "upload" && doc.source_file_url
+                      ? doc.source_file_url.split("/").pop()
+                      : doc.source_type === "jira_sr"
+                      ? `Jira ${doc.jira_issue_key || ""}`
+                      : doc.source_type === "playwright"
+                      ? "자동 생성 (Playwright)"
+                      : doc.source_type === "feedback"
+                      ? "피드백 기반"
+                      : doc.source_type === "manual"
+                      ? "직접 작성"
+                      : doc.source_file_url
+                      ? doc.source_file_url.split("/").pop()
+                      : doc.source_type ?? "-"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

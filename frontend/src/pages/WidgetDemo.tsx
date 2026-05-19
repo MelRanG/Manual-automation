@@ -8,12 +8,16 @@ interface Message {
   citations?: { title: string; id: string }[]
 }
 
+type WidgetMode = "question" | "change_request"
+
 export function WidgetDemo() {
   const [chatOpen, setChatOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [streaming, setStreaming] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [widgetMode, setWidgetMode] = useState<WidgetMode>("question")
+  const [srCreated, setSrCreated] = useState<string | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -35,9 +39,11 @@ export function WidgetDemo() {
 
   async function sendMessage() {
     if (!input.trim() || streaming) return
-    const question = input.trim()
+    const userInput = input.trim()
+    const question = widgetMode === "change_request" ? `[변경 요청] ${userInput}` : userInput
     setInput("")
-    setMessages(prev => [...prev, { role: "user", content: question }])
+    setSrCreated(null)
+    setMessages(prev => [...prev, { role: "user", content: userInput }])
     setStreaming(true)
 
     try {
@@ -69,6 +75,11 @@ export function WidgetDemo() {
             updated[updated.length - 1] = { role: "assistant", content: assistantContent, citations }
             return updated
           })
+        } else if (event.event === "done") {
+          const doneData = JSON.parse(event.data)
+          if (doneData.sr_draft) {
+            setSrCreated(doneData.sr_draft.title)
+          }
         }
       }
     } catch {
@@ -260,6 +271,37 @@ export function WidgetDemo() {
               </div>
             </div>
 
+            {/* Mode Tabs */}
+            <div className="flex items-center gap-1 px-3 py-2 bg-[#f2f4f6] border-b border-[#c4c5d5]">
+              <button
+                onClick={() => setWidgetMode("question")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
+                  widgetMode === "question"
+                    ? "bg-[#00288e] text-white shadow-sm"
+                    : "text-[#444653] hover:bg-white"
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">help</span>
+                질문하기
+              </button>
+              <button
+                onClick={() => setWidgetMode("change_request")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
+                  widgetMode === "change_request"
+                    ? "bg-[#b45309] text-white shadow-sm"
+                    : "text-[#444653] hover:bg-white"
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm">edit_note</span>
+                변경 요청
+              </button>
+              {srCreated && (
+                <div className="ml-auto text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                  SR 생성됨
+                </div>
+              )}
+            </div>
+
             {/* Chat Area */}
             <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-[#f7f9fb]">
               {messages.length === 0 && (
@@ -319,7 +361,7 @@ export function WidgetDemo() {
               <div className="flex items-center gap-3">
                 <input
                   className="flex-1 bg-[#f2f4f6] border-none rounded-full px-4 py-2 text-sm focus:ring-1 focus:ring-[#00288e] outline-none text-[#191c1e]"
-                  placeholder="질문을 입력하세요..."
+                  placeholder={widgetMode === "change_request" ? "변경 요청 내용을 입력하세요..." : "질문을 입력하세요..."}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && sendMessage()}

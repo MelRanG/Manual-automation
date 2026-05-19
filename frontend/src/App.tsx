@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider, useAuth } from "@/contexts/AuthContext"
+import { ManualJobProvider } from "@/contexts/ManualJobContext"
 import { Layout } from "@/components/Layout"
 import { Login } from "@/pages/Login"
 import { Dashboard } from "@/pages/Dashboard"
@@ -34,6 +35,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ManualJobProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/widget-demo" element={<WidgetDemo />} />
@@ -53,6 +55,7 @@ export default function App() {
             <Route path="/widget-conversations" element={<WidgetConversations />} />
           </Route>
         </Routes>
+        </ManualJobProvider>
       </AuthProvider>
     </BrowserRouter>
   )

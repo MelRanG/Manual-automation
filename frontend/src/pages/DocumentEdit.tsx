@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { useParams, useNavigate, Link } from "react-router-dom"
 import { api } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
+import { TagEditor } from "@/components/TagEditor"
 
 export function DocumentEdit() {
   const { id } = useParams<{ id: string }>()
@@ -14,6 +15,7 @@ export function DocumentEdit() {
   const [description, setDescription] = useState("")
   const [content, setContent] = useState("")
   const [changeSummary, setChangeSummary] = useState("")
+  const [tags, setTags] = useState<string[]>([])
   const contentInitialized = useRef(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +26,7 @@ export function DocumentEdit() {
       metaInitialized.current = true
       setTitle(doc.title)
       setDescription(doc.description ?? "")
+      setTags(doc.tags ?? [])
     }
   }, [doc])
 
@@ -47,6 +50,7 @@ export function DocumentEdit() {
         description: description.trim() || undefined,
         content,
         change_summary: changeSummary.trim() || undefined,
+        tags,
       })
       navigate(`/documents/${id}`)
     } catch (e: unknown) {
@@ -109,6 +113,16 @@ export function DocumentEdit() {
             rows={20}
             value={content}
             onChange={e => setContent(e.target.value)}
+          />
+        </div>
+
+        {/* Tags */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-[#191c1e]">태그</label>
+          <TagEditor
+            tags={tags}
+            onChange={setTags}
+            onSuggest={() => api.suggestTags(id!).then(r => r.tags)}
           />
         </div>
 
