@@ -119,7 +119,8 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   const [linkDocId, setLinkDocId] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
   const { data: allDocs } = useApi(() => api.listDocuments(0, 200), [])
-  const { data: proposal, loading: proposalLoading, refetch: refetchProposal } = useApi<ProposedChange>(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { data: proposal, loading: _proposalLoading, refetch: refetchProposal } = useApi<ProposedChange>(
     () => api.getFeedbackProposal(item.id),
     [item.id]
   )
@@ -127,17 +128,14 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   const { user } = useAuth()
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
   const [editedText, setEditedText] = useState("")
-  const [applying, setApplying] = useState(false)
-  const { data: history, loading: historyLoading } = useApi<ChangeHistory[]>(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_applying, _setApplying] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { data: _history, loading: _historyLoading } = useApi<ChangeHistory[]>(
     () => api.listHistory("feedback", item.id),
     [item.id]
   )
 
-  // These are used in the UI rendering part (Task 8) — suppress unused warnings
-  void proposalLoading
-  void applying
-  void history
-  void historyLoading
 
   useEffect(() => {
     if (proposal) setEditedText(proposal.proposed_text)
@@ -151,9 +149,11 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     }
   }
 
+  // @ts-expect-error TS6133 - used in Task 8
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleApplyDraft() {
     if (!proposal) return
-    setApplying(true)
+    _setApplying(true)
     try {
       await api.applyFeedbackDraft(item.id, {
         action: "apply",
@@ -163,22 +163,26 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
       await refetchProposal()
       onRefetch()
     } finally {
-      setApplying(false)
+      _setApplying(false)
     }
   }
 
+  // @ts-expect-error TS6133 - used in Task 8
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleRejectDraft() {
     if (!proposal) return
-    setApplying(true)
+    _setApplying(true)
     try {
       await api.applyFeedbackDraft(item.id, { action: "reject", reviewer_id: reviewerId })
       await refetchProposal()
       onRefetch()
     } finally {
-      setApplying(false)
+      _setApplying(false)
     }
   }
 
+  // @ts-expect-error TS6133 - used in Task 8
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleRegenerateDraft() {
     setRequesting(true)
     try {
@@ -192,10 +196,6 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     }
   }
 
-  // These handler functions are used in the UI rendering part (Task 8)
-  void handleApplyDraft
-  void handleRejectDraft
-  void handleRegenerateDraft
 
   async function handleRequestDraft() {
     setRequesting(true)
