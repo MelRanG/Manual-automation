@@ -364,15 +364,19 @@ function ApprovalCard({
                   approval.status === "approved" ? "bg-[#e8f5e9] text-[#2e7d32]"
                   : approval.status === "rejected" ? "bg-[#fce4ec] text-[#c62828]"
                   : approval.status === "needs_review" ? "bg-[#e8f0fe] text-[#1a56db]"
-                  : tab === "jira_sr" && approval.proposed_change?.source_type === "jira_sr" ? "bg-[#e8f0fe] text-[#1a56db]"
+                  : approval.proposed_change?.source_type === "jira_sr" ? "bg-[#e8f0fe] text-[#1a56db]"
+                  : approval.approval_type === "doc_review" ? "bg-[#fff3dc] text-[#92600a]"
                   : "bg-[#ffdbce] text-[#611e00]"
                 }`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                  {(approval.status === "pending" || approval.status === "needs_review") && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                  )}
                   {approval.status === "approved" ? "문서 수정 완료"
                   : approval.status === "rejected" ? "종료"
                   : approval.status === "needs_review" ? "AI 초안 검토"
-                  : tab === "jira_sr" && approval.proposed_change?.source_type === "jira_sr" ? "AI 초안 검토"
-                  : "문서화 필요 여부"}
+                  : approval.proposed_change?.source_type === "jira_sr" ? "AI 초안 검토"
+                  : approval.approval_type === "doc_review" ? "문서화 필요 여부"
+                  : "승인 대기"}
                 </span>
               </div>
               {tab === "feedback" && change && (
@@ -461,6 +465,8 @@ function ApprovalCard({
                           await api.reviewDocApproval(approval.id, { reviewer_id: reviewerId, action: "reject" })
                           onCloseReview()
                           onRefetch()
+                        } catch (e: any) {
+                          alert("처리 중 오류: " + e.message)
                         } finally { setLocalSubmitting(false) }
                       }}
                       className="px-3 py-1.5 text-sm rounded border border-[#e0e3e5] text-[#757684] hover:bg-[#f2f4f6]"
@@ -475,6 +481,8 @@ function ApprovalCard({
                           await api.reviewDocApproval(approval.id, { reviewer_id: reviewerId, action: "approve_doc" })
                           onCloseReview()
                           onRefetch()
+                        } catch (e: any) {
+                          alert("처리 중 오류: " + e.message)
                         } finally { setLocalSubmitting(false) }
                       }}
                       className="px-3 py-1.5 text-sm rounded bg-[#00288e] text-white hover:bg-[#001a6b]"
@@ -493,6 +501,8 @@ function ApprovalCard({
                           })
                           onCloseReview()
                           onRefetch()
+                        } catch (e: any) {
+                          alert("처리 중 오류: " + e.message)
                         } finally { setLocalSubmitting(false) }
                       }}
                       className="px-3 py-1.5 text-sm rounded bg-[#1a6b3c] text-white hover:bg-[#0d4a28] disabled:opacity-40"
