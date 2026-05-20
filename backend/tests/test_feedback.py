@@ -405,10 +405,11 @@ async def test_apply_draft_reject_logs_history(client: AsyncClient, test_user: d
         "reviewed_text": "Issue here",
     })
 
-    await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+    resp = await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
         "action": "reject",
         "reviewer_id": test_user["id"],
     })
+    assert resp.status_code == 200
 
     history_resp = await client.get(f"/api/history/feedback/{feedback_id}")
     assert history_resp.status_code == 200
@@ -435,10 +436,11 @@ async def test_apply_draft_apply_logs_history(client: AsyncClient, test_user: di
         "reviewed_text": "Fix it",
     })
 
-    await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+    resp = await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
         "action": "apply",
         "reviewer_id": test_user["id"],
     })
+    assert resp.status_code == 200
 
     history_resp = await client.get(f"/api/history/feedback/{feedback_id}")
     assert history_resp.status_code == 200
