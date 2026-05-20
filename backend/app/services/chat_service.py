@@ -212,12 +212,11 @@ async def ask_question(
 async def ask_question_stream(
     db: AsyncSession, session_id: uuid.UUID, question: str
 ) -> AsyncGenerator[str, None]:
-    # TODO: 현재 각 요청이 단일 메시지로 처리됨 (대화 히스토리 미전달).
-    # change_request 모드에서 멀티턴으로 정보를 수집하려면 이전 메시지들을
-    # LLM context에 포함해야 함. 현재는 단일 메시지에 모든 필수 정보가 포함된 경우만 동작.
     session = await get_session(db, session_id)
     if not session:
         raise ValueError("Session not found")
+
+    history = await get_messages(db, session_id)
 
     user_msg = ChatMessage(
         id=uuid.uuid4(),
@@ -234,10 +233,13 @@ async def ask_question_stream(
         f"[{c['document_title']}] {c['content']}" for c in relevant_chunks
     )
 
+    messages = [{"role": m.role, "content": m.content} for m in history[-20:]]
+    messages.append({"role": "user", "content": question})
+
     llm = get_llm_provider()
     full_content = ""
 
-    async for token in llm.generate_stream(RAG_SYSTEM_PROMPT, question, context):
+    async for token in llm.generate_stream_with_history(RAG_SYSTEM_PROMPT, messages, context):
         full_content += token
         yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
 

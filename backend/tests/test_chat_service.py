@@ -59,3 +59,52 @@ async def test_mock_generate_stream_with_history_yields_tokens():
         tokens.append(token)
     assert len(tokens) > 0
     assert "".join(tokens)  # 빈 문자열이 아님
+
+
+@pytest.mark.asyncio
+async def test_ask_question_stream_includes_history():
+    """ask_question_stream은 이전 메시지를 포함한 messages 배열을 LLM에 전달한다."""
+    from app.services.chat_service import ask_question_stream
+    from unittest.mock import AsyncMock, MagicMock, patch
+    import uuid
+
+    session_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    mock_session = MagicMock()
+    mock_session.id = session_id
+    mock_session.user_id = user_id
+    mock_session.title = "test"
+
+    prev_user = MagicMock()
+    prev_user.role = "user"
+    prev_user.content = "이전 질문"
+
+    prev_assistant = MagicMock()
+    prev_assistant.role = "assistant"
+    prev_assistant.content = "이전 답변"
+
+    async def mock_stream(system_prompt, messages, context=""):
+        assert len(messages) == 3  # 이전 2개 + 현재 1개
+        assert messages[0]["content"] == "이전 질문"
+        assert messages[1]["content"] == "이전 답변"
+        assert messages[2]["content"] == "현재 질문"
+        yield "응답 토큰"
+
+    mock_db = AsyncMock()
+
+    with patch("app.services.chat_service.get_session", return_value=mock_session), \
+         patch("app.services.chat_service.get_messages", return_value=[prev_user, prev_assistant]), \
+         patch("app.services.chat_service.search_similar_chunks", return_value=[]), \
+         patch("app.services.chat_service.get_llm_provider") as mock_provider_fn:
+
+        mock_llm = MagicMock()
+        mock_llm.generate_stream_with_history = mock_stream
+        mock_provider_fn.return_value = mock_llm
+
+        events = []
+        async for event in ask_question_stream(mock_db, session_id, "현재 질문"):
+            events.append(event)
+
+        token_events = [e for e in events if "token" in e]
+        assert len(token_events) > 0
