@@ -187,3 +187,17 @@ async def test_link_document(client: AsyncClient, test_user: dict):
         "document_id": doc_id,
     })
     assert resp2.status_code == 400
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_request_draft_without_document_returns_400(client: AsyncClient, test_user: dict):
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "feedback_text": "No document attached",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    resp = await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "something",
+    })
+    assert resp.status_code == 400
