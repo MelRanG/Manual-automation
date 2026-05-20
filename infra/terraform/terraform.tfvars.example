@@ -1,0 +1,13 @@
+aws_region  = "us-east-1"
+account_id  = "136609826435"
+
+project_name = "manual-auto"
+environment  = "codex-dev"
+
+# Keep HTTP public while validating. Restrict later, for example:
+# allowed_http_cidr_blocks = ["203.0.113.10/32"]
+allowed_http_cidr_blocks = ["0.0.0.0/0"]
+
+# Start safely without paid LLM calls. Change to "bedrock" after IAM/Bedrock access is confirmed.
+llm_provider    = "mock"
+embedding_model = "mock"
