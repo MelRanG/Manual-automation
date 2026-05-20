@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.routers import auth, documents, users, chat, feedback, approvals, trust, sr, change_impact, manual, widget, notifications, jira
 from app.seed import seed
 from app.services.document_service import UPLOAD_DIR
+from app.services.file_converter import STATIC_IMAGES_DIR
 
 
 @asynccontextmanager
@@ -40,6 +41,7 @@ app.include_router(manual.router)
 app.include_router(widget.router)
 
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+app.mount("/static/images", StaticFiles(directory=str(STATIC_IMAGES_DIR)), name="static_images")
 
 
 @app.get("/health")

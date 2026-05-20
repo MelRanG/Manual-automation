@@ -3,14 +3,18 @@ import io
 from pathlib import Path
 
 
+STATIC_IMAGES_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "images"
+STATIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+
 async def convert_to_markdown(
     file_bytes: bytes,
     filename: str,
     document_id: str,
-    static_dir: Path,
+    static_dir: Path | None = None,
 ) -> str:
     return await asyncio.to_thread(
-        _convert_sync, file_bytes, filename, document_id, static_dir
+        _convert_sync, file_bytes, filename, document_id, static_dir or STATIC_IMAGES_DIR
     )
 
 
