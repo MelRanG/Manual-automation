@@ -14,6 +14,14 @@ class LLMProvider(ABC):
     async def generate_stream(self, system_prompt: str, user_message: str, context: str = "") -> AsyncGenerator[str, None]:
         ...
 
+    @abstractmethod
+    async def generate_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> str:
+        ...
+
+    @abstractmethod
+    async def generate_stream_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> AsyncGenerator[str, None]:
+        ...
+
 
 class MockLLMProvider(LLMProvider):
     async def generate(self, system_prompt: str, user_message: str, context: str = "") -> str:
@@ -31,6 +39,15 @@ class MockLLMProvider(LLMProvider):
         for i, word in enumerate(words):
             yield word if i == 0 else f" {word}"
             await asyncio.sleep(0.03)
+
+    async def generate_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> str:
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        return await self.generate(system_prompt, last_user, context)
+
+    async def generate_stream_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> AsyncGenerator[str, None]:
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        async for token in self.generate_stream(system_prompt, last_user, context):
+            yield token
 
 
 class BedrockLLMProvider(LLMProvider):

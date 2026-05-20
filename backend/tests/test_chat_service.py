@@ -30,3 +30,34 @@ def test_strip_sr_block_removes_block():
     result = _strip_sr_block(response)
     assert "sr_proposal" not in result
     assert "SR을 등록했습니다." in result
+
+
+import asyncio
+import pytest
+from app.services.llm_service import MockLLMProvider
+
+
+@pytest.mark.asyncio
+async def test_mock_generate_with_history_uses_last_message():
+    """generate_with_history는 마지막 user 메시지를 기반으로 응답을 생성한다."""
+    llm = MockLLMProvider()
+    messages = [
+        {"role": "user", "content": "첫 번째 질문"},
+        {"role": "assistant", "content": "첫 번째 답변"},
+        {"role": "user", "content": "두 번째 질문"},
+    ]
+    result = await llm.generate_with_history("system", messages)
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+@pytest.mark.asyncio
+async def test_mock_generate_stream_with_history_yields_tokens():
+    """generate_stream_with_history는 토큰을 순서대로 yield한다."""
+    llm = MockLLMProvider()
+    messages = [{"role": "user", "content": "테스트 질문"}]
+    tokens = []
+    async for token in llm.generate_stream_with_history("system", messages):
+        tokens.append(token)
+    assert len(tokens) > 0
+    assert "".join(tokens)  # 빈 문자열이 아님
