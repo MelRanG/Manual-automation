@@ -32,7 +32,7 @@ interface Props {
 }
 
 export function ChangeHistoryTimeline({ entityType, entityId }: Props) {
-  const { data: events, loading } = useApi(
+  const { data: events, loading } = useApi<ChangeHistory[]>(
     () => api.listHistory(entityType, entityId),
     [entityType, entityId]
   )

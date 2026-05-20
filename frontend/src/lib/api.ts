@@ -112,8 +112,15 @@ export const api = {
     }),
   listFeedback: (documentId?: string) =>
     request<FeedbackReport[]>(`/feedback${documentId ? `?document_id=${documentId}` : ''}`),
+  listFeedbackByStatus: (status?: string) => {
+    const params = new URLSearchParams()
+    if (status) params.set("status", status)
+    return request<FeedbackReport[]>(`/feedback?${params.toString()}`)
+  },
   deleteFeedback: (id: string) =>
     fetch(`${BASE}/feedback/${id}`, { method: 'DELETE', headers: getAuthHeaders() }),
+  getFeedbackProposal: (feedbackId: string) =>
+    request<ProposedChange>(`/feedback/${feedbackId}/proposal`),
 
   // Approvals
   createApproval: (proposedChangeId: string) =>
@@ -150,7 +157,7 @@ export const api = {
     request<{ sr_id: string; status: string; webhook: { status: string } }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
   completeSRLocal: (id: string) =>
     request<{ status: string; message: string }>(`/sr/drafts/${id}/complete-local`, { method: 'POST' }),
-  updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string }) =>
+  updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string; status?: string }) =>
     request<SRDraft>(`/sr/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // Change Impact
@@ -191,6 +198,10 @@ export const api = {
     request<{ ok: boolean }>(`/notifications/${id}/read`, { method: 'POST' }),
   markAllNotificationsRead: () =>
     request<{ ok: boolean }>('/notifications/read-all', { method: 'POST' }),
+
+  // History
+  listHistory: (entityType: string, entityId: string) =>
+    request<ChangeHistory[]>(`/history/${entityType}/${entityId}`),
 }
 
 // Types
@@ -234,5 +245,16 @@ export interface JiraCallbackLog {
   jira_issue_status: string | null
   jira_issue_status_category: string | null
   status: string
+  created_at: string
+}
+
+export interface ChangeHistory {
+  id: string
+  entity_type: string
+  entity_id: string
+  event_type: string
+  actor_id: string | null
+  actor_name: string | null
+  detail: string | null
   created_at: string
 }
