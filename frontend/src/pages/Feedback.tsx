@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { api, type FeedbackReport, type ProposedChange, type ChangeHistory } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
@@ -126,6 +126,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
 
   const { user } = useAuth()
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
+  const [prevProposalId, setPrevProposalId] = useState<string | null>(null)
   const [editedText, setEditedText] = useState("")
   const [applying, setApplying] = useState(false)
   const { data: history, loading: historyLoading } = useApi<ChangeHistory[]>(
@@ -133,10 +134,10 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     [item.id]
   )
 
-
-  useEffect(() => {
-    if (proposal) setEditedText(proposal.proposed_text)
-  }, [proposal?.id])
+  if (proposal?.id !== prevProposalId) {
+    setPrevProposalId(proposal?.id ?? null)
+    setEditedText(proposal?.proposed_text ?? "")
+  }
 
   async function handleDelete() {
     if (!confirm("이 피드백을 삭제하시겠습니까?")) return
