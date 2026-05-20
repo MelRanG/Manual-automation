@@ -125,6 +125,10 @@ export const api = {
     request<{ feedback: FeedbackReport; proposed_change: ProposedChange | null }>(`/feedback/${feedbackId}/request-draft`, {
       method: 'POST', body: JSON.stringify({ reviewed_text: reviewedText }),
     }),
+  applyFeedbackDraft: (feedbackId: string, data: { action: "apply" | "reject"; edited_text?: string; reviewer_id: string }) =>
+    request<{ feedback: FeedbackReport; proposed_change: ProposedChange | null; approval_id: string | null }>(`/feedback/${feedbackId}/apply-draft`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteFeedbackProposal: (feedbackId: string) =>
+    fetch(`${BASE}/feedback/${feedbackId}/proposal`, { method: 'DELETE' }),
   linkDocument: (feedbackId: string, documentId: string) =>
     request<FeedbackReport>(`/feedback/${feedbackId}/link-document`, {
       method: 'PATCH', body: JSON.stringify({ document_id: documentId }),
@@ -222,7 +226,7 @@ export interface AskResponse { message_id: string; content: string; citations: C
 export interface DocumentWarning { document_id: string; title: string; reason: "trust_score_low" | "stale" }
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }
 export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; reviewed_text: string | null; status: string; document_title: string | null; proposed_change_status: string | null; created_at: string }
-export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright" | "jira_sr"; status: string }
+export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright" | "jira_sr"; status: string; is_stale: boolean }
 export interface ApprovalRequest { id: string; proposed_change_id: string | null; sr_draft_id: string | null; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; approval_type: string; comment: string | null; reviewed_at: string | null; created_at: string }
 export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
