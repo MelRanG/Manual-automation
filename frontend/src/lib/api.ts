@@ -178,6 +178,40 @@ export const api = {
     request<{ sr_id: string; status: string; webhook?: { status: string }; jira_issue_key?: string }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
   completeSRLocal: (id: string) =>
     request<{ status: string; message: string }>(`/sr/drafts/${id}/complete-local`, { method: 'POST' }),
+  getAiDocRecommendation: async (srId: string): Promise<AiDocRecommendation | null> => {
+    const res = await fetch(`${BASE}/sr/drafts/${srId}/ai-doc-recommendation`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    })
+    if (res.status === 404) return null
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(err.detail || res.statusText)
+    }
+    return res.json()
+  },
+  postAiDocRecommendation: async (srId: string, force = false): Promise<AiDocRecommendation> => {
+    const params = force ? "?force=true" : ""
+    const res = await fetch(`${BASE}/sr/drafts/${srId}/ai-doc-recommendation${params}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: "Unknown error" }))
+      throw new Error(body.detail || "AI 추천 생성 실패")
+    }
+    return res.json()
+  },
+  getLatestProposal: async (srId: string): Promise<LatestProposalResponse | null> => {
+    const res = await fetch(`${BASE}/sr/drafts/${srId}/latest-proposal`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    })
+    if (res.status === 404) return null
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(err.detail || res.statusText)
+    }
+    return res.json()
+  },
   updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string; status?: string }) =>
     request<SRDraft>(`/sr/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
@@ -243,6 +277,23 @@ export interface SRDraft { id: string; user_id: string; title: string; descripti
 export interface SRListResponse { items: SRDraft[]; total: number }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; related_document_ids: string[] | null; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
 export interface ChangeProposal { id: string; impact_analysis_id: string; document_id: string; original_content: string; proposed_content: string; diff: string; status: string; created_at: string }
+export type AiDocRecommendation = {
+  recommendation: "new" | "existing" | "none"
+  reason: string
+  suggested_document_id: string | null
+  model: string
+  created_at: string
+}
+export type LatestProposalResponse = {
+  impact_analysis: {
+    id: string
+    recommended_strategy: string
+    reasoning: string
+    created_at: string
+  }
+  proposal: ChangeProposal | null
+  doc_mode_hint: "new" | "existing"
+}
 export interface ManualJob { id: string; user_id: string; target_url: string; login_url: string | null; status: string; output_document_id: string | null; screenshots: { step: number; filename: string | null; url: string; description: string }[] | null; error_message: string | null; created_at: string }
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
 export interface JiraConfig {
