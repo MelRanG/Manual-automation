@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { api, type ChatSession, type ChatMessage, type Citation, type DocumentWarning } from "@/lib/api"
+import { api, type ChatSession, type ChatMessage, type Citation, type DocumentWarning, type SRDraftCreated } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 
 type ChatMode = "question" | "change_request"
@@ -22,6 +22,10 @@ export function Chat() {
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
   const [chatMode, setChatMode] = useState<ChatMode>("question")
   const [srCreated, setSrCreated] = useState<{id: string; title: string} | null>(null)
+  const [srDraftsByMessage, setSrDraftsByMessage] = useState<Record<string, SRDraftCreated>>({})
+  const [srSendingId, setSrSendingId] = useState<string | null>(null)
+  const [srSentById, setSrSentById] = useState<Record<string, string>>({})
+  const [srSendErrorById, setSrSendErrorById] = useState<Record<string, string>>({})
   const messagesEnd = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,6 +59,7 @@ export function Chat() {
     setMessages([])
     setCitations([])
     setCitationsByMessage({})
+    setSrDraftsByMessage({})
   }
 
   const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
@@ -68,6 +73,7 @@ export function Chat() {
         setMessages([])
         setCitations([])
         setCitationsByMessage({})
+        setSrDraftsByMessage({})
         setWarnings([])
       }
     } finally {
@@ -107,6 +113,9 @@ export function Chat() {
           }
           if (event.sr_draft) {
             setSrCreated({ id: event.sr_draft.id, title: event.sr_draft.title })
+            if (messageId) {
+              setSrDraftsByMessage(prev => ({ ...prev, [messageId]: event.sr_draft! }))
+            }
           }
         }
       }
@@ -150,6 +159,27 @@ export function Chat() {
     }
   }
 
+  const sendSRDraft = async (draft: SRDraftCreated) => {
+    setSrSendingId(draft.id)
+    setSrSendErrorById(prev => ({ ...prev, [draft.id]: "" }))
+    try {
+      const result = await api.submitSR(draft.id)
+      setSrSentById(prev => ({
+        ...prev,
+        [draft.id]: result.jira_issue_key
+          ? `SR 전송 완료 (${result.jira_issue_key})`
+          : "SR 전송 완료",
+      }))
+    } catch (err) {
+      setSrSendErrorById(prev => ({
+        ...prev,
+        [draft.id]: err instanceof Error ? err.message : "SR 전송에 실패했습니다",
+      }))
+    } finally {
+      setSrSendingId(null)
+    }
+  }
+
   const groupSessionsByDate = () => {
     const today: ChatSession[] = []
     const yesterday: ChatSession[] = []
@@ -176,7 +206,7 @@ export function Chat() {
         }`}
       >
         <button
-          onClick={() => { setActiveSession(s.id); setCitations([]); setWarnings([]); setCitationsByMessage({}) }}
+          onClick={() => { setActiveSession(s.id); setCitations([]); setWarnings([]); setCitationsByMessage({}); setSrDraftsByMessage({}) }}
           className={`flex-1 text-left px-3 py-2 text-sm truncate transition-colors ${
             activeSession === s.id ? "text-[#00288e] font-medium" : "text-[#191c1e]"
           }`}
@@ -255,7 +285,7 @@ export function Chat() {
             {srCreated && (
               <div className="ml-auto flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-3 py-1.5 rounded-lg">
                 <span className="material-symbols-outlined text-sm">check_circle</span>
-                SR 생성됨: {srCreated.title.slice(0, 30)}
+                SR 초안 생성됨: {srCreated.title.slice(0, 30)}
               </div>
             )}
           </div>
@@ -353,6 +383,50 @@ export function Chat() {
                               )
                             })()}
                           </div>
+
+                          {srDraftsByMessage[msg.id] && (
+                            <div className="border border-[#d7b46a] bg-[#fff8e6] rounded-xl p-4 shadow-sm space-y-3">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-base text-[#92600a]">assignment</span>
+                                    <span className="text-xs font-bold text-[#92600a]">AI가 정리한 SR 초안</span>
+                                  </div>
+                                  <p className="text-sm font-semibold text-[#191c1e]">{srDraftsByMessage[msg.id].title}</p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-white border border-[#e6d3a1] px-2 py-0.5 text-[10px] font-semibold text-[#92600a]">
+                                  {srDraftsByMessage[msg.id].priority}
+                                </span>
+                              </div>
+                              <p className="text-xs leading-relaxed text-[#444653] whitespace-pre-wrap line-clamp-4">
+                                {srDraftsByMessage[msg.id].description}
+                              </p>
+                              <div className="flex items-center justify-between gap-3 pt-1">
+                                <p className="text-[11px] text-[#757684]">
+                                  검토 후 바로 Jira/Webhook으로 전송할 수 있습니다.
+                                </p>
+                                {srSentById[srDraftsByMessage[msg.id].id] ? (
+                                  <span className="text-xs font-semibold text-emerald-700">
+                                    {srSentById[srDraftsByMessage[msg.id].id]}
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => sendSRDraft(srDraftsByMessage[msg.id])}
+                                    disabled={srSendingId === srDraftsByMessage[msg.id].id}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#00288e] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1e40af] disabled:opacity-50 transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">send</span>
+                                    {srSendingId === srDraftsByMessage[msg.id].id ? "전송 중..." : "SR 보내기"}
+                                  </button>
+                                )}
+                              </div>
+                              {srSendErrorById[srDraftsByMessage[msg.id].id] && (
+                                <p className="text-xs font-medium text-[#ba1a1a]">
+                                  {srSendErrorById[srDraftsByMessage[msg.id].id]}
+                                </p>
+                              )}
+                            </div>
+                          )}
 
                           {/* Action buttons */}
                           {msg.id !== "streaming" && msg.content && (

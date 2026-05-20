@@ -145,7 +145,7 @@ export const api = {
   generateSR: (data: { user_id: string; document_id: string; issue_description: string }) =>
     request<SRDraft>('/sr/generate', { method: 'POST', body: JSON.stringify(data) }),
   submitSR: (id: string) =>
-    request<{ sr_id: string; status: string; webhook: { status: string } }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
+    request<{ sr_id: string; status: string; webhook?: { status: string }; jira_issue_key?: string }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
   completeSRLocal: (id: string) =>
     request<{ status: string; message: string }>(`/sr/drafts/${id}/complete-local`, { method: 'POST' }),
   updateSRDraft: (id: string, data: { title?: string; description?: string; priority?: string }) =>
