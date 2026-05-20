@@ -161,6 +161,72 @@ async def delete_proposal(
     await db.commit()
 
 
+@router.post("/{feedback_id}/apply-draft", response_model=FeedbackWithProposalResponse)
+async def apply_draft(
+    feedback_id: uuid.UUID,
+    body: ApplyDraftBody,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(FeedbackReport).where(FeedbackReport.id == feedback_id))
+    feedback = result.scalar_one_or_none()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    proposal = await feedback_service.get_proposed_change(db, feedback_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="No proposal found")
+
+    # Stale check
+    if proposal.document_version_id and proposal.document_id:
+        doc_result = await db.execute(select(Document).where(Document.id == proposal.document_id))
+        doc = doc_result.scalar_one_or_none()
+        if doc and doc.current_version_id != proposal.document_version_id:
+            raise HTTPException(
+                status_code=409,
+                detail="문서가 수정되어 초안이 만료되었습니다. 초안을 재생성하세요.",
+            )
+
+    approval_result = await db.execute(
+        select(ApprovalRequest).where(ApprovalRequest.proposed_change_id == proposal.id)
+    )
+    approval = approval_result.scalar_one_or_none()
+    if not approval:
+        raise HTTPException(status_code=404, detail="No approval request found")
+
+    if body.action == "apply":
+        if body.edited_text and body.edited_text.strip() != proposal.proposed_text.strip():
+            await approval_service.review_approval(
+                db, approval.id, body.reviewer_id, "edit_and_approve",
+                edited_content=body.edited_text,
+            )
+        else:
+            await approval_service.review_approval(
+                db, approval.id, body.reviewer_id, "approved",
+            )
+    elif body.action == "reject":
+        await approval_service.review_approval(
+            db, approval.id, body.reviewer_id, "rejected",
+        )
+    else:
+        raise HTTPException(status_code=400, detail="action must be 'apply' or 'reject'")
+
+    await db.refresh(feedback)
+    updated_proposal = await feedback_service.get_proposed_change(db, feedback_id)
+    proposal_resp = (
+        ProposedChangeResponse.model_validate(updated_proposal, from_attributes=True).model_copy(
+            update={"is_stale": False}
+        )
+        if updated_proposal
+        else None
+    )
+
+    return FeedbackWithProposalResponse(
+        feedback=FeedbackReportResponse.model_validate(feedback, from_attributes=True),
+        proposed_change=proposal_resp,
+        approval_id=approval.id,
+    )
+
+
 @router.delete("/{feedback_id}", status_code=204)
 async def delete_feedback(
     feedback_id: uuid.UUID,

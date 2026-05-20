@@ -262,3 +262,92 @@ async def test_delete_proposal_resets_feedback_status(client: AsyncClient, test_
     list_resp = await client.get("/api/feedback")
     target = next(i for i in list_resp.json() if i["id"] == feedback_id)
     assert target["status"] == "pending"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apply_draft_apply_action(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Apply Draft Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Original text to fix."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Fix this text",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    draft_resp = await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Fix this text",
+    })
+    assert draft_resp.status_code == 200
+
+    resp = await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+        "action": "apply",
+        "reviewer_id": test_user["id"],
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["proposed_change"]["status"] == "approved"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apply_draft_reject_action(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Reject Draft Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Issue here",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Issue here",
+    })
+
+    resp = await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+        "action": "reject",
+        "reviewer_id": test_user["id"],
+    })
+    assert resp.status_code == 200
+    assert resp.json()["proposed_change"]["status"] == "rejected"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apply_draft_stale_returns_409(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Stale Apply Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Initial content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Something wrong",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Something wrong",
+    })
+
+    # 문서에 새 버전 생성 → proposal stale
+    await client.post(
+        f"/api/documents/{doc_id}/versions",
+        data={"content": "Updated content by someone else.", "change_summary": "manual edit"},
+    )
+
+    resp = await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+        "action": "apply",
+        "reviewer_id": test_user["id"],
+    })
+    assert resp.status_code == 409
+    assert "만료" in resp.json()["detail"]
