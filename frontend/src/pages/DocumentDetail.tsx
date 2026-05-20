@@ -357,6 +357,18 @@ export function DocumentDetail() {
                   </span>
                 </div>
               )}
+              {doc.source_file_url && (
+                <div className="pt-2 border-t border-[#e0e3e5]">
+                  <a
+                    href={doc.source_file_url}
+                    download
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-[#c4c7c5] text-[#444653] hover:bg-[#f3f4f6] transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-base">download</span>
+                    원본 파일 다운로드
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 
