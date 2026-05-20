@@ -119,8 +119,17 @@ export const api = {
   },
   deleteFeedback: (id: string) =>
     fetch(`${BASE}/feedback/${id}`, { method: 'DELETE', headers: getAuthHeaders() }),
-  getFeedbackProposal: (feedbackId: string) =>
-    request<ProposedChange>(`/feedback/${feedbackId}/proposal`),
+  getFeedbackProposal: async (feedbackId: string): Promise<ProposedChange | null> => {
+    const res = await fetch(`${BASE}/feedback/${feedbackId}/proposal`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    })
+    if (res.status === 404) return null
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(err.detail || res.statusText)
+    }
+    return res.json()
+  },
   requestDraft: (feedbackId: string, reviewedText: string) =>
     request<{ feedback: FeedbackReport; proposed_change: ProposedChange | null }>(`/feedback/${feedbackId}/request-draft`, {
       method: 'POST', body: JSON.stringify({ reviewed_text: reviewedText }),
