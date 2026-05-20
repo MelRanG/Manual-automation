@@ -126,7 +126,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
 
   const { user } = useAuth()
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
-  const [prevProposalId, setPrevProposalId] = useState<string | null>(null)
+  const [prevProposalId, setPrevProposalId] = useState<string | undefined>(undefined)
   const [editedText, setEditedText] = useState("")
   const [applying, setApplying] = useState(false)
   const { data: history, loading: historyLoading } = useApi<ChangeHistory[]>(
@@ -135,7 +135,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   )
 
   if (proposal?.id !== prevProposalId) {
-    setPrevProposalId(proposal?.id ?? null)
+    setPrevProposalId(proposal?.id)
     setEditedText(proposal?.proposed_text ?? "")
   }
 
