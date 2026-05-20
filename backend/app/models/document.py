@@ -31,6 +31,7 @@ class Document(Base, UUIDMixin, TimestampMixin):
     audience: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_file_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    original_file_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     related_sr_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("sr_drafts.id"), nullable=True
     )

@@ -62,6 +62,7 @@ class DocumentResponse(BaseModel):
     audience: str | None = None
     source_type: str | None = None
     source_file_url: str | None = None
+    original_file_path: str | None = None
     related_sr_id: uuid.UUID | None = None
     jira_issue_key: str | None = None
     tags: list[str] | None = None
