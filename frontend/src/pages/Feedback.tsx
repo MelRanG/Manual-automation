@@ -90,7 +90,12 @@ export function Feedback() {
 
       <div className="flex-1 overflow-y-auto">
         {selected ? (
-          <FeedbackDetail item={selected} onRefetch={refetch} />
+          <FeedbackDetail
+            key={selected.id}
+            item={selected}
+            onRefetch={refetch}
+            onDelete={() => { setSelectedId(null); refetch() }}
+          />
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
             목록에서 항목을 선택하세요
@@ -101,11 +106,55 @@ export function Feedback() {
   )
 }
 
-function FeedbackDetail({ item }: { item: FeedbackReport; onRefetch?: () => void }) {
+function FeedbackDetail({ item, onRefetch, onDelete }: {
+  item: FeedbackReport
+  onRefetch: () => void
+  onDelete: () => void
+}) {
   const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">("info")
-  const { data: proposal } = useApi<ProposedChange>(
+  const [reviewedText, setReviewedText] = useState(item.reviewed_text ?? item.feedback_text)
+  const [requesting, setRequesting] = useState(false)
+  const [linkQuery, setLinkQuery] = useState("")
+  const [linkDocId, setLinkDocId] = useState<string | null>(null)
+  const [linking, setLinking] = useState(false)
+  const { data: allDocs } = useApi(() => api.listDocuments(0, 200), [])
+  const { data: proposal, refetch: refetchProposal } = useApi<ProposedChange>(
     () => api.getFeedbackProposal(item.id),
     [item.id]
+  )
+
+
+  async function handleDelete() {
+    if (!confirm("이 피드백을 삭제하시겠습니까?")) return
+    await api.deleteFeedback(item.id)
+    onDelete()
+  }
+
+  async function handleRequestDraft() {
+    setRequesting(true)
+    try {
+      await api.requestDraft(item.id, reviewedText)
+      await refetchProposal()
+      onRefetch()
+      setActiveSection("draft")
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  async function handleLinkDocument() {
+    if (!linkDocId) return
+    setLinking(true)
+    try {
+      await api.linkDocument(item.id, linkDocId)
+      onRefetch()
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  const filteredDocs = (allDocs?.documents ?? []).filter(d =>
+    d.title.toLowerCase().includes(linkQuery.toLowerCase())
   )
 
   return (
@@ -115,6 +164,12 @@ function FeedbackDetail({ item }: { item: FeedbackReport; onRefetch?: () => void
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
           item.status === "processed" ? "bg-[#dcfce7] text-[#15803d]" : "bg-[#fff3dc] text-[#92600a]"
         }`}>{item.status === "processed" ? "완료" : "검토요청"}</span>
+        <button
+          onClick={handleDelete}
+          className="text-xs font-medium text-[#dc2626] hover:text-[#991b1b] px-3 py-1.5 rounded-lg border border-[#fca5a5] hover:border-[#f87171] transition-colors"
+        >
+          삭제
+        </button>
       </div>
 
       <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
@@ -136,6 +191,73 @@ function FeedbackDetail({ item }: { item: FeedbackReport; onRefetch?: () => void
             <div><span className="text-[#757684] w-24 inline-block text-xs">관련 문서</span><span className="text-[#191c1e]">{item.document_title}</span></div>
           )}
           <div><span className="text-[#757684] w-24 inline-block text-xs">제보 일시</span><span className="text-[#191c1e]">{new Date(item.created_at).toLocaleString("ko-KR")}</span></div>
+
+          {!item.document_id && (
+            <div className="pt-4 border-t border-[#e0e3e5]">
+              <p className="text-xs font-semibold text-[#757684] mb-2">관련 문서 연결</p>
+              <p className="text-xs text-[#9a9bad] mb-3">연결된 문서가 없습니다. 문서를 연결하면 AI 초안을 요청할 수 있습니다.</p>
+              <input
+                type="text"
+                placeholder="문서 검색..."
+                value={linkQuery}
+                onChange={e => { setLinkQuery(e.target.value); setLinkDocId(null) }}
+                className="w-full px-3 py-2 text-sm border border-[#e0e3e5] rounded-lg focus:outline-none focus:border-[#00288e] mb-2"
+              />
+              {linkQuery && filteredDocs.length > 0 && (
+                <ul className="border border-[#e0e3e5] rounded-lg overflow-hidden mb-2 max-h-40 overflow-y-auto">
+                  {filteredDocs.slice(0, 10).map(d => (
+                    <li key={d.id}>
+                      <button
+                        onClick={() => { setLinkDocId(d.id); setLinkQuery(d.title) }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[#f7f9fb] transition-colors ${linkDocId === d.id ? "bg-[#eef2ff] text-[#00288e]" : "text-[#191c1e]"}`}
+                      >
+                        {d.title}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                onClick={handleLinkDocument}
+                disabled={!linkDocId || linking}
+                className="px-4 py-2 text-sm font-medium bg-[#00288e] text-white rounded-lg disabled:opacity-40 hover:bg-[#001f6b] transition-colors"
+              >
+                {linking ? "연결 중..." : "문서 연결"}
+              </button>
+            </div>
+          )}
+
+          {item.document_id && (
+            <div className="pt-4 border-t border-[#e0e3e5]">
+              <p className="text-xs font-semibold text-[#757684] mb-2">관리자 검토 내용</p>
+              {proposal ? (
+                <p className="text-xs text-[#9a9bad] bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">
+                  초안이 생성되었습니다.{" "}
+                  <button onClick={() => setActiveSection("draft")} className="text-[#00288e] underline">
+                    AI 수정 초안 보기
+                  </button>
+                </p>
+              ) : (
+                <>
+                  <textarea
+                    value={reviewedText}
+                    onChange={e => setReviewedText(e.target.value)}
+                    rows={5}
+                    className="w-full px-3 py-2 text-sm border border-[#e0e3e5] rounded-lg focus:outline-none focus:border-[#00288e] resize-none"
+                  />
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={handleRequestDraft}
+                      disabled={requesting || !reviewedText.trim()}
+                      className="px-4 py-2 text-sm font-medium bg-[#00288e] text-white rounded-lg disabled:opacity-40 hover:bg-[#001f6b] transition-colors"
+                    >
+                      {requesting ? "초안 생성 중..." : "AI 초안 요청 →"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -170,7 +292,17 @@ function FeedbackDetail({ item }: { item: FeedbackReport; onRefetch?: () => void
       )}
 
       {activeSection === "history" && (
-        <ChangeHistoryTimeline entityType="feedback" entityId={item.id} />
+        <div className="space-y-4">
+          {item.reviewed_text && item.reviewed_text !== item.feedback_text && (
+            <div className="mb-4">
+              <p className="text-xs font-semibold text-[#757684] mb-2">원본 제보 내용</p>
+              <p className="text-sm text-[#444653] bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5] whitespace-pre-wrap">{item.feedback_text}</p>
+              <p className="text-xs font-semibold text-[#757684] mt-3 mb-2">관리자 수정 내용</p>
+              <p className="text-sm text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap">{item.reviewed_text}</p>
+            </div>
+          )}
+          <ChangeHistoryTimeline entityType="feedback" entityId={item.id} />
+        </div>
       )}
     </div>
   )
