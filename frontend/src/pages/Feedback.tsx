@@ -180,10 +180,10 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     try {
       await api.deleteFeedbackProposal(item.id)
       await api.requestDraft(item.id, reviewedText)
+      await refetchProposal()
       onRefetch()
       setActiveSection("draft")
     } finally {
-      refetchProposal()
       setRequesting(false)
     }
   }
