@@ -136,6 +136,14 @@ export function ServiceRequests() {
     return "bg-[#e6e8ea] text-[#444653]"
   }
 
+  const isRealJiraLink = (sr: SRDraft) =>
+    Boolean(
+      sr.jira_issue_key &&
+      sr.jira_issue_url &&
+      !sr.jira_issue_key.startsWith("LOCAL-") &&
+      !sr.jira_issue_url.includes("localhost")
+    )
+
   const TAB_LABELS: { key: Tab; label: string }[] = [
     { key: "draft", label: "초안" },
     { key: "active", label: "진행중" },
@@ -279,9 +287,9 @@ export function ServiceRequests() {
                             AI
                           </span>
                         )}
-                        {sr.jira_issue_key && sr.jira_issue_url && (
+                        {isRealJiraLink(sr) ? (
                           <a
-                            href={sr.jira_issue_url}
+                            href={sr.jira_issue_url ?? undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e8f0fe] text-[#1a56db] hover:bg-[#c7d7fb] transition-colors"
@@ -290,7 +298,15 @@ export function ServiceRequests() {
                             <span className="material-symbols-outlined text-[12px]">link</span>
                             {sr.jira_issue_key}
                           </a>
-                        )}
+                        ) : sr.jira_issue_key ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e6e8ea] text-[#444653]"
+                            title="Jira가 연결되지 않아 로컬 시뮬레이션 키로 생성되었습니다"
+                          >
+                            <span className="material-symbols-outlined text-[12px]">link_off</span>
+                            {sr.jira_issue_key}
+                          </span>
+                        ) : null}
                       </div>
                       <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
                       {sr.target_url && (
