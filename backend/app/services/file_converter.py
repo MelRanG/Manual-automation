@@ -2,9 +2,39 @@ import asyncio
 import io
 from pathlib import Path
 
+from app.config import settings
+
 
 STATIC_IMAGES_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "images"
 STATIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _use_s3() -> bool:
+    return bool(settings.uploads_s3_bucket)
+
+
+def _upload_image_to_s3(image_bytes: bytes, document_id: str, filename: str) -> str:
+    import boto3
+
+    prefix = settings.uploads_s3_prefix.strip("/")
+    key = f"{prefix}/images/{document_id}/{filename}" if prefix else f"images/{document_id}/{filename}"
+    client = boto3.client("s3", region_name=settings.aws_region)
+    client.put_object(
+        Bucket=settings.uploads_s3_bucket,
+        Key=key,
+        Body=image_bytes,
+        ServerSideEncryption="AES256",
+    )
+    return f"https://{settings.uploads_s3_bucket}.s3.{settings.aws_region}.amazonaws.com/{key}"
+
+
+def _save_image(image_bytes: bytes, document_id: str, filename: str, static_dir: Path) -> str:
+    if _use_s3():
+        return _upload_image_to_s3(image_bytes, document_id, filename)
+    img_dir = static_dir / document_id
+    img_dir.mkdir(parents=True, exist_ok=True)
+    (img_dir / filename).write_bytes(image_bytes)
+    return f"/static/images/{document_id}/{filename}"
 
 
 async def convert_to_markdown(
@@ -37,16 +67,9 @@ def _convert_sync(
     return file_bytes.decode("utf-8", errors="replace")
 
 
-def _image_dir(static_dir: Path, document_id: str) -> Path:
-    d = static_dir / document_id
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
 def _pdf_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> str:
     import fitz
 
-    img_dir = _image_dir(static_dir, document_id)
     parts: list[str] = []
     pdf = fitz.open(stream=file_bytes, filetype="pdf")
 
@@ -61,8 +84,8 @@ def _pdf_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> s
             img_bytes = base_image["image"]
             ext = base_image["ext"]
             img_filename = f"page{page_num}_img{img_index}.{ext}"
-            (img_dir / img_filename).write_bytes(img_bytes)
-            parts.append(f"![이미지](/static/images/{document_id}/{img_filename})")
+            url = _save_image(img_bytes, document_id, img_filename, static_dir)
+            parts.append(f"![이미지]({url})")
 
     pdf.close()
     return "\n\n".join(parts)
@@ -72,7 +95,6 @@ def _pptx_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> 
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
-    img_dir = _image_dir(static_dir, document_id)
     parts: list[str] = []
     prs = Presentation(io.BytesIO(file_bytes))
 
@@ -87,8 +109,8 @@ def _pptx_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> 
                         slide_parts.append(text)
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 img_filename = f"slide{slide_num}_img{img_idx}.png"
-                (img_dir / img_filename).write_bytes(shape.image.blob)
-                slide_parts.append(f"![이미지](/static/images/{document_id}/{img_filename})")
+                url = _save_image(shape.image.blob, document_id, img_filename, static_dir)
+                slide_parts.append(f"![이미지]({url})")
                 img_idx += 1
         parts.append("\n\n".join(slide_parts))
 
@@ -99,7 +121,6 @@ def _docx_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> 
     import mammoth
     import markdownify
 
-    img_dir = _image_dir(static_dir, document_id)
     img_counter = 0
 
     def handle_image(image):
@@ -110,8 +131,8 @@ def _docx_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> 
         ext = content_type.split("/")[-1]
         img_filename = f"img{img_counter}.{ext}"
         img_counter += 1
-        (img_dir / img_filename).write_bytes(img_bytes)
-        return {"src": f"/static/images/{document_id}/{img_filename}"}
+        url = _save_image(img_bytes, document_id, img_filename, static_dir)
+        return {"src": url}
 
     result = mammoth.convert_to_html(
         io.BytesIO(file_bytes),

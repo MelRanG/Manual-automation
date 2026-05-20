@@ -150,7 +150,7 @@ async def bulk_upload_documents(
         doc = await document_service.create_document(
             db, data, initial_content,
             source_file_url=file_url,
-            original_file_path=str(document_service.UPLOAD_DIR / Path(file_url).name),
+            original_file_path=file_url,
             status=initial_status,
         )
 
@@ -202,7 +202,7 @@ async def upload_document(
     doc = await document_service.create_document(
         db, data, initial_content,
         source_file_url=file_url,
-        original_file_path=str(document_service.UPLOAD_DIR / Path(file_url).name),
+        original_file_path=file_url,
         status=initial_status,
     )
 
