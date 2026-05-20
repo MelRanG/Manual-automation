@@ -1,0 +1,1 @@
+http://manual-auto-codex-dev-alb-255473346.us-east-1.elb.amazonaws.com
