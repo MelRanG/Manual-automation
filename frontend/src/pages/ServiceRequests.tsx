@@ -86,8 +86,7 @@ export function ServiceRequests() {
     setSubmittingId(id)
     try {
       await api.completeSRLocal(id)
-      refetch()
-      navigate("/change-impact")
+      handleTabChange("done")
     } catch (e: any) {
       alert("실패: " + e.message)
     } finally {
@@ -123,6 +122,7 @@ export function ServiceRequests() {
     if (s === "done_synced") return "완료 동기화됨"
     if (s === "done_no_proposal") return "완료 (문서 없음)"
     if (s === "pending_document_selection") return "문서 반영 대기"
+    if (s === "pending_doc_review") return "문서 검토 대기"
     if (s === "jira_created") return "Jira 생성됨"
     if (s === "submitted") return "제출됨"
     return "초안"
@@ -131,6 +131,7 @@ export function ServiceRequests() {
   const getStatusStyle = (s: string) => {
     if (s === "done_synced" || s === "done_pending_selection") return "bg-[#d5e3fc] text-[#16a34a]"
     if (s === "done_no_proposal") return "bg-[#e6e8ea] text-[#444653]"
+    if (s === "pending_doc_review") return "bg-[#fff3dc] text-[#92600a]"
     if (s === "jira_created" || s === "pending_document_selection") return "bg-[#e8f0fe] text-[#1a56db]"
     if (s === "submitted") return "bg-[#d5e3fc] text-[#16a34a]"
     return "bg-[#e6e8ea] text-[#444653]"
@@ -345,6 +346,15 @@ export function ServiceRequests() {
                     >
                       <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                       문서 반영 대기 →
+                    </button>
+                  )}
+                  {tab === "done" && sr.status === "pending_doc_review" && (
+                    <button
+                      onClick={() => navigate("/approvals")}
+                      className="flex items-center gap-2 px-3 py-1.5 border border-[#e6a817] text-[#92600a] rounded-lg text-xs font-semibold hover:bg-[#fff3dc] transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">rate_review</span>
+                      문서 검토 →
                     </button>
                   )}
                 </div>

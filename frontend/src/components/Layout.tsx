@@ -24,17 +24,45 @@ import { useManualJob } from "@/contexts/ManualJobContext"
 import { NotificationBell } from "@/components/NotificationBell"
 import { ToastContainer } from "@/components/Toast"
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "대시보드" },
-  { to: "/documents", icon: FileText, label: "문서 관리" },
-  { to: "/chat", icon: MessageSquare, label: "Q&A 챗봇" },
-  { to: "/approvals", icon: CheckCircle, label: "승인 관리" },
-  { to: "/sr", icon: Ticket, label: "서비스 요청" },
-  { to: "/change-impact", icon: GitMerge, label: "변경 영향" },
-  { to: "/webhook-logs", icon: Webhook, label: "웹훅 로그" },
-  { to: "/manuals", icon: BookOpen, label: "매뉴얼 생성" },
-  { to: "/widget-demo", icon: Globe, label: "위젯 데모" },
-  { to: "/widget-conversations", icon: Users, label: "위젯 대화" },
+type NavItem = { to: string; icon: React.ElementType; label: string }
+type NavSection = { heading: string | null; items: NavItem[] }
+
+const navSections: NavSection[] = [
+  {
+    heading: null,
+    items: [
+      { to: "/", icon: LayoutDashboard, label: "대시보드" },
+    ],
+  },
+  {
+    heading: "문서",
+    items: [
+      { to: "/documents", icon: FileText, label: "문서 관리" },
+      { to: "/manuals", icon: BookOpen, label: "매뉴얼 생성" },
+    ],
+  },
+  {
+    heading: "변경 관리",
+    items: [
+      { to: "/sr", icon: Ticket, label: "서비스 요청" },
+      { to: "/change-impact", icon: GitMerge, label: "변경 영향" },
+      { to: "/approvals", icon: CheckCircle, label: "승인 관리" },
+    ],
+  },
+  {
+    heading: "고객 채널",
+    items: [
+      { to: "/chat", icon: MessageSquare, label: "Q&A 챗봇" },
+      { to: "/widget-conversations", icon: Users, label: "위젯 대화" },
+      { to: "/widget-demo", icon: Globe, label: "위젯 데모" },
+    ],
+  },
+  {
+    heading: "운영",
+    items: [
+      { to: "/webhook-logs", icon: Webhook, label: "웹훅 로그" },
+    ],
+  },
 ]
 
 interface ToastItem { id: string; title: string; message: string }
@@ -96,26 +124,37 @@ export function Layout() {
           </Link>
         </div>
 
-        <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const active = location.pathname === item.to ||
-              (item.to !== "/" && location.pathname.startsWith(item.to))
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
-                  active
-                    ? "bg-accent text-primary font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                )}
-              >
-                <item.icon className="h-[18px] w-[18px]" />
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav className="flex-1 px-3 overflow-y-auto space-y-4">
+          {navSections.map((section, i) => (
+            <div key={i}>
+              {section.heading && (
+                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                  {section.heading}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const active = location.pathname === item.to ||
+                    (item.to !== "/" && location.pathname.startsWith(item.to))
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors",
+                        active
+                          ? "bg-accent text-primary font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <item.icon className="h-[18px] w-[18px]" />
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="px-3 pb-4 space-y-0.5 border-t border-border pt-3 mt-2">
