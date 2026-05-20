@@ -59,7 +59,11 @@ async def test_get_document_not_found(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_upload_document(client: AsyncClient, test_user: dict):
+async def test_upload_document(client: AsyncClient, test_user: dict, monkeypatch):
+    monkeypatch.setattr(document_service.settings, "uploads_s3_bucket", "test-bucket")
+    monkeypatch.setattr(document_service.settings, "uploads_s3_prefix", "uploads")
+    monkeypatch.setattr(document_service, "_put_s3_object", lambda key, content: None)
+
     resp = await client.post("/api/documents/upload", data={
         "title": "Uploaded Doc",
         "description": "From file",
@@ -68,6 +72,15 @@ async def test_upload_document(client: AsyncClient, test_user: dict):
     assert resp.status_code == 201
     data = resp.json()
     assert data["title"] == "Uploaded Doc"
+    assert data["source_file_url"].startswith("s3://test-bucket/uploads/")
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_requires_s3_bucket(monkeypatch):
+    monkeypatch.setattr(document_service.settings, "uploads_s3_bucket", "")
+
+    with pytest.raises(RuntimeError, match="UPLOADS_S3_BUCKET"):
+        await document_service.save_uploaded_file("guide.txt", b"hello")
 
 
 @pytest.mark.asyncio

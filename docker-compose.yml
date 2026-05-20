@@ -27,8 +27,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
@@ -51,4 +49,3 @@ services:
 
 volumes:
   pgdata:
-  uploads:
