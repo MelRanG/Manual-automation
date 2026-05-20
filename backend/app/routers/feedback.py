@@ -17,7 +17,7 @@ from app.schemas.feedback import (
     LinkDocumentBody,
     ApplyDraftBody,
 )
-from app.services import feedback_service, approval_service
+from app.services import feedback_service, approval_service, history_service
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
@@ -213,6 +213,21 @@ async def apply_draft(
             raise HTTPException(status_code=400, detail="action must be 'apply' or 'reject'")
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+    if body.action == "apply":
+        await history_service.log_event(
+            db, "feedback", feedback_id,
+            event_type="feedback_applied",
+            actor_id=body.reviewer_id,
+            detail="AI 수정 초안이 문서에 반영되었습니다.",
+        )
+    elif body.action == "reject":
+        await history_service.log_event(
+            db, "feedback", feedback_id,
+            event_type="feedback_rejected",
+            actor_id=body.reviewer_id,
+            detail="오류 제보를 검토하였으나 문서에 반영하지 않기로 결정했습니다.",
+        )
 
     await db.refresh(feedback)
     updated_proposal = await feedback_service.get_proposed_change(db, feedback_id)

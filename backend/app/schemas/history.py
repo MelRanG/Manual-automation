@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from pydantic import BaseModel
 
 
@@ -10,6 +11,6 @@ class ChangeHistoryResponse(BaseModel):
     actor_id: uuid.UUID | None
     actor_name: str | None
     detail: str | None
-    created_at: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}

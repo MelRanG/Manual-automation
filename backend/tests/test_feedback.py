@@ -384,3 +384,63 @@ async def test_get_proposal_is_not_stale_after_apply(client: AsyncClient, test_u
     assert proposal_resp.status_code == 200
     assert proposal_resp.json()["is_stale"] is False
     assert proposal_resp.json()["status"] == "approved"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apply_draft_reject_logs_history(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Reject History Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Issue here",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Issue here",
+    })
+
+    await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+        "action": "reject",
+        "reviewer_id": test_user["id"],
+    })
+
+    history_resp = await client.get(f"/api/history/feedback/{feedback_id}")
+    assert history_resp.status_code == 200
+    events = history_resp.json()
+    assert any(e["event_type"] == "feedback_rejected" for e in events)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_apply_draft_apply_logs_history(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Apply History Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Content to be fixed."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Fix it",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Fix it",
+    })
+
+    await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+        "action": "apply",
+        "reviewer_id": test_user["id"],
+    })
+
+    history_resp = await client.get(f"/api/history/feedback/{feedback_id}")
+    assert history_resp.status_code == 200
+    events = history_resp.json()
+    assert any(e["event_type"] == "feedback_applied" for e in events)
