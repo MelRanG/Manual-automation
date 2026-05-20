@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { api, type SRDraft, type Document } from "@/lib/api"
+import { api, type SRDraft, type Document, type ChangeProposal } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
@@ -164,6 +164,7 @@ export function ServiceRequests() {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${sr.created_by_ai ? "bg-[#f0f0ff] text-[#4a4bdc]" : "bg-[#f2f4f6] text-[#757684]"}`}>
                     {sr.created_by_ai ? "챗봇" : "직접생성"}
                   </span>
+                  <span className="text-[10px] text-[#757684]">요청자: {sr.user_id.slice(0, 8)}</span>
                   {sr.jira_issue_key && (
                     <span className="text-[10px] text-[#757684] font-mono">{sr.jira_issue_key}</span>
                   )}
@@ -236,8 +237,9 @@ function SRDetail({ sr, onRefetch }: { sr: SRDraft; onRefetch: () => void }) {
             <p className="text-[#191c1e] whitespace-pre-wrap bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">{sr.description}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[#757684] text-xs">우선순위</span><p className="text-[#191c1e] mt-0.5 capitalize">{sr.priority}</p></div>
+            <div><span className="text-[#757684] text-xs">요청자</span><p className="text-[#191c1e] mt-0.5 font-mono text-xs">{sr.user_id.slice(0, 8)}</p></div>
             <div><span className="text-[#757684] text-xs">요청 일시</span><p className="text-[#191c1e] mt-0.5">{new Date(sr.created_at).toLocaleString("ko-KR")}</p></div>
+            <div><span className="text-[#757684] text-xs">우선순위</span><p className="text-[#191c1e] mt-0.5 capitalize">{sr.priority}</p></div>
             {sr.jira_issue_key && (
               <div><span className="text-[#757684] text-xs">Jira 이슈</span>
                 {sr.jira_issue_url ? (
@@ -278,7 +280,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [docQuery, setDocQuery] = useState("")
   const [generating, setGenerating] = useState(false)
-  const [proposal, setProposal] = useState<{ original: string; proposed: string } | null>(null)
+  const [proposal, setProposal] = useState<ChangeProposal | null>(null)
   const [applying, setApplying] = useState(false)
 
   if (sr.status !== "pending_doc_review") {
@@ -380,12 +382,27 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                 onClick={async () => {
                   setGenerating(true)
                   try {
-                    const result = await api.analyzeImpact({
+                    const analysis = await api.analyzeImpact({
                       source_type: "jira_sr",
                       source_id: sr.id,
                       related_document_ids: selectedDocId ? [selectedDocId] : undefined,
                     })
-                    setProposal({ original: "기존 내용", proposed: result.reasoning })
+                    if (selectedDocId) {
+                      const cp = await api.generateProposalForDocument(analysis.id, selectedDocId, analysis.recommended_strategy || "update")
+                      setProposal(cp)
+                    } else {
+                      // 신규 문서: proposal 없이 reasoning만 표시
+                      setProposal({
+                        id: analysis.id,
+                        impact_analysis_id: analysis.id,
+                        document_id: "",
+                        original_content: "",
+                        proposed_content: analysis.reasoning,
+                        diff: "",
+                        status: analysis.status,
+                        created_at: analysis.created_at,
+                      })
+                    }
                   } catch {
                     // 에러 시 UI에서 재시도 가능
                   } finally {
@@ -400,10 +417,23 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
             </div>
           ) : (
             <div className="space-y-4">
-              <div>
-                <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안</p>
-                <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-64">{proposal.proposed}</pre>
-              </div>
+              {proposal.original_content ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-[#757684] mb-2">기존 내용</p>
+                    <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-64">{proposal.original_content}</pre>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안</p>
+                    <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-64">{proposal.proposed_content}</pre>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안</p>
+                  <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-64">{proposal.proposed_content}</pre>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button
                   onClick={async () => {
@@ -418,7 +448,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                   disabled={applying}
                   className="px-4 py-2 bg-[#15803d] text-white rounded-lg text-sm font-medium hover:bg-[#166534] disabled:opacity-50"
                 >
-                  {applying ? "반영 중..." : "문서에 반영"}
+                  {applying ? "반영 중..." : "승인"}
                 </button>
                 <button onClick={() => setProposal(null)} className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm hover:bg-[#f2f4f6]">
                   다시 생성
