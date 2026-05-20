@@ -2,6 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
+from app.models.history import ChangeHistory
 from app.schemas.history import ChangeHistoryResponse
 from app.services import history_service
 
@@ -13,5 +14,5 @@ async def get_history(
     entity_type: str,
     entity_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-):
+) -> list[ChangeHistory]:
     return await history_service.list_events(db, entity_type, entity_id)
