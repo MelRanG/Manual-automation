@@ -201,3 +201,27 @@ async def test_request_draft_without_document_returns_400(client: AsyncClient, t
         "reviewed_text": "something",
     })
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_proposal_is_stale_false_when_version_matches(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Stale Test Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Original content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Fix this",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Fix this",
+    })
+
+    resp = await client.get(f"/api/feedback/{feedback_id}/proposal")
+    assert resp.status_code == 200
+    assert resp.json()["is_stale"] is False

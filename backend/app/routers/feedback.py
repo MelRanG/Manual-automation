@@ -15,6 +15,7 @@ from app.schemas.feedback import (
     FeedbackWithProposalResponse,
     RequestDraftBody,
     LinkDocumentBody,
+    ApplyDraftBody,
 )
 from app.services import feedback_service, approval_service
 
@@ -66,7 +67,17 @@ async def get_proposal(
     proposal = await feedback_service.get_proposed_change(db, feedback_id)
     if not proposal:
         raise HTTPException(status_code=404, detail="No proposal found")
-    return proposal
+
+    is_stale = False
+    if proposal.document_version_id and proposal.document_id:
+        doc_result = await db.execute(select(Document).where(Document.id == proposal.document_id))
+        doc = doc_result.scalar_one_or_none()
+        if doc and doc.current_version_id != proposal.document_version_id:
+            is_stale = True
+
+    return ProposedChangeResponse.model_validate(proposal, from_attributes=True).model_copy(
+        update={"is_stale": is_stale}
+    )
 
 
 @router.post("/{feedback_id}/request-draft", response_model=FeedbackWithProposalResponse)
