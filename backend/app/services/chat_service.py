@@ -244,9 +244,14 @@ async def ask_question_stream(
     llm = get_llm_provider()
     full_content = ""
 
-    async for token in llm.generate_stream_with_history(RAG_SYSTEM_PROMPT, messages, context):
-        full_content += token
-        yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
+    try:
+        async for token in llm.generate_stream_with_history(RAG_SYSTEM_PROMPT, messages, context):
+            full_content += token
+            yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
+    except Exception as e:
+        logger.error(f"LLM 스트리밍 에러: {e}")
+        yield f"event: error\ndata: {json.dumps({'error': 'LLM 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.'})}\n\n"
+        return
 
     # SR 제안 감지 — 변경 요청 탭에서 보낸 메시지일 때만 처리
     sr_proposal = _extract_sr_proposal(full_content) if question.startswith("[변경 요청]") else None
