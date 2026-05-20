@@ -184,13 +184,40 @@ async def deliver_webhook(db: AsyncSession, draft: SRDraft) -> dict:
         return {"status": "error", "error": str(e)}
 
 
+ALLOWED_STATUS_TRANSITIONS = {
+    "draft": {"draft", "submitted"},
+    "submitted": {"submitted", "jira_created"},
+    "jira_created": {"jira_created", "pending_doc_review"},
+    "pending_doc_review": {"pending_doc_review", "done_synced", "done_no_proposal"},
+    "pending_document_selection": {"pending_document_selection", "pending_doc_review"},
+    "done_synced": {"done_synced"},
+    "done_no_proposal": {"done_no_proposal"},
+}
+
+EDITABLE_FIELDS_IN_DRAFT = {"title", "description", "priority", "target_url"}
+
+
 async def update_sr_draft(db: AsyncSession, sr_id: uuid.UUID, data: dict) -> SRDraft:
     result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
     draft = result.scalar_one_or_none()
     if not draft:
         raise ValueError("SR draft not found")
-    if draft.status != "draft":
-        raise ValueError("SR is not in draft status")
+
+    new_status = data.get("status")
+    if new_status is not None:
+        allowed = ALLOWED_STATUS_TRANSITIONS.get(draft.status, set())
+        if new_status not in allowed:
+            raise ValueError(f"Invalid status transition: {draft.status} → {new_status}")
+
+    # status 외 필드는 draft 상태에서만 수정 허용
+    non_status_changes = {k: v for k, v in data.items() if k != "status"}
+    if non_status_changes:
+        if draft.status != "draft":
+            raise ValueError("SR is not in draft status")
+        for key in non_status_changes:
+            if key not in EDITABLE_FIELDS_IN_DRAFT:
+                raise ValueError(f"Field {key} is not editable")
+
     for key, value in data.items():
         setattr(draft, key, value)
     await db.commit()
