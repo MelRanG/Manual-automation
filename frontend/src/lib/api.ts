@@ -74,7 +74,7 @@ export const api = {
     request<{ documents: Document[]; total: number }>(`/documents?skip=${skip}&limit=${limit}`),
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getVersions: (id: string) => request<DocumentVersion[]>(`/documents/${id}/versions`),
-  createDocument: (data: { title: string; description?: string; owner_id?: string; source_type?: string; tags?: string[] }, content: string) =>
+  createDocument: (data: { title: string; description?: string; owner_id?: string; source_type?: string }, content: string) =>
     request<Document>(`/documents?content=${encodeURIComponent(content)}`, {
       method: 'POST', body: JSON.stringify(data),
     }),
@@ -124,8 +124,6 @@ export const api = {
   },
   reviewApproval: (id: string, data: { reviewer_id: string; action: string; comment?: string; edited_content?: string }) =>
     request<ApprovalRequest>(`/approvals/${id}/review`, { method: 'POST', body: JSON.stringify(data) }),
-  reviewDocApproval: (id: string, data: { reviewer_id: string; action: string; target_url?: string }) =>
-    request<ApprovalRequest>(`/approvals/${id}/doc-review`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Trust
   listTrustScores: () => request<TrustScore[]>('/trust'),
@@ -195,7 +193,7 @@ export const api = {
 
 // Types
 export interface User { id: string; name: string; email: string; role: string; department: string | null; created_at: string }
-export interface Document { id: string; title: string; description: string | null; owner_id: string | null; status: string; priority: string; trust_score: number; view_count: number; created_at: string; updated_at: string; current_version_id: string | null; document_type: string | null; domain: string | null; audience: string | null; source_type: string | null; source_file_url: string | null; original_file_path: string | null; related_sr_id: string | null; jira_issue_key: string | null; tags: string[] | null }
+export interface Document { id: string; title: string; description: string | null; owner_id: string | null; status: string; priority: string; trust_score: number; view_count: number; created_at: string; updated_at: string; current_version_id: string | null; document_type: string | null; domain: string | null; audience: string | null; source_type: string | null; source_file_url: string | null; related_sr_id: string | null; jira_issue_key: string | null; tags: string[] | null }
 export interface DocumentVersion { id: string; document_id: string; version_number: number; content: string; source_file_url: string | null; change_summary: string | null; created_at: string }
 export interface ChatSession { id: string; user_id: string; title: string | null; created_at: string }
 export interface ChatMessage { id: string; session_id: string; role: string; content: string; created_at: string }
@@ -204,7 +202,7 @@ export interface DocumentWarning { document_id: string; title: string; reason: "
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }
 export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; status: string; document_title: string | null; proposed_change_status: string | null; created_at: string }
 export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright" | "jira_sr"; status: string }
-export interface ApprovalRequest { id: string; proposed_change_id: string | null; approval_type: string; sr_draft_id: string | null; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; comment: string | null; reviewed_at: string | null; created_at: string }
+export interface ApprovalRequest { id: string; proposed_change_id: string; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; approval_type: string; comment: string | null; reviewed_at: string | null; created_at: string }
 export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
 export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; target_url: string | null; created_at: string }
