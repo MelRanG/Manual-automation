@@ -8,7 +8,7 @@ from app.config import settings
 def _prepend_context(messages: list[dict], context: str) -> list[dict]:
     """context가 있으면 첫 번째 user 메시지 앞에 RAG context를 prepend한다."""
     if not context or not messages:
-        return messages
+        return list(messages)
     result = list(messages)
     for i, m in enumerate(result):
         if m["role"] == "user":
@@ -244,7 +244,7 @@ class OpenAILLMProvider(LLMProvider):
             messages=[{"role": "system", "content": system_prompt}] + prepared,
             max_tokens=2048,
         )
-        return response.choices[0].message.content
+        return response.choices[0].message.content or ""
 
     async def generate_stream_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> AsyncGenerator[str, None]:
         prepared = _prepend_context(messages, context)
