@@ -1,57 +1,62 @@
 import { useState } from "react"
-import { useSearchParams, useNavigate } from "react-router-dom"
-import { api, type SRDraft } from "@/lib/api"
+import { api, type SRDraft, type Document } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
+import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
 
-type Tab = "draft" | "active" | "done"
+type Tab = "all" | "draft" | "active" | "pending_doc_review" | "done"
+type SourceFilter = "all" | "direct" | "chatbot"
+type ReviewStep = 1 | 2 | 3
+type DocMode = "new" | "existing" | null
+
+const TAB_LABELS: Record<Tab, string> = {
+  all: "전체",
+  draft: "SR요청 대기",
+  active: "SR 진행중",
+  pending_doc_review: "검토",
+  done: "완료",
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  draft: "bg-[#f2f4f6] text-[#444653]",
+  active: "bg-[#d5e3fc] text-[#00288e]",
+  pending_doc_review: "bg-[#fff3dc] text-[#92600a]",
+  done: "bg-[#dcfce7] text-[#15803d]",
+}
 
 export function ServiceRequests() {
   const { user } = useAuth()
-  const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [tab, setTab] = useState<Tab>(() => {
-    const t = searchParams.get("tab")
-    return (t === "active" || t === "done") ? t : "draft"
-  })
-  const [page, setPage] = useState(1)
-  const pageSize = 20
+  const [tab, setTab] = useState<Tab>("all")
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all")
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState("medium")
   const [targetUrl, setTargetUrl] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ title: "", description: "", priority: "medium" })
-  const [saving, setSaving] = useState(false)
-  const [submittingId, setSubmittingId] = useState<string | null>(null)
 
   const userId = user?.id ?? "00000000-0000-0000-0000-000000000001"
 
-  // 탭 배지용: active 건수 항상 별도 조회
-  const { data: activeData, refetch: refetchCount } = useApi(
-    () => api.listSRDrafts({ status: "active", skip: 0, limit: 500 }),
-    []
-  )
-  const activeCount = activeData?.total ?? 0
-
-  const { data: result, refetch: refetchMain } = useApi(
-    () => api.listSRDrafts({ status: tab, skip: (page - 1) * pageSize, limit: pageSize }),
-    [tab, page]
+  const { data: result, refetch } = useApi(
+    () => api.listSRDrafts({ status: tab === "all" ? undefined : tab, skip: 0, limit: 500 }),
+    [tab]
   )
 
-  const items = result?.items ?? []
-  const total = result?.total ?? 0
-  const totalPages = Math.ceil(total / pageSize)
+  const allItems = result?.items ?? []
 
-  const refetch = () => { refetchMain(); refetchCount() }
+  const filtered = allItems.filter(sr => {
+    if (sourceFilter === "direct") return !sr.created_by_ai
+    if (sourceFilter === "chatbot") return sr.created_by_ai
+    return true
+  })
 
-  const handleTabChange = (t: Tab) => {
-    setTab(t)
-    setPage(1)
-    setEditingId(null)
-    setSearchParams({ tab: t })
+  const selected = allItems.find(s => s.id === selectedId) ?? null
+
+  const tabCount = (t: Tab) => {
+    if (t === "all") return allItems.length
+    return allItems.filter(s => s.status === t).length
   }
 
   const handleCreate = async () => {
@@ -62,329 +67,365 @@ export function ServiceRequests() {
         ? (targetUrl.trim().startsWith("http") ? targetUrl.trim() : `https://${targetUrl.trim()}`)
         : undefined
       await api.createSRDraft({ user_id: userId, title, description, priority, target_url: normalizedUrl })
-      setTitle("")
-      setDescription("")
-      setTargetUrl("")
-      setShowCreate(false)
+      setTitle(""); setDescription(""); setTargetUrl(""); setShowCreate(false)
       refetch()
     } finally {
       setSubmitting(false)
     }
   }
 
-  const handleSubmit = async (id: string) => {
-    setSubmittingId(id)
-    try {
-      await api.submitSR(id)
-      refetch()
-    } finally {
-      setSubmittingId(null)
-    }
-  }
-
-  const handleLocalComplete = async (id: string) => {
-    setSubmittingId(id)
-    try {
-      await api.completeSRLocal(id)
-      handleTabChange("done")
-    } catch (e: any) {
-      alert("실패: " + e.message)
-    } finally {
-      setSubmittingId(null)
-    }
-  }
-
-  const handleEditStart = (sr: SRDraft) => {
-    setEditingId(sr.id)
-    setEditForm({ title: sr.title, description: sr.description, priority: sr.priority })
-  }
-
-  const handleEditSave = async () => {
-    if (!editingId) return
-    if (!editForm.title.trim() || !editForm.description.trim()) return
-    setSaving(true)
-    try {
-      await api.updateSRDraft(editingId, editForm)
-      setEditingId(null)
-      refetch()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const getPriorityStyle = (p: string) => {
-    if (p === "critical") return "bg-[#ffdad6] text-[#93000a]"
-    if (p === "high") return "bg-[#ffdbce] text-[#611e00]"
-    return "bg-[#e6e8ea] text-[#444653]"
-  }
-
-  const getStatusLabel = (s: string) => {
-    if (s === "done_synced") return "완료 동기화됨"
-    if (s === "done_no_proposal") return "완료 (문서 없음)"
-    if (s === "pending_document_selection") return "문서 반영 대기"
-    if (s === "pending_doc_review") return "문서 검토 대기"
-    if (s === "jira_created") return "Jira 생성됨"
-    if (s === "submitted") return "제출됨"
-    return "초안"
-  }
-
-  const getStatusStyle = (s: string) => {
-    if (s === "done_synced" || s === "done_pending_selection") return "bg-[#d5e3fc] text-[#16a34a]"
-    if (s === "done_no_proposal") return "bg-[#e6e8ea] text-[#444653]"
-    if (s === "pending_doc_review") return "bg-[#fff3dc] text-[#92600a]"
-    if (s === "jira_created" || s === "pending_document_selection") return "bg-[#e8f0fe] text-[#1a56db]"
-    if (s === "submitted") return "bg-[#d5e3fc] text-[#16a34a]"
-    return "bg-[#e6e8ea] text-[#444653]"
-  }
-
-  const TAB_LABELS: { key: Tab; label: string }[] = [
-    { key: "draft", label: "초안" },
-    { key: "active", label: "진행중" },
-    { key: "done", label: "완료" },
-  ]
-
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-[#191c1e]">서비스 요청</h2>
-          <p className="text-sm text-[#444653] mt-1">Jira SR 초안을 생성하고 관리합니다.</p>
-        </div>
-        <button
-          onClick={() => setShowCreate(!showCreate)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] transition-colors shadow-sm"
-        >
-          <span className="material-symbols-outlined text-base">add</span>
-          새 SR
-        </button>
-      </div>
-
-      {showCreate && (
-        <div className="bg-white border border-[#00288e]/30 rounded-xl p-6 shadow-sm space-y-4">
-          <input
-            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-            placeholder="SR 제목"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-          />
-          <textarea
-            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
-            placeholder="상세 설명..."
-            rows={3}
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-          />
-          <input
-            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-            placeholder="대상 URL (선택) — 입력 시 자동으로 스크린샷이 캡처됩니다"
-            value={targetUrl}
-            onChange={e => setTargetUrl(e.target.value)}
-          />
-          <select
-            className="w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none bg-white"
-            value={priority}
-            onChange={e => setPriority(e.target.value)}
-          >
-            <option value="lowest">최저</option>
-            <option value="low">낮음</option>
-            <option value="medium">보통</option>
-            <option value="high">높음</option>
-            <option value="critical">긴급</option>
-          </select>
-          <div className="flex gap-2">
-            <button onClick={handleCreate} disabled={submitting} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50 transition-colors">
-              {submitting ? "생성 중..." : "초안 생성"}
+    <div className="flex h-full">
+      <div className="w-[400px] border-r border-[#e0e3e5] flex flex-col shrink-0">
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-[#191c1e]">Jira SR</h2>
+            <button
+              onClick={() => setShowCreate(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00288e] text-white rounded-lg text-xs font-medium hover:bg-[#1e40af] transition-colors"
+            >
+              <span className="material-symbols-outlined text-sm">add</span>
+              신규 SR
             </button>
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-[#444653] hover:bg-[#f2f4f6] rounded-lg transition-colors">취소</button>
+          </div>
+
+          <div className="flex gap-0.5 border-b border-[#e0e3e5] overflow-x-auto">
+            {(["all", "draft", "active", "pending_doc_review", "done"] as Tab[]).map(t => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setSelectedId(null) }}
+                className={`px-2.5 py-2 text-xs font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
+                  tab === t ? "border-[#00288e] text-[#00288e]" : "border-transparent text-[#757684] hover:text-[#191c1e]"
+                }`}
+              >
+                {TAB_LABELS[t]}
+                {t !== "all" && tabCount(t) > 0 && (
+                  <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${t === "pending_doc_review" ? "bg-[#92600a] text-white" : "bg-[#e0e3e5] text-[#444653]"}`}>
+                    {tabCount(t)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-1.5 mt-2">
+            {([["all", "전체"], ["direct", "직접생성"], ["chatbot", "챗봇"]] as [SourceFilter, string][]).map(([f, label]) => (
+              <button
+                key={f}
+                onClick={() => setSourceFilter(f)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                  sourceFilter === f ? "bg-[#00288e] text-white" : "bg-[#f2f4f6] text-[#757684] hover:bg-[#e0e3e5]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* 탭 */}
-      <div className="flex gap-1 border-b border-[#e6e8ea]">
-        {TAB_LABELS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => handleTabChange(key)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === key
-                ? "border-[#00288e] text-[#00288e]"
-                : "border-transparent text-[#757684] hover:text-[#191c1e]"
-            }`}
-          >
+        {showCreate && (
+          <div className="mx-4 mb-3 p-4 border border-[#c4c5d5] rounded-xl bg-white space-y-3 text-sm">
+            <input className="w-full px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-sm outline-none focus:border-[#00288e]" placeholder="제목 *" value={title} onChange={e => setTitle(e.target.value)} />
+            <textarea className="w-full px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-sm outline-none focus:border-[#00288e] resize-none" rows={3} placeholder="내용 *" value={description} onChange={e => setDescription(e.target.value)} />
+            <div className="flex gap-2">
+              <select className="flex-1 px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-sm outline-none" value={priority} onChange={e => setPriority(e.target.value)}>
+                <option value="low">낮음</option>
+                <option value="medium">보통</option>
+                <option value="high">높음</option>
+              </select>
+              <input className="flex-1 px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-sm outline-none focus:border-[#00288e]" placeholder="관련 URL (선택)" value={targetUrl} onChange={e => setTargetUrl(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-xs hover:bg-[#f2f4f6]">취소</button>
+              <button onClick={handleCreate} disabled={!title.trim() || !description.trim() || submitting} className="px-3 py-1.5 bg-[#00288e] text-white rounded-lg text-xs font-medium hover:bg-[#1e40af] disabled:opacity-50">
+                {submitting ? "제출 중..." : "SR 생성"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto divide-y divide-[#f2f4f6]">
+          {filtered.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm text-[#9a9bad]">항목이 없습니다</div>
+          ) : (
+            filtered.map(sr => (
+              <button
+                key={sr.id}
+                onClick={() => setSelectedId(sr.id)}
+                className={`w-full text-left px-5 py-4 hover:bg-[#f7f9fb] transition-colors ${selectedId === sr.id ? "bg-[#eef2ff]" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{sr.title}</p>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[sr.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
+                    {TAB_LABELS[sr.status as Tab] ?? sr.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${sr.created_by_ai ? "bg-[#f0f0ff] text-[#4a4bdc]" : "bg-[#f2f4f6] text-[#757684]"}`}>
+                    {sr.created_by_ai ? "챗봇" : "직접생성"}
+                  </span>
+                  {sr.jira_issue_key && (
+                    <span className="text-[10px] text-[#757684] font-mono">{sr.jira_issue_key}</span>
+                  )}
+                  <span className="text-[10px] text-[#9a9bad] ml-auto">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {selected ? (
+          <SRDetail sr={selected} onRefetch={refetch} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
+            목록에서 항목을 선택하세요
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SRDetail({ sr, onRefetch }: { sr: SRDraft; onRefetch: () => void }) {
+  const [activeSection, setActiveSection] = useState<"info" | "review" | "history">("info")
+  const [submittingId, setSubmittingId] = useState(false)
+
+  const { data: docData } = useApi(() => api.listDocuments(0, 500), [])
+  const docs = docData?.documents ?? []
+
+  const handleSubmitSR = async () => {
+    setSubmittingId(true)
+    try {
+      await api.submitSR(sr.id)
+      onRefetch()
+    } finally {
+      setSubmittingId(false)
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-3xl">
+      <div className="flex items-center gap-3 mb-6">
+        <h3 className="text-lg font-bold text-[#191c1e] flex-1">{sr.title}</h3>
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_BADGE[sr.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
+          {TAB_LABELS[sr.status as Tab] ?? sr.status}
+        </span>
+        <span className={`text-xs px-2 py-1 rounded-full ${sr.created_by_ai ? "bg-[#f0f0ff] text-[#4a4bdc]" : "bg-[#f2f4f6] text-[#757684]"}`}>
+          {sr.created_by_ai ? "챗봇" : "직접생성"}
+        </span>
+      </div>
+
+      <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
+        {([["info", "요청 정보"], ["review", "검토"], ["history", "변경 이력"]] as ["info" | "review" | "history", string][]).map(([s, label]) => (
+          <button key={s} onClick={() => setActiveSection(s)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeSection === s ? "border-[#00288e] text-[#00288e]" : "border-transparent text-[#757684] hover:text-[#191c1e]"}`}>
             {label}
-            {key === "active" && activeCount > 0 && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-[#00288e] text-white">
-                {activeCount}
-              </span>
+            {s === "review" && sr.status === "pending_doc_review" && (
+              <span className="ml-1.5 w-2 h-2 rounded-full bg-[#f59e0b] inline-block" />
             )}
           </button>
         ))}
       </div>
 
-      {/* SR 목록 */}
-      {items.length === 0 ? (
-        <div className="text-center py-16">
-          <span className="material-symbols-outlined text-5xl text-[#c4c5d5]">confirmation_number</span>
-          <p className="mt-4 text-sm text-[#757684]">
-            {tab === "draft" ? "작성 중인 SR이 없습니다" : tab === "active" ? "진행 중인 SR이 없습니다" : "완료된 SR이 없습니다"}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {items.map((sr) => (
-            <div key={sr.id} className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-              {editingId === sr.id ? (
-                <div className="space-y-3">
-                  <input
-                    className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-                    value={editForm.title}
-                    onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
-                  />
-                  <textarea
-                    className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
-                    rows={3}
-                    value={editForm.description}
-                    onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-                  />
-                  <select
-                    className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none bg-white"
-                    value={editForm.priority}
-                    onChange={e => setEditForm(f => ({ ...f, priority: e.target.value }))}
-                  >
-                    <option value="lowest">최저</option>
-                    <option value="low">낮음</option>
-                    <option value="medium">보통</option>
-                    <option value="high">높음</option>
-                    <option value="critical">긴급</option>
-                  </select>
-                  <div className="flex gap-2">
-                    <button onClick={handleEditSave} disabled={saving} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50 transition-colors">
-                      {saving ? "저장 중..." : "저장"}
-                    </button>
-                    <button onClick={() => setEditingId(null)} className="px-4 py-2 text-sm text-[#444653] hover:bg-[#f2f4f6] rounded-lg transition-colors">취소</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 flex-1">
-                    <div className="w-10 h-10 rounded-lg bg-[#dde1ff] flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-lg text-[#00288e]">confirmation_number</span>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-[#191c1e]">{sr.title}</p>
-                        {sr.created_by_ai && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dde1ff] text-[#00288e]">
-                            <span className="material-symbols-outlined text-[12px]">auto_awesome</span>
-                            AI
-                          </span>
-                        )}
-                        {sr.jira_issue_key && sr.jira_issue_url && (
-                          <a
-                            href={sr.jira_issue_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e8f0fe] text-[#1a56db] hover:bg-[#c7d7fb] transition-colors"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            <span className="material-symbols-outlined text-[12px]">link</span>
-                            {sr.jira_issue_key}
-                          </a>
-                        )}
-                      </div>
-                      <p className="text-xs text-[#444653] mt-1 line-clamp-2">{sr.description}</p>
-                      {sr.target_url && (
-                        <p className="text-xs text-[#757684] mt-0.5 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[12px]">screenshot_monitor</span>
-                          {sr.target_url}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${getPriorityStyle(sr.priority)}`}>
-                          {sr.priority === "critical" ? "긴급" : sr.priority === "high" ? "높음" : sr.priority === "medium" ? "보통" : sr.priority === "low" ? "낮음" : "최저"}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${getStatusStyle(sr.status)}`}>
-                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                          {getStatusLabel(sr.status)}
-                        </span>
-                        <span className="text-[11px] text-[#757684]">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {sr.status === "draft" && (
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleEditStart(sr)} className="flex items-center gap-1 px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#444653] hover:bg-[#f2f4f6] transition-colors">
-                        <span className="material-symbols-outlined text-base">edit</span>
-                      </button>
-                      <button
-                        onClick={() => handleSubmit(sr.id)}
-                        disabled={submittingId === sr.id}
-                        className="flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] disabled:opacity-50 transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-base">send</span>
-                        {submittingId === sr.id ? "제출 중..." : "제출"}
-                      </button>
-                    </div>
-                  )}
-                  {tab === "active" && sr.status !== "pending_document_selection" && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleLocalComplete(sr.id)}
-                        disabled={submittingId === sr.id}
-                        className="flex items-center gap-2 px-3 py-1.5 border border-[#1a56db] text-[#1a56db] rounded-lg text-xs font-semibold hover:bg-[#e8f0fe] disabled:opacity-50 transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                        {submittingId === sr.id ? "처리 중..." : "완료 처리 (시뮬레이터)"}
-                      </button>
-                    </div>
-                  )}
-                  {tab === "active" && sr.status === "pending_document_selection" && (
-                    <button
-                      onClick={() => navigate("/change-impact")}
-                      className="flex items-center gap-2 px-3 py-1.5 border border-[#e6a817] text-[#92600a] rounded-lg text-xs font-semibold hover:bg-[#fff3dc] transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                      문서 반영 대기 →
-                    </button>
-                  )}
-                  {tab === "done" && sr.status === "pending_doc_review" && (
-                    <button
-                      onClick={() => navigate("/approvals")}
-                      className="flex items-center gap-2 px-3 py-1.5 border border-[#e6a817] text-[#92600a] rounded-lg text-xs font-semibold hover:bg-[#fff3dc] transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[14px]">rate_review</span>
-                      문서 검토 →
-                    </button>
-                  )}
-                </div>
-              )}
+      {activeSection === "info" && (
+        <div className="space-y-4 text-sm">
+          <div>
+            <p className="text-xs font-semibold text-[#757684] mb-1">내용</p>
+            <p className="text-[#191c1e] whitespace-pre-wrap bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">{sr.description}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><span className="text-[#757684] text-xs">우선순위</span><p className="text-[#191c1e] mt-0.5 capitalize">{sr.priority}</p></div>
+            <div><span className="text-[#757684] text-xs">요청 일시</span><p className="text-[#191c1e] mt-0.5">{new Date(sr.created_at).toLocaleString("ko-KR")}</p></div>
+            {sr.jira_issue_key && (
+              <div><span className="text-[#757684] text-xs">Jira 이슈</span>
+                {sr.jira_issue_url ? (
+                  <a href={sr.jira_issue_url} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline block mt-0.5">{sr.jira_issue_key}</a>
+                ) : (
+                  <p className="text-[#191c1e] mt-0.5">{sr.jira_issue_key}</p>
+                )}
+              </div>
+            )}
+            {sr.target_url && (
+              <div><span className="text-[#757684] text-xs">대상 URL</span><a href={sr.target_url} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline block mt-0.5 truncate">{sr.target_url}</a></div>
+            )}
+          </div>
+          {sr.status === "draft" && (
+            <div className="pt-2">
+              <button onClick={handleSubmitSR} disabled={submittingId} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50">
+                {submittingId ? "제출 중..." : "SR 제출"}
+              </button>
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      {/* 페이지네이션 */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2">
-          <p className="text-xs text-[#757684]">전체 {total}건</p>
-          <div className="flex items-center gap-2">
+      {activeSection === "review" && (
+        <SRReview sr={sr} docs={docs} onRefetch={onRefetch} />
+      )}
+
+      {activeSection === "history" && (
+        <ChangeHistoryTimeline entityType="sr" entityId={sr.id} />
+      )}
+    </div>
+  )
+}
+
+function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRefetch: () => void }) {
+  const [step, setStep] = useState<ReviewStep>(1)
+  const [docMode, setDocMode] = useState<DocMode>(null)
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+  const [docQuery, setDocQuery] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [proposal, setProposal] = useState<{ original: string; proposed: string } | null>(null)
+  const [applying, setApplying] = useState(false)
+
+  if (sr.status !== "pending_doc_review") {
+    return (
+      <div className="text-sm text-[#9a9bad] py-4">
+        {sr.status === "done"
+          ? "이 SR은 이미 완료되었습니다."
+          : "Jira 이슈가 완료된 후 검토 단계가 활성화됩니다."}
+      </div>
+    )
+  }
+
+  const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(docQuery.toLowerCase()))
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        {([1, 2, 3] as ReviewStep[]).map(s => (
+          <div key={s} className="flex items-center gap-2">
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+              step > s ? "bg-[#15803d] text-white" : step === s ? "bg-[#00288e] text-white" : "bg-[#e0e3e5] text-[#9a9bad]"
+            }`}>{step > s ? "✓" : s}</div>
+            {s < 3 && <div className={`h-px w-8 ${step > s ? "bg-[#15803d]" : "bg-[#e0e3e5]"}`} />}
+          </div>
+        ))}
+        <span className="ml-2 text-xs text-[#757684]">
+          {step === 1 ? "반영 방식 선택" : step === 2 ? "문서 선택" : "AI 초안 검토"}
+        </span>
+      </div>
+
+      {step === 1 && (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-[#191c1e]">문서 반영 방식을 선택하세요</p>
+          <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1.5 text-sm border border-[#c4c5d5] rounded-lg disabled:opacity-40 hover:bg-[#f2f4f6] transition-colors"
+              onClick={() => { setDocMode("new"); setStep(3) }}
+              className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#00288e] transition-colors group"
             >
-              이전
+              <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#00288e]">신규 문서 작성</p>
+              <p className="text-xs text-[#757684] mt-1">새 문서를 생성합니다</p>
             </button>
-            <span className="text-sm text-[#444653]">{page} / {totalPages}</span>
             <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="px-3 py-1.5 text-sm border border-[#c4c5d5] rounded-lg disabled:opacity-40 hover:bg-[#f2f4f6] transition-colors"
+              onClick={() => { setDocMode("existing"); setStep(2) }}
+              className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#00288e] transition-colors group"
             >
-              다음
+              <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#00288e]">기존 문서 수정</p>
+              <p className="text-xs text-[#757684] mt-1">기존 문서에 반영합니다</p>
             </button>
           </div>
+        </div>
+      )}
+
+      {step === 2 && docMode === "existing" && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setStep(1)} className="text-xs text-[#757684] hover:text-[#191c1e]">← 뒤로</button>
+            <p className="text-sm font-medium text-[#191c1e]">반영할 문서를 선택하세요</p>
+          </div>
+          <input
+            className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm outline-none focus:border-[#00288e]"
+            placeholder="문서 검색..."
+            value={docQuery}
+            onChange={e => setDocQuery(e.target.value)}
+          />
+          <div className="max-h-60 overflow-y-auto border border-[#e0e3e5] rounded-lg divide-y divide-[#f2f4f6]">
+            {filteredDocs.map(doc => (
+              <button
+                key={doc.id}
+                onClick={() => setSelectedDocId(doc.id)}
+                className={`w-full text-left px-4 py-3 text-sm hover:bg-[#f7f9fb] transition-colors ${selectedDocId === doc.id ? "bg-[#eef2ff]" : ""}`}
+              >
+                <p className="font-medium text-[#191c1e]">{doc.title}</p>
+                {doc.description && <p className="text-xs text-[#757684] mt-0.5 truncate">{doc.description}</p>}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setStep(3)}
+            disabled={!selectedDocId}
+            className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50"
+          >
+            다음: AI 초안 생성
+          </button>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setStep(docMode === "new" ? 1 : 2)} className="text-xs text-[#757684] hover:text-[#191c1e]">← 뒤로</button>
+            <p className="text-sm font-medium text-[#191c1e]">
+              {docMode === "new" ? "신규 문서 AI 초안" : `'${docs.find(d => d.id === selectedDocId)?.title}' 수정 초안`}
+            </p>
+          </div>
+          {!proposal ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-[#757684] mb-4">AI가 SR 내용을 바탕으로 문서 초안을 생성합니다.</p>
+              <button
+                onClick={async () => {
+                  setGenerating(true)
+                  try {
+                    const result = await api.analyzeImpact({
+                      source_type: "jira_sr",
+                      source_id: sr.id,
+                      related_document_ids: selectedDocId ? [selectedDocId] : undefined,
+                    })
+                    setProposal({ original: "기존 내용", proposed: result.reasoning })
+                  } catch {
+                    // 에러 시 UI에서 재시도 가능
+                  } finally {
+                    setGenerating(false)
+                  }
+                }}
+                disabled={generating}
+                className="px-5 py-2 bg-[#4a4bdc] text-white rounded-lg text-sm font-medium hover:bg-[#3b3cd0] disabled:opacity-50"
+              >
+                {generating ? "생성 중..." : "AI 초안 생성"}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안</p>
+                <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-64">{proposal.proposed}</pre>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    setApplying(true)
+                    try {
+                      await api.updateSRDraft(sr.id, { status: "done" })
+                      onRefetch()
+                    } finally {
+                      setApplying(false)
+                    }
+                  }}
+                  disabled={applying}
+                  className="px-4 py-2 bg-[#15803d] text-white rounded-lg text-sm font-medium hover:bg-[#166534] disabled:opacity-50"
+                >
+                  {applying ? "반영 중..." : "문서에 반영"}
+                </button>
+                <button onClick={() => setProposal(null)} className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm hover:bg-[#f2f4f6]">
+                  다시 생성
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
