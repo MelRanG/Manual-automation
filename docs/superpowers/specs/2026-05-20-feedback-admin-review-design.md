@@ -7,6 +7,7 @@
 
 1. 관리자가 피드백 항목을 삭제할 수 있도록 UI 제공
 2. 피드백 접수 시 AI 초안 자동 생성을 제거하고, 관리자가 원본을 검토·수정한 뒤 직접 AI에 초안 요청하는 흐름으로 변경
+3. `document_id` 없는 피드백에서 관리자가 관련 문서를 검색·연결할 수 있도록 UI 제공
 
 ## 현재 흐름 vs 변경 후 흐름
 
@@ -48,7 +49,13 @@
 **3. `generate_correction` 수정**
 - AI 프롬프트에서 `feedback_text` 대신 `reviewed_text`(있으면) 우선 사용
 
-**4. `DELETE /api/feedback/{id}`**
+**4. `PATCH /api/feedback/{id}/link-document` 신규**
+- Request body: `{ document_id: UUID }`
+- `FeedbackReport.document_id` 업데이트
+- 이미 `document_id`가 있거나 초안이 존재하면 400 반환
+- Response: `FeedbackReportResponse`
+
+**5. `DELETE /api/feedback/{id}`**
 - 이미 존재, 변경 없음
 - 연결된 `ProposedDocumentChange`, `ApprovalRequest` cascade 삭제 (기존 동작 유지)
 
@@ -62,6 +69,12 @@ class RequestDraftBody(BaseModel):
     reviewed_text: str
 ```
 
+`LinkDocumentBody` 스키마 신규:
+```python
+class LinkDocumentBody(BaseModel):
+    document_id: uuid.UUID
+```
+
 ---
 
 ## 섹션 2: 프론트엔드 UX
@@ -71,9 +84,27 @@ class RequestDraftBody(BaseModel):
 - `FeedbackDetail` 헤더 우측에 "삭제" 버튼 추가
 - 클릭 → confirm 다이얼로그 → `DELETE /api/feedback/{id}` → 목록 refetch + 상세 패널 초기화
 
+### "요청 정보" 탭 하단 — 문서 연결 UI (`document_id` 없을 때)
+
+```
+┌─────────────────────────────────────────────────┐
+│ 관련 문서                                         │
+│ 연결된 문서가 없습니다.                             │
+│ ┌─────────────────────────────────────────────┐  │
+│ │ 문서 검색...                🔍               │  │
+│ └─────────────────────────────────────────────┘  │
+│ [검색 결과 드롭다운 — 문서 제목 목록]               │
+│                              [문서 연결]           │
+└─────────────────────────────────────────────────┘
+```
+
+- `GET /api/documents?q=<검색어>` 로 실시간 검색 (debounce 300ms)
+- 문서 선택 후 "문서 연결" 클릭 → `PATCH /api/feedback/{id}/link-document` 호출
+- 연결 성공 시 `item` 상태 업데이트 → 하단 관리자 편집 영역 노출
+
 ### "요청 정보" 탭 하단 — 관리자 편집 영역
 
-`document_id`가 있는 피드백에만 노출:
+`document_id`가 있는 피드백에만 노출 (문서 연결 후 포함):
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -112,7 +143,9 @@ class RequestDraftBody(BaseModel):
 
 | 케이스 | 처리 |
 |---|---|
-| `document_id` 없는 피드백 | 관리자 편집 영역 비노출, 삭제만 가능 |
+| `document_id` 없는 피드백 | 문서 연결 UI 표시. 연결 전까지 관리자 편집 영역 비노출 |
+| 문서 연결 후 | 관리자 편집 영역 노출, AI 초안 요청 가능 상태로 전환 |
+| 이미 `document_id` 있는 피드백에 link-document 요청 | 백엔드 400 반환 |
 | 이미 초안 있는 상태에서 재요청 | "AI 초안 요청" 버튼 비활성화 (덮어쓰기 방지) |
 | 삭제 시 연결 데이터 | cascade 삭제 — 백엔드에서 기존 처리 중 |
 
@@ -128,5 +161,5 @@ class RequestDraftBody(BaseModel):
 - `backend/alembic/versions/` — 마이그레이션 파일 신규
 
 **프론트엔드**
-- `frontend/src/pages/Feedback.tsx` — 삭제 버튼, 관리자 편집 영역
-- `frontend/src/lib/api.ts` — deleteFeedback, requestDraft API 함수 추가
+- `frontend/src/pages/Feedback.tsx` — 삭제 버튼, 문서 연결 UI, 관리자 편집 영역
+- `frontend/src/lib/api.ts` — deleteFeedback, requestDraft, linkDocument API 함수 추가
