@@ -17,6 +17,20 @@ const TAB_LABELS: Record<Tab, string> = {
   done: "완료",
 }
 
+const TAB_STATUSES: Record<Exclude<Tab, "all">, string[]> = {
+  draft: ["draft"],
+  active: ["submitted", "jira_created", "pending_document_selection"],
+  pending_doc_review: ["pending_doc_review"],
+  done: ["done_synced", "done_no_proposal", "done"],
+}
+
+const statusToTab = (status: string): Tab => {
+  for (const [tab, statuses] of Object.entries(TAB_STATUSES)) {
+    if (statuses.includes(status)) return tab as Tab
+  }
+  return "all"
+}
+
 const STATUS_BADGE: Record<string, string> = {
   draft: "bg-[#f2f4f6] text-[#444653]",
   active: "bg-[#d5e3fc] text-[#00288e]",
@@ -47,14 +61,14 @@ export function ServiceRequests() {
   const allSRs = srResult?.items ?? []
 
   const displayItems = allSRs.filter(sr => {
-    const tabMatch = tab === "all" || sr.status === tab
+    const tabMatch = tab === "all" || TAB_STATUSES[tab as Exclude<Tab, "all">]?.includes(sr.status)
     const sourceMatch =
       sourceFilter === "all" ||
       (sourceFilter === "direct" ? !sr.created_by_ai : sr.created_by_ai)
     return tabMatch && sourceMatch
   })
 
-  const tabCount = (t: Tab) => allSRs.filter(s => s.status === t).length
+  const tabCount = (t: Tab) => t === "all" ? allSRs.length : allSRs.filter(s => TAB_STATUSES[t]?.includes(s.status)).length
 
   const { data: docsResult } = useApi(() => api.listDocuments(0, 500), [])
   const docs = docsResult?.documents ?? []
@@ -161,8 +175,8 @@ export function ServiceRequests() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{sr.title}</p>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[sr.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
-                    {TAB_LABELS[sr.status as Tab] ?? sr.status}
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[statusToTab(sr.status)] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
+                    {TAB_LABELS[statusToTab(sr.status)]}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
@@ -216,8 +230,8 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
     <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <h3 className="text-lg font-bold text-[#191c1e] flex-1">{sr.title}</h3>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_BADGE[sr.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
-          {TAB_LABELS[sr.status as Tab] ?? sr.status}
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_BADGE[statusToTab(sr.status)] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
+          {TAB_LABELS[statusToTab(sr.status)]}
         </span>
         <span className={`text-xs px-2 py-1 rounded-full ${sr.created_by_ai ? "bg-[#f0f0ff] text-[#4a4bdc]" : "bg-[#f2f4f6] text-[#757684]"}`}>
           {sr.created_by_ai ? "챗봇" : "직접생성"}
