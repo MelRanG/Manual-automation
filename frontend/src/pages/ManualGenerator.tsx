@@ -1,11 +1,31 @@
 import { useState } from "react"
-import { api } from "@/lib/api"
+import { api, type ManualJob } from "@/lib/api"
+import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { useManualJob } from "@/contexts/ManualJobContext"
+import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
+
+type Tab = "all" | "review" | "done"
+
+const STATUS_BADGE: Record<string, string> = {
+  pending: "bg-[#fff3dc] text-[#92600a]",
+  running: "bg-[#d5e3fc] text-[#00288e]",
+  completed: "bg-[#dcfce7] text-[#15803d]",
+  failed: "bg-[#ffdad6] text-[#ba1a1a]",
+}
+const STATUS_LABEL: Record<string, string> = {
+  pending: "대기",
+  running: "생성 중",
+  completed: "완료",
+  failed: "실패",
+}
 
 export function ManualGenerator() {
   const { user } = useAuth()
-  const { runningJob, startJob, clearJob } = useManualJob()
+  const { startJob } = useManualJob()
+  const [tab, setTab] = useState<Tab>("all")
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showForm, setShowForm] = useState(false)
 
   const [targetUrl, setTargetUrl] = useState("")
   const [loginUrl, setLoginUrl] = useState("")
@@ -15,7 +35,22 @@ export function ManualGenerator() {
   const [stepInput, setStepInput] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
 
-  const isRunning = !!runningJob
+  const { data: jobs, refetch } = useApi(
+    () => api.listManualJobs(user?.id),
+    [user?.id]
+  )
+
+  const allJobs = jobs ?? []
+
+  const filtered = allJobs.filter(j => {
+    if (tab === "all") return true
+    if (tab === "review") return j.status === "completed" && !j.output_document_id
+    if (tab === "done") return j.status === "completed" && !!j.output_document_id
+    return true
+  })
+
+  const selected = allJobs.find(j => j.id === selectedId) ?? null
+  const reviewCount = allJobs.filter(j => j.status === "completed" && !j.output_document_id).length
 
   const normalizeUrl = (url: string) => {
     const v = url.trim()
@@ -31,7 +66,6 @@ export function ManualGenerator() {
   const handleSubmit = async () => {
     const url = normalizeUrl(targetUrl)
     if (!url) return
-    setTargetUrl(url)
     setErrorMsg("")
     try {
       const job = await api.createManualJob({
@@ -43,140 +77,191 @@ export function ManualGenerator() {
         scenario_steps: steps.length > 0 ? steps : undefined,
       })
       startJob(job)
+      setShowForm(false)
+      setTargetUrl(""); setLoginUrl(""); setLoginId(""); setLoginPw(""); setSteps([])
+      refetch()
     } catch (e: unknown) {
       setErrorMsg(e instanceof Error ? e.message : "요청 실패")
     }
   }
 
-  const reset = () => {
-    clearJob()
-    setTargetUrl("")
-    setLoginUrl("")
-    setLoginId("")
-    setLoginPw("")
-    setSteps([])
-    setStepInput("")
-    setErrorMsg("")
-  }
-
   return (
-    <div className="p-8 max-w-2xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-[#191c1e]">사용자 매뉴얼 생성</h2>
-        <p className="text-sm text-[#444653] mt-1">
-          웹사이트 URL과 클릭 단계를 입력하면 Playwright가 캡처하고 AI가 매뉴얼을 생성합니다.
-        </p>
-      </div>
-
-      {isRunning ? (
-        <div className="bg-white border border-[#c4c5d5] rounded-xl p-10 flex flex-col items-center gap-4 shadow-sm">
-          <div className="w-14 h-14 rounded-full bg-[#d5e3fc] flex items-center justify-center animate-pulse">
-            <span className="material-symbols-outlined text-3xl text-[#00288e]">screenshot_monitor</span>
-          </div>
-          <p className="text-sm font-medium text-[#191c1e]">매뉴얼 생성 중...</p>
-          <p className="text-xs text-[#757684]">Playwright가 페이지를 캡처하고 있습니다. 잠시 기다려주세요.</p>
-          <p className="text-xs text-[#757684]">다른 페이지로 이동해도 생성은 계속 진행됩니다.</p>
-          {runningJob && <p className="text-[10px] font-mono text-[#c4c5d5]">{runningJob.id}</p>}
-          <button onClick={reset} className="mt-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-xs text-[#757684] hover:bg-[#f2f4f6]">
-            취소
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white border border-[#c4c5d5] rounded-xl p-6 shadow-sm space-y-5">
-          {errorMsg && (
-            <div className="flex items-center gap-2 bg-[#ffdad6] text-[#ba1a1a] text-sm px-4 py-3 rounded-lg">
-              <span className="material-symbols-outlined text-base">error</span>
-              {errorMsg}
-            </div>
-          )}
-
-          <div>
-            <label className="text-sm font-medium text-[#191c1e]">대상 URL <span className="text-[#ba1a1a]">*</span></label>
-            <input
-              className="mt-1 w-full px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-              placeholder="https://example.com"
-              value={targetUrl}
-              onChange={e => setTargetUrl(e.target.value)}
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm font-medium text-[#191c1e]">로그인 URL</label>
-              <input
-                className="mt-1 w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] outline-none"
-                placeholder="https://…/login"
-                value={loginUrl}
-                onChange={e => setLoginUrl(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#191c1e]">아이디</label>
-              <input
-                className="mt-1 w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] outline-none"
-                placeholder="user@email.com"
-                value={loginId}
-                onChange={e => setLoginId(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#191c1e]">비밀번호</label>
-              <input
-                type="password"
-                className="mt-1 w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] outline-none"
-                placeholder="••••••"
-                value={loginPw}
-                onChange={e => setLoginPw(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-[#191c1e]">클릭 단계</label>
-            <p className="text-xs text-[#757684] mt-0.5 mb-2">
-              "뉴스 클릭", "웹툰 클릭" 처럼 입력하세요. 클릭 위치가 스크린샷에 표시됩니다.
-            </p>
-            <div className="flex gap-2">
-              <input
-                className="flex-1 px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] outline-none"
-                placeholder="예: 뉴스 클릭"
-                value={stepInput}
-                onChange={e => setStepInput(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && addStep()}
-              />
-              <button
-                onClick={addStep}
-                className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors"
-              >
-                추가
-              </button>
-            </div>
-            {steps.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {steps.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-[#f7f9fb] rounded-lg text-sm border border-[#e0e3e5]">
-                    <span className="text-xs text-[#757684] font-mono w-5">{i + 1}.</span>
-                    <span className="flex-1 text-[#191c1e]">{s}</span>
-                    <button onClick={() => setSteps(prev => prev.filter((_, j) => j !== i))} className="text-[#757684] hover:text-[#ba1a1a] transition-colors">
-                      <span className="material-symbols-outlined text-sm">close</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 pt-1">
+    <div className="flex h-full">
+      <div className="w-[380px] border-r border-[#e0e3e5] flex flex-col shrink-0">
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-bold text-[#191c1e]">매뉴얼 생성</h2>
             <button
-              onClick={handleSubmit}
-              disabled={!targetUrl.trim()}
-              className="px-5 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2"
+              onClick={() => setShowForm(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00288e] text-white rounded-lg text-xs font-medium hover:bg-[#1e40af] transition-colors"
             >
-              <span className="material-symbols-outlined text-base">play_arrow</span>
-              매뉴얼 생성 시작
+              <span className="material-symbols-outlined text-sm">add</span>
+              신규 요청
             </button>
           </div>
+          <div className="flex gap-1 border-b border-[#e0e3e5]">
+            {([["all", "전체"], ["review", "검토요청"], ["done", "완료"]] as [Tab, string][]).map(([t, label]) => (
+              <button
+                key={t}
+                onClick={() => { setTab(t); setSelectedId(null) }}
+                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                  tab === t
+                    ? "border-[#00288e] text-[#00288e]"
+                    : "border-transparent text-[#757684] hover:text-[#191c1e]"
+                }`}
+              >
+                {label}
+                {t === "review" && reviewCount > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-[#00288e] text-white text-[10px] font-bold">
+                    {reviewCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {showForm && (
+          <div className="mx-4 mb-3 p-4 border border-[#c4c5d5] rounded-xl bg-white space-y-3 text-sm">
+            {errorMsg && <div className="text-xs text-[#ba1a1a] bg-[#ffdad6] px-3 py-2 rounded-lg">{errorMsg}</div>}
+            <div>
+              <label className="text-xs font-medium text-[#191c1e]">대상 URL *</label>
+              <input className="mt-1 w-full px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-xs outline-none focus:border-[#00288e]" placeholder="https://example.com" value={targetUrl} onChange={e => setTargetUrl(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-xs font-medium text-[#191c1e]">로그인 URL</label>
+                <input className="mt-1 w-full px-2 py-1.5 border border-[#c4c5d5] rounded-lg text-xs outline-none focus:border-[#00288e]" value={loginUrl} onChange={e => setLoginUrl(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#191c1e]">아이디</label>
+                <input className="mt-1 w-full px-2 py-1.5 border border-[#c4c5d5] rounded-lg text-xs outline-none focus:border-[#00288e]" value={loginId} onChange={e => setLoginId(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-[#191c1e]">비밀번호</label>
+                <input type="password" className="mt-1 w-full px-2 py-1.5 border border-[#c4c5d5] rounded-lg text-xs outline-none focus:border-[#00288e]" value={loginPw} onChange={e => setLoginPw(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-[#191c1e]">클릭 단계</label>
+              <div className="flex gap-1 mt-1">
+                <input className="flex-1 px-2 py-1.5 border border-[#c4c5d5] rounded-lg text-xs outline-none focus:border-[#00288e]" placeholder="예: 뉴스 클릭" value={stepInput} onChange={e => setStepInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addStep()} />
+                <button onClick={addStep} className="px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-xs hover:bg-[#f2f4f6]">추가</button>
+              </div>
+              {steps.map((s, i) => (
+                <div key={i} className="flex items-center gap-1 mt-1 text-xs">
+                  <span className="text-[#757684] w-4">{i + 1}.</span>
+                  <span className="flex-1">{s}</span>
+                  <button onClick={() => setSteps(p => p.filter((_, j) => j !== i))} className="text-[#9a9bad] hover:text-[#ba1a1a]">✕</button>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowForm(false)} className="px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-xs hover:bg-[#f2f4f6]">취소</button>
+              <button onClick={handleSubmit} disabled={!targetUrl.trim()} className="px-3 py-1.5 bg-[#00288e] text-white rounded-lg text-xs font-medium hover:bg-[#1e40af] disabled:opacity-50">생성 시작</button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto divide-y divide-[#f2f4f6]">
+          {filtered.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm text-[#9a9bad]">항목이 없습니다</div>
+          ) : (
+            filtered.map(job => (
+              <button
+                key={job.id}
+                onClick={() => setSelectedId(job.id)}
+                className={`w-full text-left px-5 py-4 hover:bg-[#f7f9fb] transition-colors ${selectedId === job.id ? "bg-[#eef2ff]" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{job.target_url}</p>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[job.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
+                    {STATUS_LABEL[job.status] ?? job.status}
+                  </span>
+                </div>
+                <p className="text-xs text-[#9a9bad] mt-1">{new Date(job.created_at).toLocaleDateString("ko-KR")}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {selected ? (
+          <ManualDetail job={selected} onRefetch={refetch} />
+        ) : (
+          <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
+            목록에서 항목을 선택하세요
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ManualDetail({ job, onRefetch: _onRefetch }: { job: ManualJob; onRefetch: () => void }) {
+  const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">("info")
+
+  return (
+    <div className="p-6 max-w-3xl">
+      <div className="flex items-center gap-3 mb-6">
+        <h3 className="text-lg font-bold text-[#191c1e] flex-1 truncate">{job.target_url}</h3>
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+          job.status === "completed" ? "bg-[#dcfce7] text-[#15803d]" :
+          job.status === "running" ? "bg-[#d5e3fc] text-[#00288e]" :
+          job.status === "failed" ? "bg-[#ffdad6] text-[#ba1a1a]" :
+          "bg-[#fff3dc] text-[#92600a]"
+        }`}>{job.status === "completed" ? "완료" : job.status === "running" ? "생성 중" : job.status === "failed" ? "실패" : "대기"}</span>
+      </div>
+
+      <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
+        {([["info", "요청 정보"], ["draft", "AI 초안"], ["history", "변경 이력"]] as ["info" | "draft" | "history", string][]).map(([s, label]) => (
+          <button key={s} onClick={() => setActiveSection(s)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeSection === s ? "border-[#00288e] text-[#00288e]" : "border-transparent text-[#757684] hover:text-[#191c1e]"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {activeSection === "info" && (
+        <div className="space-y-3 text-sm">
+          <div><span className="text-[#757684] w-24 inline-block">대상 URL</span><a href={job.target_url} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline">{job.target_url}</a></div>
+          <div><span className="text-[#757684] w-24 inline-block">요청 일시</span><span className="text-[#191c1e]">{new Date(job.created_at).toLocaleString("ko-KR")}</span></div>
+          {job.screenshots && job.screenshots.length > 0 && (
+            <div>
+              <span className="text-[#757684] block mb-2">스크린샷 ({job.screenshots.length})</span>
+              <div className="space-y-1">
+                {job.screenshots.map((s, i) => (
+                  <div key={i} className="text-xs text-[#444653]">{i + 1}. {s.description}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          {job.error_message && (
+            <div className="p-3 bg-[#ffdad6] rounded-lg text-xs text-[#ba1a1a]">{job.error_message}</div>
+          )}
+        </div>
+      )}
+
+      {activeSection === "draft" && (
+        <div>
+          {job.output_document_id ? (
+            <div className="text-sm text-[#444653]">
+              <p className="mb-2 text-[#15803d] font-medium">문서가 생성되었습니다.</p>
+              <a href={`/documents/${job.output_document_id}`} className="text-[#00288e] hover:underline text-sm">생성된 문서 보기 →</a>
+            </div>
+          ) : job.status === "completed" ? (
+            <div className="p-4 bg-[#fff3dc] rounded-xl text-sm text-[#92600a]">
+              매뉴얼이 생성되었습니다. 문서 관리 메뉴에서 확인하세요.
+            </div>
+          ) : (
+            <div className="text-sm text-[#9a9bad]">매뉴얼 생성이 완료된 후 초안을 확인할 수 있습니다.</div>
+          )}
+        </div>
+      )}
+
+      {activeSection === "history" && (
+        <ChangeHistoryTimeline entityType="manual" entityId={job.id} />
       )}
     </div>
   )
