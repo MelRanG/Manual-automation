@@ -7,6 +7,7 @@ from app.models.sr import SRDraft, WebhookDeliveryLog, ChangeImpactAnalysis, Doc
 from app.models.manual import ManualGenerationJob
 from app.models.notification import Notification
 from app.models.jira import JiraConfig, JiraCallbackLog
+from app.models.history import ChangeHistory
 
 __all__ = [
     "Base",
@@ -28,4 +29,5 @@ __all__ = [
     "Notification",
     "JiraConfig",
     "JiraCallbackLog",
+    "ChangeHistory",
 ]
