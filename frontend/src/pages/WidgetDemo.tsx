@@ -100,7 +100,7 @@ export function WidgetDemo() {
       {/* Top NavBar */}
       <nav className="bg-white flex justify-between items-center px-6 w-full h-16 border-b border-[#c4c5d5] shadow-sm sticky top-0 z-40">
         <div className="flex items-center gap-8">
-          <div className="text-2xl font-bold text-[#00288e] cursor-pointer">Manual Automation</div>
+          <div className="text-2xl font-bold text-[#00288e] cursor-pointer">DocOps AI</div>
           <div className="hidden md:flex gap-6 h-full items-center text-base">
             <a className="h-full flex items-center text-[#00288e] border-b-2 border-[#00288e] pb-1" href="#">항공권 예매</a>
             <a className="h-full flex items-center text-[#444653] hover:text-[#00288e] transition-colors" href="#">여행 정보</a>
@@ -208,7 +208,7 @@ export function WidgetDemo() {
             <div className="p-6 flex flex-col justify-center w-full md:w-1/2 gap-3">
               <div className="flex items-center gap-1 text-[#00288e] text-xs font-semibold uppercase tracking-wide">
                 <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>schema</span>
-                Manual Automation 연동
+                DocOps AI 연동
               </div>
               <h3 className="text-xl font-semibold text-[#191c1e]">여행 기록과 Jira 동기화</h3>
               <p className="text-sm text-[#444653] line-clamp-3">
@@ -233,7 +233,7 @@ export function WidgetDemo() {
 
       {/* Footer */}
       <footer className="bg-[#d8dadc] border-t border-[#c4c5d5] flex flex-col md:flex-row justify-between items-center px-8 py-6 w-full mt-auto">
-        <div className="text-xl font-semibold text-[#191c1e] mb-3 md:mb-0">Manual Automation</div>
+        <div className="text-xl font-semibold text-[#191c1e] mb-3 md:mb-0">DocOps AI</div>
         <div className="flex flex-wrap justify-center gap-6 text-sm mb-3 md:mb-0">
           <a className="text-[#444653] hover:text-[#00288e] underline" href="#">개인정보처리방침</a>
           <a className="text-[#444653] hover:text-[#00288e] underline" href="#">이용약관</a>
@@ -241,7 +241,7 @@ export function WidgetDemo() {
           <a className="text-[#444653] hover:text-[#00288e] underline" href="#">상태</a>
         </div>
         <div className="text-sm text-[#444653] text-center md:text-right">
-          © 2024 Manual Automation Platform. All rights reserved.
+          © 2024 DocOps AI Platform. All rights reserved.
         </div>
       </footer>
 
@@ -253,7 +253,7 @@ export function WidgetDemo() {
             <div className="bg-[#00288e] text-white p-4 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
-                <span className="text-xl font-semibold">Manual Automation 어시스턴트</span>
+                <span className="text-xl font-semibold">DocOps AI 어시스턴트</span>
               </div>
               <div className="flex gap-1">
                 <button
@@ -307,7 +307,7 @@ export function WidgetDemo() {
               {messages.length === 0 && (
                 <div className="text-center text-sm text-[#444653] mt-8">
                   <span className="material-symbols-outlined text-4xl text-[#00288e] mb-2 block" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
-                  안녕하세요! Manual Automation 어시스턴트입니다.<br />
+                  안녕하세요! DocOps AI 어시스턴트입니다.<br />
                   무엇을 도와드릴까요?
                 </div>
               )}
@@ -380,7 +380,7 @@ export function WidgetDemo() {
                 className="w-full bg-transparent text-[#00288e] hover:bg-[#f2f4f6] py-1 rounded text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
               >
                 <span className="material-symbols-outlined text-sm">open_in_new</span>
-                Manual Automation 대시보드로 이동
+                DocOps AI 대시보드로 이동
               </Link>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { api, type ChatSession, type ChatMessage, type Citation, type DocumentWarning } from "@/lib/api"
+import { api, type ChatSession, type ChatMessage, type Citation, type DocumentWarning, type SRDraftCreated } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 
 type ChatMode = "question" | "change_request"
@@ -10,6 +10,7 @@ export function Chat() {
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [citations, setCitations] = useState<Citation[]>([])
+  const [citationsByMessage, setCitationsByMessage] = useState<Record<string, Citation[]>>({})
   const [warnings, setWarnings] = useState<DocumentWarning[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -17,9 +18,14 @@ export function Chat() {
   const [feedbackText, setFeedbackText] = useState("")
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null)
+  const [feedbackNotice, setFeedbackNotice] = useState<Record<string, string>>({})
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
   const [chatMode, setChatMode] = useState<ChatMode>("question")
   const [srCreated, setSrCreated] = useState<{id: string; title: string} | null>(null)
+  const [srDraftsByMessage, setSrDraftsByMessage] = useState<Record<string, SRDraftCreated>>({})
+  const [srSendingId, setSrSendingId] = useState<string | null>(null)
+  const [srSentById, setSrSentById] = useState<Record<string, string>>({})
+  const [srSendErrorById, setSrSendErrorById] = useState<Record<string, string>>({})
   const messagesEnd = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,7 +36,14 @@ export function Chat() {
 
   useEffect(() => {
     if (activeSession) {
-      api.getMessages(activeSession).then(setMessages).catch(() => {})
+      api.getMessages(activeSession).then((loaded) => {
+        setMessages(loaded)
+        const next: Record<string, Citation[]> = {}
+        for (const message of loaded) {
+          if (message.citations?.length) next[message.id] = message.citations
+        }
+        setCitationsByMessage(next)
+      }).catch(() => {})
     }
   }, [activeSession])
 
@@ -45,6 +58,8 @@ export function Chat() {
     setActiveSession(session.id)
     setMessages([])
     setCitations([])
+    setCitationsByMessage({})
+    setSrDraftsByMessage({})
   }
 
   const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
@@ -57,6 +72,8 @@ export function Chat() {
         setActiveSession(null)
         setMessages([])
         setCitations([])
+        setCitationsByMessage({})
+        setSrDraftsByMessage({})
         setWarnings([])
       }
     } finally {
@@ -72,6 +89,7 @@ export function Chat() {
     setInput("")
     setLoading(true)
     setSrCreated(null)
+    let responseCitations: Citation[] = []
 
     const userMsg: ChatMessage = { id: "user-" + Date.now(), session_id: activeSession, role: "user", content: input, created_at: new Date().toISOString() }
     const botMsg: ChatMessage = { id: "streaming", session_id: activeSession, role: "assistant", content: "", created_at: new Date().toISOString() }
@@ -85,16 +103,23 @@ export function Chat() {
           content += event.token
           setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content } : m))
         } else if (event.type === "citations") {
-          setCitations(event.citations || [])
+          responseCitations = event.citations || []
+          setCitations(responseCitations)
           setWarnings(event.warnings || [])
         } else if (event.type === "done") {
           messageId = event.messageId || ""
+          if (messageId && responseCitations.length) {
+            setCitationsByMessage(prev => ({ ...prev, [messageId]: responseCitations }))
+          }
           if (event.sr_draft) {
             setSrCreated({ id: event.sr_draft.id, title: event.sr_draft.title })
+            if (messageId) {
+              setSrDraftsByMessage(prev => ({ ...prev, [messageId]: event.sr_draft! }))
+            }
           }
         }
       }
-      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId, content } : m))
+      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m))
       setSessions(prev => prev.map(s => s.id === activeSession && !s.title ? { ...s, title: input.slice(0, 50) } : s))
     } catch {
       setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: "오류가 발생했습니다. 다시 시도해주세요." } : m))
@@ -107,19 +132,51 @@ export function Chat() {
     if (!feedbackText.trim() || !user?.id) return
     setFeedbackSubmitting(true)
     try {
-      const citation = citations.find(c => c.document_id)
-      await api.createFeedback({
+      const message = messages.find(m => m.id === messageId)
+      const messageCitations = message?.citations?.length
+        ? message.citations
+        : citationsByMessage[messageId] || citations
+      const citation = messageCitations.find(c => c.document_id)
+      const result = await api.createFeedback({
         user_id: user.id,
         chat_message_id: messageId,
         document_id: citation?.document_id,
+        chunk_id: citation?.chunk_id || undefined,
         feedback_text: feedbackText,
       })
+      setFeedbackNotice(prev => ({
+        ...prev,
+        [messageId]: result.proposed_change
+          ? "AI 수정안이 생성되어 승인 관리로 전달되었습니다"
+          : "오류 제보가 접수되었습니다",
+      }))
       setFeedbackSuccess(messageId)
       setFeedbackFor(null)
       setFeedbackText("")
       setTimeout(() => setFeedbackSuccess(null), 3000)
     } finally {
       setFeedbackSubmitting(false)
+    }
+  }
+
+  const sendSRDraft = async (draft: SRDraftCreated) => {
+    setSrSendingId(draft.id)
+    setSrSendErrorById(prev => ({ ...prev, [draft.id]: "" }))
+    try {
+      const result = await api.submitSR(draft.id)
+      setSrSentById(prev => ({
+        ...prev,
+        [draft.id]: result.jira_issue_key
+          ? `SR 전송 완료 (${result.jira_issue_key})`
+          : "SR 전송 완료",
+      }))
+    } catch (err) {
+      setSrSendErrorById(prev => ({
+        ...prev,
+        [draft.id]: err instanceof Error ? err.message : "SR 전송에 실패했습니다",
+      }))
+    } finally {
+      setSrSendingId(null)
     }
   }
 
@@ -149,7 +206,7 @@ export function Chat() {
         }`}
       >
         <button
-          onClick={() => { setActiveSession(s.id); setCitations([]); setWarnings([]) }}
+          onClick={() => { setActiveSession(s.id); setCitations([]); setWarnings([]); setCitationsByMessage({}); setSrDraftsByMessage({}) }}
           className={`flex-1 text-left px-3 py-2 text-sm truncate transition-colors ${
             activeSession === s.id ? "text-[#00288e] font-medium" : "text-[#191c1e]"
           }`}
@@ -228,7 +285,7 @@ export function Chat() {
             {srCreated && (
               <div className="ml-auto flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium px-3 py-1.5 rounded-lg">
                 <span className="material-symbols-outlined text-sm">check_circle</span>
-                SR 생성됨: {srCreated.title.slice(0, 30)}
+                SR 초안 생성됨: {srCreated.title.slice(0, 30)}
               </div>
             )}
           </div>
@@ -241,7 +298,7 @@ export function Chat() {
             </div>
             <h2 className="text-xl font-semibold text-[#191c1e] mt-4 text-center">무엇을 도와드릴까요?</h2>
             <p className="text-sm text-[#444653] text-center max-w-md mt-2">
-              사내 규정, 재무 데이터, 기술 문서 등 Manual Automation에 등록된 모든 지식을 기반으로 답변해 드립니다.
+              사내 규정, 재무 데이터, 기술 문서 등 DocOps AI에 등록된 모든 지식을 기반으로 답변해 드립니다.
             </p>
             <button
               onClick={createSession}
@@ -263,7 +320,7 @@ export function Chat() {
                     </div>
                     <h2 className="text-xl font-semibold text-[#191c1e] text-center">무엇을 도와드릴까요?</h2>
                     <p className="text-sm text-[#444653] text-center max-w-md">
-                      사내 규정, 재무 데이터, 기술 문서 등 Manual Automation에 등록된 모든 지식을 기반으로 답변해 드립니다.
+                      사내 규정, 재무 데이터, 기술 문서 등 DocOps AI에 등록된 모든 지식을 기반으로 답변해 드립니다.
                     </p>
                   </div>
                 )}
@@ -290,36 +347,86 @@ export function Chat() {
                             </div>
 
                             {/* Citations inside message */}
-                            {msg.id !== "streaming" && citations.length > 0 && msg === messages[messages.length - 1] && (
-                              <>
-                                <div className="h-px w-full bg-[#e0e3e5] my-4" />
-                                <div className="space-y-3">
-                                  <div className="flex items-center gap-1 text-[#444653]">
-                                    <span className="material-symbols-outlined text-sm">menu_book</span>
-                                    <span className="text-xs font-semibold">참고 문서 (출처)</span>
-                                  </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {citations.map((c, i) => (
-                                      <a key={i} href="#" className="flex flex-col gap-1 p-3 bg-[#f7f9fb] rounded-lg border border-[#c4c5d5] hover:border-[#b8c4ff] hover:bg-white hover:shadow-sm transition-all group">
-                                        <div className="flex items-start justify-between">
-                                          <div className="flex items-center gap-1 overflow-hidden">
-                                            <span className="material-symbols-outlined text-base text-[#00288e] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
-                                            <span className="text-sm text-[#191c1e] font-semibold truncate group-hover:text-[#00288e] transition-colors">{c.document_title}</span>
+                            {(() => {
+                              const messageCitations = msg.citations?.length
+                                ? msg.citations
+                                : citationsByMessage[msg.id] || (msg === messages[messages.length - 1] ? citations : [])
+                              if (msg.id === "streaming" || messageCitations.length === 0) return null
+                              return (
+                                <>
+                                  <div className="h-px w-full bg-[#e0e3e5] my-4" />
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-1 text-[#444653]">
+                                      <span className="material-symbols-outlined text-sm">menu_book</span>
+                                      <span className="text-xs font-semibold">참고 문서 (출처)</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {messageCitations.map((c, i) => (
+                                        <a key={i} href="#" className="flex flex-col gap-1 p-3 bg-[#f7f9fb] rounded-lg border border-[#c4c5d5] hover:border-[#b8c4ff] hover:bg-white hover:shadow-sm transition-all group">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex items-center gap-1 overflow-hidden">
+                                              <span className="material-symbols-outlined text-base text-[#00288e] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
+                                              <span className="text-sm text-[#191c1e] font-semibold truncate group-hover:text-[#00288e] transition-colors">{c.document_title || "참고 문서"}</span>
+                                            </div>
                                           </div>
-                                        </div>
-                                        {c.quote && (
-                                          <div className="text-xs text-[#444653] truncate flex items-center gap-1 mt-1">
-                                            <span className="material-symbols-outlined text-[14px]">link</span>
-                                            {c.quote}
-                                          </div>
-                                        )}
-                                      </a>
-                                    ))}
+                                          {c.quote && (
+                                            <div className="text-xs text-[#444653] truncate flex items-center gap-1 mt-1">
+                                              <span className="material-symbols-outlined text-[14px]">link</span>
+                                              {c.quote}
+                                            </div>
+                                          )}
+                                        </a>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              </>
-                            )}
+                                </>
+                              )
+                            })()}
                           </div>
+
+                          {srDraftsByMessage[msg.id] && (
+                            <div className="border border-[#d7b46a] bg-[#fff8e6] rounded-xl p-4 shadow-sm space-y-3">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-base text-[#92600a]">assignment</span>
+                                    <span className="text-xs font-bold text-[#92600a]">AI가 정리한 SR 초안</span>
+                                  </div>
+                                  <p className="text-sm font-semibold text-[#191c1e]">{srDraftsByMessage[msg.id].title}</p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-white border border-[#e6d3a1] px-2 py-0.5 text-[10px] font-semibold text-[#92600a]">
+                                  {srDraftsByMessage[msg.id].priority}
+                                </span>
+                              </div>
+                              <p className="text-xs leading-relaxed text-[#444653] whitespace-pre-wrap line-clamp-4">
+                                {srDraftsByMessage[msg.id].description}
+                              </p>
+                              <div className="flex items-center justify-between gap-3 pt-1">
+                                <p className="text-[11px] text-[#757684]">
+                                  검토 후 바로 Jira/Webhook으로 전송할 수 있습니다.
+                                </p>
+                                {srSentById[srDraftsByMessage[msg.id].id] ? (
+                                  <span className="text-xs font-semibold text-emerald-700">
+                                    {srSentById[srDraftsByMessage[msg.id].id]}
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => sendSRDraft(srDraftsByMessage[msg.id])}
+                                    disabled={srSendingId === srDraftsByMessage[msg.id].id}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#00288e] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#1e40af] disabled:opacity-50 transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">send</span>
+                                    {srSendingId === srDraftsByMessage[msg.id].id ? "전송 중..." : "SR 보내기"}
+                                  </button>
+                                )}
+                              </div>
+                              {srSendErrorById[srDraftsByMessage[msg.id].id] && (
+                                <p className="text-xs font-medium text-[#ba1a1a]">
+                                  {srSendErrorById[srDraftsByMessage[msg.id].id]}
+                                </p>
+                              )}
+                            </div>
+                          )}
 
                           {/* Action buttons */}
                           {msg.id !== "streaming" && msg.content && (
@@ -337,7 +444,7 @@ export function Chat() {
                               </button>
                               <div className="ml-auto">
                                 {feedbackSuccess === msg.id ? (
-                                  <span className="text-xs text-emerald-600 font-medium">오류 제보 접수 완료</span>
+                                  <span className="text-xs text-emerald-600 font-medium">{feedbackNotice[msg.id] || "오류 제보 접수 완료"}</span>
                                 ) : feedbackFor === msg.id ? (
                                   <div className="bg-[#ffdad6]/30 border border-[#ffdad6] rounded-lg p-3 space-y-2 max-w-sm">
                                     <p className="text-xs font-medium text-[#93000a]">어떤 내용이 실제와 다른가요?</p>
@@ -360,7 +467,7 @@ export function Chat() {
                                 ) : (
                                   <button onClick={() => setFeedbackFor(msg.id)} className="flex items-center gap-1 text-xs text-[#757684] hover:text-[#ba1a1a] hover:bg-[#ffdad6] px-3 py-1 rounded transition-all">
                                     <span className="material-symbols-outlined text-base">report</span>
-                                    실제와 달라요
+                                    오류 수정 요청
                                   </button>
                                 )}
                               </div>

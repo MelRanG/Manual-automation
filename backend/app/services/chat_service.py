@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.chat import ChatSession, ChatMessage, AnswerCitation
 from app.models.document import Document
@@ -14,21 +15,27 @@ from app.services.search_service import search_similar_chunks
 
 logger = logging.getLogger(__name__)
 
-RAG_SYSTEM_PROMPT = """당신은 Manual Automation 문서 관리 시스템의 AI 어시스턴트입니다.
+RAG_SYSTEM_PROMPT = """당신은 DocOps AI 문서 관리 시스템의 AI 어시스턴트입니다.
 문서 컨텍스트를 기반으로 질문에 답변합니다.
 
-사용자 메시지가 "[변경 요청]"으로 시작하면, 이것은 SR(서비스 요청) 등록 대화입니다.
-이 경우 다음 필수 정보가 모두 충족됐는지 판단하세요:
-  1. 제목 — 무엇을 변경해야 하는지 명확히 알 수 있는 한 줄 제목
-  2. 내용 — 변경 이유, 현재 문제, 원하는 결과 등 구체적인 설명
-  3. 우선순위 — high / medium / low 중 하나
+사용자 메시지가 "[변경 요청]"으로 시작하면, 이것은 문서/시스템 변경 요청입니다.
+이 경우 먼저 SR 생성에 필요한 정보가 충분한지 판단하세요.
 
-[필수 정보가 부족한 경우]
-부족한 항목이 무엇인지 친절하게 안내하고, 추가 질문으로만 응답하세요.
-절대 sr_proposal 블록을 포함하지 마세요.
+SR 생성에 필요한 최소 정보:
+- 변경 대상 업무/화면/문서
+- 현재 문제 또는 현행 상태
+- 원하는 변경 내용
+- 기대 효과 또는 처리 이유
 
-[필수 정보가 모두 충족된 경우]
-답변 맨 끝에 반드시 아래 SR 제안 블록을 포함하세요:
+정보가 부족하면 SR을 만들지 말고, 부족한 항목을 확인하는 질문을 1~3개만 하세요.
+정보가 충분하면:
+1. 요청 내용을 아래 항목으로 정리해서 사용자에게 보여주세요.
+   - 요청 부서/요청자 맥락(알 수 없으면 "확인 필요")
+   - 현행 상태
+   - 요구사항
+   - 기대 효과
+   - 문서/매뉴얼 현행화 필요 여부
+2. 답변 맨 끝에 아래 SR 제안 블록을 포함하세요:
 
 ```sr_proposal
 {"is_change_request": true, "title": "간결한 SR 제목", "description": "구체적인 변경 내용 설명", "priority": "medium", "target_document": "관련 문서 제목"}
@@ -87,13 +94,44 @@ async def list_sessions(db: AsyncSession, user_id: uuid.UUID) -> list[ChatSessio
     return list(result.scalars().all())
 
 
-async def get_messages(db: AsyncSession, session_id: uuid.UUID) -> list[ChatMessage]:
+async def get_messages(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
     result = await db.execute(
         select(ChatMessage)
+        .options(selectinload(ChatMessage.citations))
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at.asc())
     )
-    return list(result.scalars().all())
+    loaded_messages = list(result.scalars().all())
+    doc_ids = {
+        citation.document_id
+        for message in loaded_messages
+        for citation in message.citations
+        if citation.document_id
+    }
+    doc_titles: dict[uuid.UUID, str] = {}
+    if doc_ids:
+        docs_result = await db.execute(select(Document).where(Document.id.in_(doc_ids)))
+        doc_titles = {doc.id: doc.title for doc in docs_result.scalars().all()}
+
+    messages = []
+    for message in loaded_messages:
+        messages.append({
+            "id": message.id,
+            "session_id": message.session_id,
+            "role": message.role,
+            "content": message.content,
+            "created_at": message.created_at,
+            "citations": [
+                {
+                    "document_id": str(c.document_id),
+                    "document_title": doc_titles.get(c.document_id, "참고 문서"),
+                    "quote": c.quote or "",
+                    "chunk_id": str(c.chunk_id) if c.chunk_id else "",
+                }
+                for c in message.citations
+            ],
+        })
+    return messages
 
 
 async def ask_question(

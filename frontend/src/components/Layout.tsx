@@ -105,7 +105,7 @@ export function Layout() {
             </div>
             <div>
               <h1 className="text-base font-bold text-foreground tracking-tight leading-tight">
-                Manual Automation
+                DocOps AI
               </h1>
               <p className="text-[11px] text-muted-foreground leading-tight">Enterprise Tier</p>
             </div>

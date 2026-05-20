@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatSessionCreate(BaseModel):
@@ -18,16 +18,6 @@ class ChatSessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ChatMessageResponse(BaseModel):
-    id: uuid.UUID
-    session_id: uuid.UUID
-    role: str
-    content: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class AskQuestionRequest(BaseModel):
     question: str
 
@@ -37,6 +27,17 @@ class CitationResponse(BaseModel):
     document_title: str
     quote: str
     chunk_id: str
+
+
+class ChatMessageResponse(BaseModel):
+    id: uuid.UUID
+    session_id: uuid.UUID
+    role: str
+    content: str
+    created_at: datetime
+    citations: list[CitationResponse] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
 
 
 class SRDraftResponse(BaseModel):

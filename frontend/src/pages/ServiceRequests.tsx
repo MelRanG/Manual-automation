@@ -1,8 +1,17 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { api, type SRDraft, type Document, type ChangeProposal } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
+
+const isRealJiraLink = (sr: SRDraft) =>
+  Boolean(
+    sr.jira_issue_key &&
+    sr.jira_issue_url &&
+    !sr.jira_issue_key.startsWith("LOCAL-") &&
+    !sr.jira_issue_url.includes("localhost")
+  )
 
 type Tab = "all" | "draft" | "active" | "pending_doc_review" | "done"
 type SourceFilter = "all" | "direct" | "chatbot"
@@ -197,7 +206,7 @@ export function ServiceRequests() {
 
       <div className="flex-1 overflow-y-auto">
         {selectedSR ? (
-          <SRDetail sr={selectedSR} onRefetch={refetch} docs={docs} />
+          <SRDetail key={selectedSR.id} sr={selectedSR} onRefetch={refetch} docs={docs} />
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
             목록에서 항목을 선택하세요
@@ -209,9 +218,13 @@ export function ServiceRequests() {
 }
 
 function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void; docs: Document[] }) {
+  const navigate = useNavigate()
   const [activeSection, setActiveSection] = useState<"info" | "review" | "history">("info")
   const [submittingId, setSubmittingId] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({ title: sr.title, description: sr.description, priority: sr.priority })
+  const [saving, setSaving] = useState(false)
 
   const handleSubmitSR = async () => {
     setSubmittingId(true)
@@ -223,6 +236,31 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
       setSubmitError("SR 제출에 실패했습니다.")
     } finally {
       setSubmittingId(false)
+    }
+  }
+
+  const handleLocalComplete = async () => {
+    setSubmittingId(true)
+    try {
+      await api.completeSRLocal(sr.id)
+      onRefetch()
+      navigate("/change-impact")
+    } catch (e) {
+      setSubmitError("완료 처리에 실패했습니다: " + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setSubmittingId(false)
+    }
+  }
+
+  const handleEditSave = async () => {
+    if (!editForm.title.trim() || !editForm.description.trim()) return
+    setSaving(true)
+    try {
+      await api.updateSRDraft(sr.id, editForm)
+      setEditing(false)
+      onRefetch()
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -251,37 +289,98 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
       </div>
 
       {activeSection === "info" && (
-        <div className="space-y-4 text-sm">
-          <div>
-            <p className="text-xs font-semibold text-[#757684] mb-1">내용</p>
-            <p className="text-[#191c1e] whitespace-pre-wrap bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">{sr.description}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><span className="text-[#757684] text-xs">요청자</span><p className="text-[#191c1e] mt-0.5 font-mono text-xs">{sr.user_id.slice(0, 8)}</p></div>
-            <div><span className="text-[#757684] text-xs">요청 일시</span><p className="text-[#191c1e] mt-0.5">{new Date(sr.created_at).toLocaleString("ko-KR")}</p></div>
-            <div><span className="text-[#757684] text-xs">우선순위</span><p className="text-[#191c1e] mt-0.5 capitalize">{sr.priority}</p></div>
-            {sr.jira_issue_key && (
-              <div><span className="text-[#757684] text-xs">Jira 이슈</span>
-                {sr.jira_issue_url ? (
-                  <a href={sr.jira_issue_url} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline block mt-0.5">{sr.jira_issue_key}</a>
-                ) : (
-                  <p className="text-[#191c1e] mt-0.5">{sr.jira_issue_key}</p>
+        <>
+          {editing ? (
+            <div className="space-y-3 text-sm">
+              <input
+                className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
+                value={editForm.title}
+                onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+              />
+              <textarea
+                className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none resize-none"
+                rows={3}
+                value={editForm.description}
+                onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+              />
+              <select
+                className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none bg-white"
+                value={editForm.priority}
+                onChange={e => setEditForm(f => ({ ...f, priority: e.target.value }))}
+              >
+                <option value="lowest">최저</option>
+                <option value="low">낮음</option>
+                <option value="medium">보통</option>
+                <option value="high">높음</option>
+                <option value="critical">긴급</option>
+              </select>
+              <div className="flex gap-2">
+                <button onClick={handleEditSave} disabled={saving} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50 transition-colors">
+                  {saving ? "저장 중..." : "저장"}
+                </button>
+                <button onClick={() => setEditing(false)} className="px-4 py-2 text-sm text-[#444653] hover:bg-[#f2f4f6] rounded-lg transition-colors">취소</button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-xs font-semibold text-[#757684] mb-1">내용</p>
+                <p className="text-[#191c1e] whitespace-pre-wrap bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">{sr.description}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><span className="text-[#757684] text-xs">요청자</span><p className="text-[#191c1e] mt-0.5 font-mono text-xs">{sr.user_id.slice(0, 8)}</p></div>
+                <div><span className="text-[#757684] text-xs">요청 일시</span><p className="text-[#191c1e] mt-0.5">{new Date(sr.created_at).toLocaleString("ko-KR")}</p></div>
+                <div><span className="text-[#757684] text-xs">우선순위</span><p className="text-[#191c1e] mt-0.5 capitalize">{sr.priority}</p></div>
+                {sr.jira_issue_key && (
+                  <div><span className="text-[#757684] text-xs">Jira 이슈</span>
+                    {isRealJiraLink(sr) ? (
+                      <a href={sr.jira_issue_url!} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline block mt-0.5">{sr.jira_issue_key}</a>
+                    ) : (
+                      <p className="text-[#757684] mt-0.5 text-xs" title="Jira가 연결되지 않아 로컬 시뮬레이션 키입니다">{sr.jira_issue_key} (시뮬레이션)</p>
+                    )}
+                  </div>
+                )}
+                {sr.target_url && (
+                  <div><span className="text-[#757684] text-xs">대상 URL</span><a href={sr.target_url} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline block mt-0.5 truncate">{sr.target_url}</a></div>
                 )}
               </div>
-            )}
-            {sr.target_url && (
-              <div><span className="text-[#757684] text-xs">대상 URL</span><a href={sr.target_url} target="_blank" rel="noopener noreferrer" className="text-[#00288e] hover:underline block mt-0.5 truncate">{sr.target_url}</a></div>
-            )}
-          </div>
-          {sr.status === "draft" && (
-            <div className="pt-2 space-y-1">
-              <button onClick={handleSubmitSR} disabled={submittingId} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50">
-                {submittingId ? "제출 중..." : "SR 제출"}
-              </button>
+              <div className="pt-2 flex flex-wrap gap-2">
+                {sr.status === "draft" && (
+                  <>
+                    <button onClick={() => setEditing(true)} className="flex items-center gap-1 px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#444653] hover:bg-[#f2f4f6] transition-colors">
+                      <span className="material-symbols-outlined text-base">edit</span>
+                      수정
+                    </button>
+                    <button onClick={handleSubmitSR} disabled={submittingId} className="flex items-center gap-2 px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50">
+                      <span className="material-symbols-outlined text-base">send</span>
+                      {submittingId ? "제출 중..." : "SR 제출"}
+                    </button>
+                  </>
+                )}
+                {["submitted", "jira_created"].includes(sr.status) && (
+                  <button
+                    onClick={handleLocalComplete}
+                    disabled={submittingId}
+                    className="flex items-center gap-2 px-3 py-1.5 border border-[#1a56db] text-[#1a56db] rounded-lg text-xs font-semibold hover:bg-[#e8f0fe] disabled:opacity-50 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                    {submittingId ? "처리 중..." : "완료 처리 (시뮬레이터)"}
+                  </button>
+                )}
+                {sr.status === "pending_document_selection" && (
+                  <button
+                    onClick={() => navigate("/change-impact")}
+                    className="flex items-center gap-2 px-3 py-1.5 border border-[#e6a817] text-[#92600a] rounded-lg text-xs font-semibold hover:bg-[#fff3dc] transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                    문서 반영 대기 →
+                  </button>
+                )}
+              </div>
               {submitError && <p className="text-red-500 text-xs">{submitError}</p>}
             </div>
           )}
-        </div>
+        </>
       )}
 
       {activeSection === "review" && (

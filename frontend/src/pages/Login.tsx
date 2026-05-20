@@ -49,8 +49,8 @@ export function Login() {
               <FileText className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[#191c1e]">Manual Automation</h1>
-              <p className="text-xs text-[#757684]">Enterprise Documentation Platform</p>
+              <h1 className="text-xl font-bold text-[#191c1e]">DocOps AI</h1>
+              <p className="text-xs text-[#757684]">Document Lifecycle Automation</p>
             </div>
           </div>
 
