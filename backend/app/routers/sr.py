@@ -5,9 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.models.sr import WebhookDeliveryLog
-from app.schemas.sr import SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
-from app.services import sr_service
+from app.models.sr import SRDraft, WebhookDeliveryLog
+from app.schemas.sr import AiDocRecommendationResponse, SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
+from app.services import ai_recommendation_service, sr_service
 
 router = APIRouter(prefix="/api/sr", tags=["service-requests"])
 
@@ -97,7 +97,6 @@ async def retry_webhook(log_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     log = result.scalar_one_or_none()
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
-    from app.models.sr import SRDraft
     sr_result = await db.execute(select(SRDraft).where(SRDraft.id == log.sr_draft_id))
     draft = sr_result.scalar_one_or_none()
     if not draft:
@@ -109,7 +108,6 @@ async def retry_webhook(log_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 
 @router.post("/drafts/{sr_id}/complete-local")
 async def complete_sr_local(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    from app.models.sr import SRDraft
     from app.models.feedback import ApprovalRequest as ApprovalRequestModel
 
     result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
@@ -133,3 +131,43 @@ async def complete_sr_local(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db)
     draft.status = "pending_doc_review"
     await db.commit()
     return {"status": "pending_doc_review", "sr_id": str(draft.id), "approval_id": str(approval.id)}
+
+
+@router.get(
+    "/drafts/{sr_id}/ai-doc-recommendation",
+    response_model=AiDocRecommendationResponse | None,
+)
+async def get_ai_doc_recommendation(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+    return draft.ai_doc_recommendation
+
+
+@router.post(
+    "/drafts/{sr_id}/ai-doc-recommendation",
+    response_model=AiDocRecommendationResponse,
+)
+async def create_ai_doc_recommendation(
+    sr_id: uuid.UUID,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(SRDraft).where(SRDraft.id == sr_id).with_for_update()
+    )
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+
+    if draft.ai_doc_recommendation and not force:
+        return draft.ai_doc_recommendation
+
+    try:
+        payload = await ai_recommendation_service.recommend_doc_strategy(db, draft)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=f"AI 추천 생성 실패: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI 추천 생성 실패: {e}")
+    return payload
