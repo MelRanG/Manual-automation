@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.document import Document
-from app.models.feedback import FeedbackReport, ProposedDocumentChange
+from app.models.feedback import FeedbackReport, ProposedDocumentChange, ApprovalRequest
 from app.routers.notifications import create_notification
 from app.schemas.feedback import (
     FeedbackReportCreate,
@@ -139,6 +139,26 @@ async def link_document(
     return FeedbackReportResponse.model_validate(
         feedback, from_attributes=True
     ).model_copy(update={"document_title": doc.title})
+
+
+@router.delete("/{feedback_id}/proposal", status_code=204)
+async def delete_proposal(
+    feedback_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(FeedbackReport).where(FeedbackReport.id == feedback_id))
+    feedback = result.scalar_one_or_none()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+
+    proposal = await feedback_service.get_proposed_change(db, feedback_id)
+    if not proposal:
+        raise HTTPException(status_code=404, detail="No proposal found")
+
+    await db.execute(delete(ApprovalRequest).where(ApprovalRequest.proposed_change_id == proposal.id))
+    await db.execute(delete(ProposedDocumentChange).where(ProposedDocumentChange.id == proposal.id))
+    feedback.status = "pending"
+    await db.commit()
 
 
 @router.delete("/{feedback_id}", status_code=204)

@@ -225,3 +225,40 @@ async def test_get_proposal_is_stale_false_when_version_matches(client: AsyncCli
     resp = await client.get(f"/api/feedback/{feedback_id}/proposal")
     assert resp.status_code == 200
     assert resp.json()["is_stale"] is False
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_delete_proposal_resets_feedback_status(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Delete Proposal Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Some content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Needs fixing",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Needs fixing",
+    })
+
+    # proposal 존재 확인
+    proposal_resp = await client.get(f"/api/feedback/{feedback_id}/proposal")
+    assert proposal_resp.status_code == 200
+
+    # 삭제
+    del_resp = await client.delete(f"/api/feedback/{feedback_id}/proposal")
+    assert del_resp.status_code == 204
+
+    # proposal 사라짐
+    after_resp = await client.get(f"/api/feedback/{feedback_id}/proposal")
+    assert after_resp.status_code == 404
+
+    # feedback status 리셋
+    list_resp = await client.get("/api/feedback")
+    target = next(i for i in list_resp.json() if i["id"] == feedback_id)
+    assert target["status"] == "pending"
