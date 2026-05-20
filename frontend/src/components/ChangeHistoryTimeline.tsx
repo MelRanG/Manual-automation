@@ -36,8 +36,8 @@ interface Props {
 export function ChangeHistoryTimeline({ entityType, entityId, events: externalEvents, loading: externalLoading }: Props) {
   const useExternal = externalEvents !== undefined
   const { data: fetchedEvents, loading: fetchedLoading, error } = useApi<ChangeHistory[]>(
-    () => useExternal ? Promise.resolve(externalEvents ?? []) : api.listHistory(entityType, entityId),
-    [entityType, entityId, useExternal]
+    () => api.listHistory(entityType, entityId),
+    [entityType, entityId]
   )
 
   const events = useExternal ? (externalEvents ?? []) : (fetchedEvents ?? [])
