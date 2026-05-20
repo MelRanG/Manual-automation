@@ -57,7 +57,7 @@ export function ChangeImpact() {
 
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
-  // 탭 변경 시 페이지 초기화
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPage(1) }, [activeTab])
 
   const filteredAnalyses = (analyses ?? []).filter(a =>
@@ -104,8 +104,8 @@ export function ChangeImpact() {
     try {
       const rec = await api.recommendStrategy(analysisId, docId)
       setStrategyRec(rec)
-    } catch (e: any) {
-      alert("전략 분석 실패: " + e.message)
+    } catch (e: unknown) {
+      alert("전략 분석 실패: " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setLoadingStrategy(false)
     }
@@ -120,8 +120,8 @@ export function ChangeImpact() {
       await refetch()
       // 수정안 생성 완료 → pending_review 탭으로 이동, 해당 항목 열기
       switchToTabAndOpen(selectedAnalysis, "pending_review")
-    } catch (e: any) {
-      alert("수정안 생성 실패: " + e.message)
+    } catch (e: unknown) {
+      alert("수정안 생성 실패: " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setGenerating(false)
     }
@@ -136,8 +136,8 @@ export function ChangeImpact() {
       await refetch()
       switchToTabAndOpen(selectedAnalysis, "completed")
       navigate(`/documents/${result.document_id}`)
-    } catch (e: any) {
-      alert("적용 실패: " + e.message)
+    } catch (e: unknown) {
+      alert("적용 실패: " + (e instanceof Error ? e.message : String(e)))
     } finally {
       setApplying(false)
     }

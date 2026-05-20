@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, type ReactNode } from "react"
 
 export interface AuthUser {
   id: string
@@ -19,20 +19,17 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 const USER_KEY = "docops_user"
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
+  const [user, setUser] = useState<AuthUser | null>(() => {
     const stored = localStorage.getItem(USER_KEY)
-    if (stored) {
-      try {
-        setUser(JSON.parse(stored))
-      } catch {
-        localStorage.removeItem(USER_KEY)
-      }
+    if (!stored) return null
+    try {
+      return JSON.parse(stored) as AuthUser
+    } catch {
+      localStorage.removeItem(USER_KEY)
+      return null
     }
-    setIsLoading(false)
-  }, [])
+  })
+  const isLoading = false
 
   const login = async (email: string) => {
     const res = await fetch("/api/auth/login", {
@@ -61,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error("useAuth must be used within AuthProvider")

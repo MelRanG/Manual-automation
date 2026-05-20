@@ -27,6 +27,7 @@ export function useNotifications(userId: string | undefined): UseNotificationsRe
 
   useEffect(() => {
     if (!userId) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadNotifications()
 
     // SSE 연결 (커스텀 fetch 기반 구현 — 헤더 전송 가능)

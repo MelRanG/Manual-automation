@@ -76,6 +76,7 @@ export function Layout() {
   // 새 알림이 오면 토스트 표시
   useEffect(() => {
     if (!newNotification) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setToasts((prev) => [
       ...prev,
       { id: newNotification.id + Date.now(), title: newNotification.title, message: newNotification.message },

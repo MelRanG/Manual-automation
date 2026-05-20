@@ -222,7 +222,12 @@ def _build_s3_upload_key(safe_name: str) -> str:
 def _put_s3_object(key: str, content: bytes) -> None:
     import boto3
 
-    client = boto3.client("s3", region_name=settings.aws_region)
+    client = boto3.client(
+        "s3",
+        region_name=settings.aws_region,
+        aws_access_key_id=settings.aws_access_key_id or None,
+        aws_secret_access_key=settings.aws_secret_access_key or None,
+    )
     client.put_object(
         Bucket=settings.uploads_s3_bucket,
         Key=key,

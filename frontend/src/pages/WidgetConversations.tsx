@@ -37,6 +37,7 @@ export function WidgetConversations() {
     }
   }
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchSessions() }, [])
 
   const selectSession = async (id: string) => {

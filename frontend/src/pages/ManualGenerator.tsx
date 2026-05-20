@@ -199,7 +199,7 @@ export function ManualGenerator() {
   )
 }
 
-function ManualDetail({ job, onRefetch: _onRefetch }: { job: ManualJob; onRefetch: () => void }) {
+function ManualDetail({ job }: { job: ManualJob; onRefetch?: () => void }) {
   const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">("info")
 
   return (

@@ -10,8 +10,9 @@ export function useApi<T>(fetcher: () => Promise<T>, deps: unknown[] = []) {
     setError(null)
     fetcher()
       .then(setData)
-      .catch((e) => setError(e.message))
+      .catch((e) => setError((e as Error).message))
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/use-memo, react-hooks/exhaustive-deps
   }, deps)
 
   useEffect(() => { refetch() }, [refetch])

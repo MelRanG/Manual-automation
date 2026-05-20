@@ -465,8 +465,8 @@ function ApprovalCard({
                           await api.reviewDocApproval(approval.id, { reviewer_id: reviewerId, action: "reject" })
                           onCloseReview()
                           onRefetch()
-                        } catch (e: any) {
-                          alert("처리 중 오류: " + e.message)
+                        } catch (e: unknown) {
+                          alert("처리 중 오류: " + (e instanceof Error ? e.message : String(e)))
                         } finally { setLocalSubmitting(false) }
                       }}
                       className="px-3 py-1.5 text-sm rounded border border-[#e0e3e5] text-[#757684] hover:bg-[#f2f4f6]"
@@ -481,8 +481,8 @@ function ApprovalCard({
                           await api.reviewDocApproval(approval.id, { reviewer_id: reviewerId, action: "approve_doc" })
                           onCloseReview()
                           onRefetch()
-                        } catch (e: any) {
-                          alert("처리 중 오류: " + e.message)
+                        } catch (e: unknown) {
+                          alert("처리 중 오류: " + (e instanceof Error ? e.message : String(e)))
                         } finally { setLocalSubmitting(false) }
                       }}
                       className="px-3 py-1.5 text-sm rounded bg-[#00288e] text-white hover:bg-[#001a6b]"
@@ -501,8 +501,8 @@ function ApprovalCard({
                           })
                           onCloseReview()
                           onRefetch()
-                        } catch (e: any) {
-                          alert("처리 중 오류: " + e.message)
+                        } catch (e: unknown) {
+                          alert("처리 중 오류: " + (e instanceof Error ? e.message : String(e)))
                         } finally { setLocalSubmitting(false) }
                       }}
                       className="px-3 py-1.5 text-sm rounded bg-[#1a6b3c] text-white hover:bg-[#0d4a28] disabled:opacity-40"

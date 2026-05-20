@@ -101,7 +101,7 @@ export function Feedback() {
   )
 }
 
-function FeedbackDetail({ item, onRefetch: _onRefetch }: { item: FeedbackReport; onRefetch: () => void }) {
+function FeedbackDetail({ item }: { item: FeedbackReport; onRefetch?: () => void }) {
   const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">("info")
   const { data: proposal } = useApi<ProposedChange>(
     () => api.getFeedbackProposal(item.id),

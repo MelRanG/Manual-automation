@@ -15,5 +15,6 @@ def test_get_provider_bedrock():
         mock_settings.aws_region = "us-east-1"
         mock_settings.aws_access_key_id = "key"
         mock_settings.aws_secret_access_key = "secret"
+        mock_settings.aws_bearer_token_bedrock.get_secret_value.return_value = ""
         provider = get_embedding_provider()
     assert isinstance(provider, BedrockEmbeddingProvider)

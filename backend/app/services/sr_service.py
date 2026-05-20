@@ -108,7 +108,7 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
             )
             db.add(log)
             await db.commit()
-            return {"sr_id": str(sr_id), "status": "jira_created", "jira_issue_key": issue["key"]}
+            return {"sr_id": str(sr_id), "status": "jira_created", "webhook": {"status": "skipped", "reason": "jira_created"}, "jira_issue_key": issue["key"]}
         except Exception as e:
             logger.error(f"Jira issue creation failed: {e}")
             # fallback: webhook 시도

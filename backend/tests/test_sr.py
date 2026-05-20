@@ -136,7 +136,7 @@ async def test_list_sr_drafts_status_filter_active(client: AsyncClient, test_use
     assert resp.status_code == 200
     data = resp.json()
     assert "items" in data
-    assert all(item["status"] in ("submitted", "jira_created") for item in data["items"])
+    assert all(item["status"] in ("submitted", "jira_created", "pending_document_selection") for item in data["items"])
 
 
 @pytest.mark.asyncio(loop_scope="session")

@@ -1,6 +1,8 @@
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -10,18 +12,22 @@ from app.schemas.change_impact import (
     ChangeProposalResponse,
 )
 from pydantic import BaseModel
+from app.services import change_impact_service
+
+
 class StrategyRecommendationRequest(BaseModel):
     document_id: uuid.UUID
+
 
 class StrategyRecommendationResponse(BaseModel):
     recommended_strategy: str
     confidence: float
     reasoning: str
 
+
 class GenerateProposalRequest(BaseModel):
     document_id: uuid.UUID
     strategy: str
-from app.services import change_impact_service
 
 router = APIRouter(prefix="/api/change-impact", tags=["change-impact"])
 
@@ -44,16 +50,32 @@ async def recommend_strategy(
 ):
     return await change_impact_service.recommend_strategy_for_document(db, analysis_id, data.document_id)
 
-@router.post("/{analysis_id}/proposals", response_model=ChangeProposalResponse)
-async def generate_proposal_for_document(
+@router.post("/{analysis_id}/proposals", response_model=list[ChangeProposalResponse])
+async def generate_proposals(
     analysis_id: uuid.UUID,
-    data: GenerateProposalRequest,
+    data: Optional[GenerateProposalRequest] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    proposal = await change_impact_service.generate_change_proposal_with_strategy(
-        db, analysis_id, data.document_id, data.strategy
-    )
-    return proposal
+    if data is not None:
+        proposal = await change_impact_service.generate_change_proposal_with_strategy(
+            db, analysis_id, data.document_id, data.strategy
+        )
+        return [proposal]
+
+    from app.models.sr import ChangeImpactAnalysis
+    result = await db.execute(select(ChangeImpactAnalysis).where(ChangeImpactAnalysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    related_ids = analysis.related_document_ids or []
+    proposals = []
+    for doc_id in related_ids:
+        proposal = await change_impact_service.generate_change_proposal_with_strategy(
+            db, analysis_id, uuid.UUID(str(doc_id)), "update"
+        )
+        proposals.append(proposal)
+    return proposals
 
 
 @router.get("", response_model=list[ImpactAnalysisResponse])
