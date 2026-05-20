@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.models.sr import SRDraft, WebhookDeliveryLog
-from app.schemas.sr import AiDocRecommendationResponse, SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
+from app.models.sr import ChangeImpactAnalysis, DocumentChangeProposal, SRDraft, WebhookDeliveryLog
+from app.schemas.sr import AiDocRecommendationResponse, ImpactAnalysisSummary, LatestProposalResponse, ProposalSummary, SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
 from app.services import ai_recommendation_service, sr_service
 
 router = APIRouter(prefix="/api/sr", tags=["service-requests"])
@@ -169,3 +169,43 @@ async def create_ai_doc_recommendation(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI 추천 생성 실패: {e}")
     return payload
+
+
+@router.get(
+    "/drafts/{sr_id}/latest-proposal",
+    response_model=LatestProposalResponse | None,
+)
+async def get_latest_proposal(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+
+    analysis_result = await db.execute(
+        select(ChangeImpactAnalysis)
+        .where(
+            ChangeImpactAnalysis.source_type == "jira_sr",
+            ChangeImpactAnalysis.source_id == sr_id,
+        )
+        .order_by(ChangeImpactAnalysis.created_at.desc())
+        .limit(1)
+    )
+    analysis = analysis_result.scalar_one_or_none()
+    if not analysis:
+        return None
+
+    proposal_result = await db.execute(
+        select(DocumentChangeProposal)
+        .where(DocumentChangeProposal.impact_analysis_id == analysis.id)
+        .order_by(DocumentChangeProposal.created_at.desc())
+        .limit(1)
+    )
+    proposal = proposal_result.scalar_one_or_none()
+
+    doc_mode_hint = "existing" if proposal and proposal.document_id else "new"
+
+    return LatestProposalResponse(
+        impact_analysis=ImpactAnalysisSummary.model_validate(analysis),
+        proposal=ProposalSummary.model_validate(proposal) if proposal else None,
+        doc_mode_hint=doc_mode_hint,
+    )
