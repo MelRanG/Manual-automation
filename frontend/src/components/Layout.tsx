@@ -4,9 +4,7 @@ import { cn } from "@/lib/utils"
 import {
   FileText,
   MessageSquare,
-  AlertCircle,
   CheckCircle,
-  Shield,
   GitMerge,
   LayoutDashboard,
   Ticket,
@@ -31,8 +29,6 @@ const navItems = [
   { to: "/documents", icon: FileText, label: "문서 관리" },
   { to: "/chat", icon: MessageSquare, label: "Q&A 챗봇" },
   { to: "/approvals", icon: CheckCircle, label: "승인 관리" },
-  { to: "/feedback", icon: AlertCircle, label: "오류 제보" },
-  { to: "/trust", icon: Shield, label: "신뢰도 점수" },
   { to: "/sr", icon: Ticket, label: "서비스 요청" },
   { to: "/change-impact", icon: GitMerge, label: "변경 영향" },
   { to: "/webhook-logs", icon: Webhook, label: "웹훅 로그" },
