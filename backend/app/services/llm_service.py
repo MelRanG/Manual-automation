@@ -6,15 +6,15 @@ from app.config import settings
 
 
 def _prepend_context(messages: list[dict], context: str) -> list[dict]:
-    """context가 있으면 첫 번째 user 메시지 앞에 RAG context를 prepend한다."""
+    """context가 있으면 마지막 user 메시지 앞에 RAG context를 prepend한다."""
     if not context or not messages:
         return list(messages)
     result = list(messages)
-    for i, m in enumerate(result):
-        if m["role"] == "user":
+    for i in range(len(result) - 1, -1, -1):
+        if result[i]["role"] == "user":
             result[i] = {
                 "role": "user",
-                "content": f"Context from documentation:\n{context}\n\nUser question: {m['content']}",
+                "content": f"Context from documentation:\n{context}\n\nUser question: {result[i]['content']}",
             }
             break
     return result

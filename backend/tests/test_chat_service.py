@@ -108,3 +108,34 @@ async def test_ask_question_stream_includes_history():
 
         token_events = [e for e in events if "token" in e]
         assert len(token_events) > 0
+
+
+from app.services.llm_service import _prepend_context
+
+
+def test_prepend_context_single_message():
+    """단일 메시지(히스토리 없음): 현재 질문에 context가 붙는다."""
+    messages = [{"role": "user", "content": "현재 질문"}]
+    result = _prepend_context(messages, "문서 내용")
+    assert result[0]["content"] == "Context from documentation:\n문서 내용\n\nUser question: 현재 질문"
+
+
+def test_prepend_context_multi_turn():
+    """멀티턴: context가 첫 번째가 아닌 마지막 user 메시지에 붙는다."""
+    messages = [
+        {"role": "user", "content": "이전 질문"},
+        {"role": "assistant", "content": "이전 답변"},
+        {"role": "user", "content": "현재 질문"},
+    ]
+    result = _prepend_context(messages, "문서 내용")
+    assert result[0]["content"] == "이전 질문"  # 이전 질문은 그대로
+    assert "문서 내용" in result[2]["content"]  # 마지막 user 메시지에 context 주입
+    assert "현재 질문" in result[2]["content"]
+
+
+def test_prepend_context_no_context():
+    """context가 없으면 messages 복사본을 그대로 반환한다."""
+    messages = [{"role": "user", "content": "질문"}]
+    result = _prepend_context(messages, "")
+    assert result == messages
+    assert result is not messages  # 복사본이어야 함

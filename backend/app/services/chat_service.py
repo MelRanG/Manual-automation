@@ -120,7 +120,7 @@ async def ask_question(
         f"[{c['document_title']}] {c['content']}" for c in relevant_chunks
     )
 
-    messages = [{"role": m.role, "content": m.content} for m in history[-20:]]
+    messages = [{"role": m.role, "content": m.content} for m in history[-19:]]
     messages.append({"role": "user", "content": question})
 
     llm = get_llm_provider()
@@ -238,7 +238,7 @@ async def ask_question_stream(
         f"[{c['document_title']}] {c['content']}" for c in relevant_chunks
     )
 
-    messages = [{"role": m.role, "content": m.content} for m in history[-20:]]
+    messages = [{"role": m.role, "content": m.content} for m in history[-19:]]
     messages.append({"role": "user", "content": question})
 
     llm = get_llm_provider()
