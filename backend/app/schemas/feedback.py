@@ -41,6 +41,7 @@ class ProposedChangeResponse(BaseModel):
     confidence: float
     source_type: str
     status: str
+    is_stale: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -58,3 +59,9 @@ class RequestDraftBody(BaseModel):
 
 class LinkDocumentBody(BaseModel):
     document_id: uuid.UUID
+
+
+class ApplyDraftBody(BaseModel):
+    action: str  # "apply" | "reject"
+    edited_text: str | None = None
+    reviewer_id: uuid.UUID
