@@ -19,6 +19,7 @@ class FeedbackReportResponse(BaseModel):
     chunk_id: uuid.UUID | None
     chat_message_id: uuid.UUID | None
     feedback_text: str
+    reviewed_text: str | None = None
     status: str
     document_title: str | None = None
     proposed_change_status: str | None = None
@@ -49,3 +50,11 @@ class FeedbackWithProposalResponse(BaseModel):
     feedback: FeedbackReportResponse
     proposed_change: ProposedChangeResponse | None
     approval_id: uuid.UUID | None = None
+
+
+class RequestDraftBody(BaseModel):
+    reviewed_text: str
+
+
+class LinkDocumentBody(BaseModel):
+    document_id: uuid.UUID
