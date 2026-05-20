@@ -40,16 +40,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify AWS identity and baseline permissions
+      - name: Check AWS identity
         shell: bash
-        run: |
-          set -euo pipefail
-          aws sts get-caller-identity
-          aws ecr describe-registry >/dev/null
-          aws ec2 describe-availability-zones --region "$AWS_REGION" >/dev/null
-          aws ecs list-clusters --region "$AWS_REGION" >/dev/null
-          aws rds describe-db-engine-versions --engine postgres --region "$AWS_REGION" --max-records 20 >/dev/null
-          aws s3api list-buckets >/dev/null
+        run: aws sts get-caller-identity
+
+      - name: Check ECR permissions
+        run: aws ecr describe-registry --region "$AWS_REGION"
+
+      - name: Check EC2/VPC permissions
+        run: aws ec2 describe-availability-zones --region "$AWS_REGION"
+
+      - name: Check ECS permissions
+        run: aws ecs list-clusters --region "$AWS_REGION"
+
+      - name: Check RDS permissions
+        run: aws rds describe-db-engine-versions --engine postgres --region "$AWS_REGION" --max-records 20
+
+      - name: Check S3 permissions
+        run: aws s3api list-buckets
 
       - name: Bootstrap Terraform remote state
         shell: bash
