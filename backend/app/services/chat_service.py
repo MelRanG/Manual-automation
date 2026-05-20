@@ -103,6 +103,8 @@ async def ask_question(
     if not session:
         raise ValueError("Session not found")
 
+    history = await get_messages(db, session_id)
+
     user_msg = ChatMessage(
         id=uuid.uuid4(),
         session_id=session_id,
@@ -118,8 +120,11 @@ async def ask_question(
         f"[{c['document_title']}] {c['content']}" for c in relevant_chunks
     )
 
+    messages = [{"role": m.role, "content": m.content} for m in history[-20:]]
+    messages.append({"role": "user", "content": question})
+
     llm = get_llm_provider()
-    answer = await llm.generate(RAG_SYSTEM_PROMPT, question, context)
+    answer = await llm.generate_with_history(RAG_SYSTEM_PROMPT, messages, context)
 
     # SR 제안 감지 — 변경 요청 탭에서 보낸 메시지일 때만 처리
     sr_proposal = _extract_sr_proposal(answer) if question.startswith("[변경 요청]") else None
