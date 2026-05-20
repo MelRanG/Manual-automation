@@ -29,23 +29,29 @@ function formatDate(iso: string) {
 interface Props {
   entityType: "sr" | "feedback" | "manual"
   entityId: string
+  events?: ChangeHistory[] | null
+  loading?: boolean
 }
 
-export function ChangeHistoryTimeline({ entityType, entityId }: Props) {
-  const { data: events, loading, error } = useApi<ChangeHistory[]>(
-    () => api.listHistory(entityType, entityId),
-    [entityType, entityId]
+export function ChangeHistoryTimeline({ entityType, entityId, events: externalEvents, loading: externalLoading }: Props) {
+  const useExternal = externalEvents !== undefined
+  const { data: fetchedEvents, loading: fetchedLoading, error } = useApi<ChangeHistory[]>(
+    () => useExternal ? Promise.resolve(externalEvents ?? []) : api.listHistory(entityType, entityId),
+    [entityType, entityId, useExternal]
   )
+
+  const events = useExternal ? (externalEvents ?? []) : (fetchedEvents ?? [])
+  const loading = externalLoading !== undefined ? externalLoading : fetchedLoading
 
   if (loading) {
     return <div className="text-xs text-[#757684] py-4">이력 로딩 중...</div>
   }
 
-  if (error) {
+  if (!useExternal && error) {
     return <p className="text-sm text-red-500 px-4">이력을 불러오지 못했습니다.</p>
   }
 
-  if (!events || events.length === 0) {
+  if (events.length === 0) {
     return <div className="text-xs text-[#757684] py-4">이력이 없습니다.</div>
   }
 
