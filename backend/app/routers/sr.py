@@ -166,8 +166,6 @@ async def create_ai_doc_recommendation(
 
     try:
         payload = await ai_recommendation_service.recommend_doc_strategy(db, draft)
-    except ValueError as e:
-        raise HTTPException(status_code=502, detail=f"AI 추천 생성 실패: {e}")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI 추천 생성 실패: {e}")
     return payload
