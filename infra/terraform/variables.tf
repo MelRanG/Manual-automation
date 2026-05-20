@@ -85,13 +85,13 @@ variable "allowed_http_cidr_blocks" {
 variable "llm_provider" {
   description = "Application LLM provider."
   type        = string
-  default     = "mock"
+  default     = "bedrock"
 }
 
 variable "embedding_model" {
   description = "Application embedding provider."
   type        = string
-  default     = "mock"
+  default     = "bedrock"
 }
 
 variable "bedrock_model_id" {
