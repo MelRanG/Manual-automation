@@ -166,7 +166,7 @@ export function Documents() {
             <span className="material-symbols-outlined text-base">delete_sweep</span>전체 삭제
           </button>
           <label className="cursor-pointer flex items-center gap-2 px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm text-[#191c1e] hover:bg-[#f2f4f6] transition-colors">
-            <input type="file" className="hidden" multiple onChange={handleFileSelect} accept=".txt,.md,.html,.json,.csv,.docx,.xlsx,.xls" />
+            <input type="file" className="hidden" multiple onChange={handleFileSelect} accept=".txt,.md,.html,.json,.csv,.docx,.xlsx,.xls,.pdf,.pptx,.ppt" />
             <span className="material-symbols-outlined text-base">upload_file</span>업로드
           </label>
           <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] transition-colors shadow-sm">
@@ -361,9 +361,17 @@ export function Documents() {
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${doc.status === "active" ? "bg-[#d5e3fc] text-[#00288e]" : "bg-[#e6e8ea] text-[#444653]"}`}>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                      doc.status === "active" ? "bg-[#d5e3fc] text-[#00288e]"
+                      : doc.status === "converting" ? "bg-[#fff3cd] text-[#856404]"
+                      : doc.status === "conversion_failed" ? "bg-[#ffdad6] text-[#93000a]"
+                      : "bg-[#e6e8ea] text-[#444653]"
+                    }`}>
                       <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                      {doc.status === "active" ? "활성" : doc.status}
+                      {doc.status === "active" ? "활성"
+                        : doc.status === "converting" ? "⏳ 변환 중"
+                        : doc.status === "conversion_failed" ? "⚠ 변환 실패"
+                        : doc.status}
                     </span>
                   </td>
                   <td className="px-4 py-3">
