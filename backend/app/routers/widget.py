@@ -76,7 +76,7 @@ async def widget_get_messages(
         raise HTTPException(status_code=404, detail="Session not found")
     messages = await chat_service.get_messages(db, session_id)
     return [
-        {"id": str(m.id), "role": m.role, "content": m.content, "created_at": m.created_at.isoformat()}
+        {"id": str(m["id"]), "role": m["role"], "content": m["content"], "created_at": m["created_at"].isoformat()}
         for m in messages
     ]
 
