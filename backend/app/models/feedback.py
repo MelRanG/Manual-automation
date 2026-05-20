@@ -23,6 +23,7 @@ class FeedbackReport(Base, UUIDMixin, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("document_chunks.id")
     )
     feedback_text: Mapped[str] = mapped_column(Text)
+    reviewed_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="pending")
 
     user: Mapped["User"] = relationship(back_populates="feedback_reports")  # noqa: F821
