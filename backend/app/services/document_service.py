@@ -1,5 +1,4 @@
 import asyncio
-import io
 import uuid
 from pathlib import Path
 
@@ -11,42 +10,10 @@ from app.models.document import Document, DocumentVersion
 from app.schemas.document import DocumentCreate
 from app.config import settings
 from app.services.chunking_service import chunk_and_embed_version
+from app.routers.notifications import create_notification
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
-
-
-def convert_to_markdown(filename: str, file_bytes: bytes) -> str:
-    """docx/xlsx/xls 파일을 마크다운 텍스트로 변환."""
-    ext = Path(filename).suffix.lower()
-
-    if ext == ".docx":
-        import mammoth
-        import markdownify
-        result = mammoth.convert_to_html(io.BytesIO(file_bytes))
-        return markdownify.markdownify(result.value, heading_style="ATX")
-
-    if ext in (".xlsx", ".xls"):
-        import openpyxl
-        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-        parts: list[str] = []
-        for sheet in wb.worksheets:
-            parts.append(f"## {sheet.title}\n")
-            rows = list(sheet.iter_rows(values_only=True))
-            if not rows:
-                continue
-            # header row
-            header = [str(c) if c is not None else "" for c in rows[0]]
-            parts.append("| " + " | ".join(header) + " |")
-            parts.append("| " + " | ".join(["---"] * len(header)) + " |")
-            for row in rows[1:]:
-                cells = [str(c) if c is not None else "" for c in row]
-                parts.append("| " + " | ".join(cells) + " |")
-            parts.append("")
-        wb.close()
-        return "\n".join(parts)
-
-    return file_bytes.decode("utf-8", errors="replace")
 
 
 async def create_document(
@@ -54,19 +21,22 @@ async def create_document(
     data: DocumentCreate,
     content: str,
     source_file_url: str | None = None,
+    original_file_path: str | None = None,
+    status: str = "active",
 ) -> Document:
     doc = Document(
         id=uuid.uuid4(),
         title=data.title,
         description=data.description,
         owner_id=data.owner_id,
-        status="active",
+        status=status,
         trust_score=1.0,
         document_type=data.document_type,
         domain=data.domain,
         audience=data.audience,
         source_type=data.source_type,
         source_file_url=source_file_url,
+        original_file_path=original_file_path,
         related_sr_id=data.related_sr_id,
         jira_issue_key=data.jira_issue_key,
         tags=data.tags,
@@ -74,23 +44,26 @@ async def create_document(
     db.add(doc)
     await db.flush()
 
-    version = DocumentVersion(
-        id=uuid.uuid4(),
-        document_id=doc.id,
-        version_number=1,
-        content=content,
-        source_file_url=source_file_url,
-        created_by=data.owner_id,
-    )
-    db.add(version)
-    await db.flush()
+    if status == "active":
+        version = DocumentVersion(
+            id=uuid.uuid4(),
+            document_id=doc.id,
+            version_number=1,
+            content=content,
+            source_file_url=source_file_url,
+            created_by=data.owner_id,
+        )
+        db.add(version)
+        await db.flush()
+        doc.current_version_id = version.id
+        await db.commit()
+        await db.refresh(doc)
+        await db.refresh(version)
+        asyncio.create_task(_embed_in_background(version.id))
+    else:
+        await db.commit()
+        await db.refresh(doc)
 
-    doc.current_version_id = version.id
-    await db.commit()
-    await db.refresh(doc)
-    await db.refresh(version)
-
-    asyncio.create_task(_embed_in_background(version.id))
     return doc
 
 
@@ -269,6 +242,70 @@ async def _embed_in_background(version_id: uuid.UUID) -> None:
                 await chunk_and_embed_version(db, version)
     except Exception:
         pass
+
+
+async def convert_and_finalize(
+    document_id: uuid.UUID,
+    file_bytes: bytes,
+    filename: str,
+    owner_id: uuid.UUID | None,
+) -> None:
+    """BackgroundTasks에서 실행: 파일 변환 후 DocumentVersion 생성 및 status 갱신."""
+    from app.services.file_converter import convert_to_markdown as _file_convert
+
+    try:
+        content = await _file_convert(
+            file_bytes=file_bytes,
+            filename=filename,
+            document_id=str(document_id),
+        )
+        async with SessionLocal() as db:
+            doc = await get_document(db, document_id)
+            if not doc:
+                return
+
+            version = DocumentVersion(
+                id=uuid.uuid4(),
+                document_id=document_id,
+                version_number=1,
+                content=content,
+                source_file_url=doc.source_file_url,
+                created_by=owner_id,
+            )
+            db.add(version)
+            await db.flush()
+
+            doc.current_version_id = version.id
+            doc.status = "active"
+            await db.commit()
+            await db.refresh(version)
+
+            asyncio.create_task(_embed_in_background(version.id))
+
+            if owner_id:
+                await create_notification(
+                    db,
+                    user_id=owner_id,
+                    type="document_converted",
+                    title="문서 변환 완료",
+                    message=f"'{doc.title}' 파일 변환이 완료되었습니다.",
+                    document_id=document_id,
+                )
+    except Exception:
+        async with SessionLocal() as db:
+            doc = await get_document(db, document_id)
+            if doc:
+                doc.status = "conversion_failed"
+                await db.commit()
+
+            if owner_id:
+                await create_notification(
+                    db,
+                    user_id=owner_id,
+                    type="conversion_failed",
+                    title="문서 변환 실패",
+                    message=f"파일 변환 중 오류가 발생했습니다: {filename}",
+                )
 
 
 async def suggest_tags(title: str, description: str, content: str) -> list[str]:

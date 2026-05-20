@@ -1,9 +1,9 @@
-import asyncio
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile, File, Form, Response
+from pathlib import Path
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,32 +122,51 @@ async def delete_all_documents(db: AsyncSession = Depends(get_db)):
 
 @router.post("/bulk-upload", status_code=201)
 async def bulk_upload_documents(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     owner_id: str = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """여러 파일을 한번에 업로드하여 문서로 등록합니다."""
+    """여러 파일을 업로드. 변환은 백그라운드에서 실행된다."""
     results = []
     for file in files:
         file_bytes = await file.read()
-        filename = file.filename or "untitled.txt"
+        filename = file.filename or "untitled"
         title = filename.rsplit(".", 1)[0] if "." in filename else filename
-        content = await asyncio.to_thread(document_service.convert_to_markdown, filename, file_bytes)
         file_url = await document_service.save_uploaded_file(filename, file_bytes)
+        parsed_owner = uuid.UUID(owner_id) if owner_id else None
+
+        ext = Path(filename).suffix.lower()
+        needs_conversion = ext in (".pdf", ".pptx", ".docx", ".xlsx", ".xls")
+        initial_status = "converting" if needs_conversion else "active"
+        initial_content = "" if needs_conversion else file_bytes.decode("utf-8", errors="replace")
 
         data = DocumentCreate(
             title=title,
             description=filename,
-            owner_id=uuid.UUID(owner_id) if owner_id else None,
+            owner_id=parsed_owner,
             source_type="upload",
         )
-        doc = await document_service.create_document(db, data, content, source_file_url=file_url)
-        results.append({"id": str(doc.id), "title": doc.title, "filename": filename})
+        doc = await document_service.create_document(
+            db, data, initial_content,
+            source_file_url=file_url,
+            original_file_path=str(document_service.UPLOAD_DIR / Path(file_url).name),
+            status=initial_status,
+        )
+
+        if needs_conversion:
+            background_tasks.add_task(
+                document_service.convert_and_finalize,
+                doc.id, file_bytes, filename, parsed_owner,
+            )
+
+        results.append({"id": str(doc.id), "title": doc.title, "filename": filename, "status": initial_status})
     return {"uploaded": len(results), "documents": results}
 
 
 @router.post("/upload", response_model=DocumentResponse, status_code=201)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     title: str = Form(...),
     description: str = Form(None),
     owner_id: str = Form(None),
@@ -158,8 +177,8 @@ async def upload_document(
     import json as _json
     file_bytes = await file.read()
     filename = file.filename or "upload.txt"
-    content = await asyncio.to_thread(document_service.convert_to_markdown, filename, file_bytes)
     file_url = await document_service.save_uploaded_file(filename, file_bytes)
+    parsed_owner = uuid.UUID(owner_id) if owner_id else None
 
     parsed_tags: list[str] | None = None
     if tags:
@@ -168,14 +187,31 @@ async def upload_document(
         except Exception:
             pass
 
+    ext = Path(filename).suffix.lower()
+    needs_conversion = ext in (".pdf", ".pptx", ".docx", ".xlsx", ".xls")
+    initial_status = "converting" if needs_conversion else "active"
+    initial_content = "" if needs_conversion else file_bytes.decode("utf-8", errors="replace")
+
     data = DocumentCreate(
         title=title,
         description=description,
-        owner_id=uuid.UUID(owner_id) if owner_id else None,
+        owner_id=parsed_owner,
         source_type="upload",
         tags=parsed_tags,
     )
-    doc = await document_service.create_document(db, data, content, source_file_url=file_url)
+    doc = await document_service.create_document(
+        db, data, initial_content,
+        source_file_url=file_url,
+        original_file_path=str(document_service.UPLOAD_DIR / Path(file_url).name),
+        status=initial_status,
+    )
+
+    if needs_conversion:
+        background_tasks.add_task(
+            document_service.convert_and_finalize,
+            doc.id, file_bytes, filename, parsed_owner,
+        )
+
     return doc
 
 
@@ -231,8 +267,8 @@ async def create_version(
     if file:
         file_bytes = await file.read()
         filename = file.filename or "upload.txt"
-        content = document_service.convert_to_markdown(filename, file_bytes)
         file_url = await document_service.save_uploaded_file(filename, file_bytes)
+        content = file_bytes.decode("utf-8", errors="replace")
 
     version = await document_service.create_new_version(
         db, document_id, content, change_summary=change_summary, source_file_url=file_url
