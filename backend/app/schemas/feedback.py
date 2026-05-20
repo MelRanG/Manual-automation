@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -62,6 +63,6 @@ class LinkDocumentBody(BaseModel):
 
 
 class ApplyDraftBody(BaseModel):
-    action: str  # "apply" | "reject"
+    action: Literal["apply", "reject"]
     edited_text: str | None = None
     reviewer_id: uuid.UUID

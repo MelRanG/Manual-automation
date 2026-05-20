@@ -128,7 +128,7 @@ export const api = {
   applyFeedbackDraft: (feedbackId: string, data: { action: "apply" | "reject"; edited_text?: string; reviewer_id: string }) =>
     request<{ feedback: FeedbackReport; proposed_change: ProposedChange | null; approval_id: string | null }>(`/feedback/${feedbackId}/apply-draft`, { method: 'POST', body: JSON.stringify(data) }),
   deleteFeedbackProposal: (feedbackId: string) =>
-    fetch(`${BASE}/feedback/${feedbackId}/proposal`, { method: 'DELETE' }),
+    fetch(`${BASE}/feedback/${feedbackId}/proposal`, { method: 'DELETE', headers: getAuthHeaders() }),
   linkDocument: (feedbackId: string, documentId: string) =>
     request<FeedbackReport>(`/feedback/${feedbackId}/link-document`, {
       method: 'PATCH', body: JSON.stringify({ document_id: documentId }),
