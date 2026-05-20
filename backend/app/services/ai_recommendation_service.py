@@ -40,7 +40,7 @@ def _model_id() -> str:
     return "mock"
 
 
-async def recommend_doc_strategy(db: AsyncSession, sr_draft: SRDraft) -> dict:  # type: ignore[type-arg]
+async def recommend_doc_strategy(db: AsyncSession, sr_draft: SRDraft) -> dict:
     """LLM 호출 → 검증 → SRDraft.ai_doc_recommendation 갱신 → 결과 반환."""
 
     # 1. 문서 메타데이터 수집 (최대 50개)
