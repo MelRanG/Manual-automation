@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import SessionLocal
 from app.models.document import Document, DocumentVersion
 from app.schemas.document import DocumentCreate
+from app.config import settings
 from app.services.chunking_service import chunk_and_embed_version
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
@@ -231,9 +232,31 @@ async def get_document_versions(
 async def save_uploaded_file(filename: str, content: bytes) -> str:
     file_id = uuid.uuid4().hex[:8]
     safe_name = f"{file_id}_{filename}"
+    if settings.uploads_s3_bucket:
+        key = _build_s3_upload_key(safe_name)
+        await asyncio.to_thread(_put_s3_object, key, content)
+        return f"s3://{settings.uploads_s3_bucket}/{key}"
+
     path = UPLOAD_DIR / safe_name
     path.write_bytes(content)
     return f"/uploads/{safe_name}"
+
+
+def _build_s3_upload_key(safe_name: str) -> str:
+    prefix = settings.uploads_s3_prefix.strip("/")
+    return f"{prefix}/{safe_name}" if prefix else safe_name
+
+
+def _put_s3_object(key: str, content: bytes) -> None:
+    import boto3
+
+    client = boto3.client("s3", region_name=settings.aws_region)
+    client.put_object(
+        Bucket=settings.uploads_s3_bucket,
+        Key=key,
+        Body=content,
+        ServerSideEncryption="AES256",
+    )
 
 
 async def _embed_in_background(version_id: uuid.UUID) -> None:

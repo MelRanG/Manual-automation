@@ -23,5 +23,6 @@ locals {
     OPENAI_API_KEY      = var.openai_api_key
     JIRA_WEBHOOK_URL    = var.jira_webhook_url
     UPLOADS_S3_BUCKET   = aws_s3_bucket.uploads.bucket
+    UPLOADS_S3_PREFIX   = "uploads"
   }
 }

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     embedding_model: str = "mock"
     jira_webhook_url: str = ""
     secret_key: str = "change-me-in-production"
+    uploads_s3_bucket: str = ""
+    uploads_s3_prefix: str = "uploads"
     # AWS Bedrock
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""

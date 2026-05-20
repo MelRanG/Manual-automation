@@ -3,6 +3,8 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from app.services import document_service
+
 
 @pytest.mark.asyncio
 async def test_create_document(client: AsyncClient, test_user: dict):
@@ -66,6 +68,26 @@ async def test_upload_document(client: AsyncClient, test_user: dict):
     assert resp.status_code == 201
     data = resp.json()
     assert data["title"] == "Uploaded Doc"
+
+
+@pytest.mark.asyncio
+async def test_save_uploaded_file_uses_s3_when_bucket_configured(monkeypatch):
+    calls: list[tuple[str, bytes]] = []
+
+    monkeypatch.setattr(document_service.settings, "uploads_s3_bucket", "test-bucket")
+    monkeypatch.setattr(document_service.settings, "uploads_s3_prefix", "documents")
+    monkeypatch.setattr(document_service.settings, "aws_region", "us-east-1")
+    monkeypatch.setattr(
+        document_service,
+        "_put_s3_object",
+        lambda key, content: calls.append((key, content)),
+    )
+
+    url = await document_service.save_uploaded_file("guide.txt", b"hello")
+
+    assert url.startswith("s3://test-bucket/documents/")
+    assert url.endswith("_guide.txt")
+    assert calls == [(url.replace("s3://test-bucket/", ""), b"hello")]
 
 
 @pytest.mark.asyncio
