@@ -126,8 +126,10 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
 
   async function handleDelete() {
     if (!confirm("이 피드백을 삭제하시겠습니까?")) return
-    await api.deleteFeedback(item.id)
-    onDelete()
+    const res = await api.deleteFeedback(item.id)
+    if (res.ok || res.status === 204) {
+      onDelete()
+    }
   }
 
   async function handleRequestDraft() {
@@ -147,6 +149,8 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     setLinking(true)
     try {
       await api.linkDocument(item.id, linkDocId)
+      setLinkQuery("")
+      setLinkDocId(null)
       onRefetch()
     } finally {
       setLinking(false)
