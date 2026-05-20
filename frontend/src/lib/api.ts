@@ -106,7 +106,7 @@ export const api = {
     askStream(`/chat/sessions/${sessionId}/ask-stream`, question),
 
   // Feedback
-  createFeedback: (data: { user_id: string; document_id?: string; chat_message_id?: string; feedback_text: string }) =>
+  createFeedback: (data: { user_id: string; document_id?: string; chunk_id?: string; chat_message_id?: string; feedback_text: string }) =>
     request<{ feedback: FeedbackReport; proposed_change: ProposedChange | null }>('/feedback', {
       method: 'POST', body: JSON.stringify(data),
     }),
@@ -196,7 +196,7 @@ export interface User { id: string; name: string; email: string; role: string; d
 export interface Document { id: string; title: string; description: string | null; owner_id: string | null; status: string; priority: string; trust_score: number; view_count: number; created_at: string; updated_at: string; current_version_id: string | null; document_type: string | null; domain: string | null; audience: string | null; source_type: string | null; source_file_url: string | null; related_sr_id: string | null; jira_issue_key: string | null; tags: string[] | null }
 export interface DocumentVersion { id: string; document_id: string; version_number: number; content: string; source_file_url: string | null; change_summary: string | null; created_at: string }
 export interface ChatSession { id: string; user_id: string; title: string | null; created_at: string }
-export interface ChatMessage { id: string; session_id: string; role: string; content: string; created_at: string }
+export interface ChatMessage { id: string; session_id: string; role: string; content: string; created_at: string; citations?: Citation[] }
 export interface AskResponse { message_id: string; content: string; citations: Citation[]; warnings?: DocumentWarning[] }
 export interface DocumentWarning { document_id: string; title: string; reason: "trust_score_low" | "stale" }
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }

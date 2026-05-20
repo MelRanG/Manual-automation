@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.chat import ChatSession, ChatMessage, AnswerCitation
 from app.models.document import Document
@@ -79,13 +80,44 @@ async def list_sessions(db: AsyncSession, user_id: uuid.UUID) -> list[ChatSessio
     return list(result.scalars().all())
 
 
-async def get_messages(db: AsyncSession, session_id: uuid.UUID) -> list[ChatMessage]:
+async def get_messages(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
     result = await db.execute(
         select(ChatMessage)
+        .options(selectinload(ChatMessage.citations))
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at.asc())
     )
-    return list(result.scalars().all())
+    loaded_messages = list(result.scalars().all())
+    doc_ids = {
+        citation.document_id
+        for message in loaded_messages
+        for citation in message.citations
+        if citation.document_id
+    }
+    doc_titles: dict[uuid.UUID, str] = {}
+    if doc_ids:
+        docs_result = await db.execute(select(Document).where(Document.id.in_(doc_ids)))
+        doc_titles = {doc.id: doc.title for doc in docs_result.scalars().all()}
+
+    messages = []
+    for message in loaded_messages:
+        messages.append({
+            "id": message.id,
+            "session_id": message.session_id,
+            "role": message.role,
+            "content": message.content,
+            "created_at": message.created_at,
+            "citations": [
+                {
+                    "document_id": str(c.document_id),
+                    "document_title": doc_titles.get(c.document_id, "참고 문서"),
+                    "quote": c.quote or "",
+                    "chunk_id": str(c.chunk_id) if c.chunk_id else "",
+                }
+                for c in message.citations
+            ],
+        })
+    return messages
 
 
 async def ask_question(

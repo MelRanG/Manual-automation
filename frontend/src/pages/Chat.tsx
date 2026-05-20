@@ -10,6 +10,7 @@ export function Chat() {
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [citations, setCitations] = useState<Citation[]>([])
+  const [citationsByMessage, setCitationsByMessage] = useState<Record<string, Citation[]>>({})
   const [warnings, setWarnings] = useState<DocumentWarning[]>([])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
@@ -17,6 +18,7 @@ export function Chat() {
   const [feedbackText, setFeedbackText] = useState("")
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null)
+  const [feedbackNotice, setFeedbackNotice] = useState<Record<string, string>>({})
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
   const [chatMode, setChatMode] = useState<ChatMode>("question")
   const [srCreated, setSrCreated] = useState<{id: string; title: string} | null>(null)
@@ -30,7 +32,14 @@ export function Chat() {
 
   useEffect(() => {
     if (activeSession) {
-      api.getMessages(activeSession).then(setMessages).catch(() => {})
+      api.getMessages(activeSession).then((loaded) => {
+        setMessages(loaded)
+        const next: Record<string, Citation[]> = {}
+        for (const message of loaded) {
+          if (message.citations?.length) next[message.id] = message.citations
+        }
+        setCitationsByMessage(next)
+      }).catch(() => {})
     }
   }, [activeSession])
 
@@ -45,6 +54,7 @@ export function Chat() {
     setActiveSession(session.id)
     setMessages([])
     setCitations([])
+    setCitationsByMessage({})
   }
 
   const deleteSession = async (sessionId: string, e: React.MouseEvent) => {
@@ -57,6 +67,7 @@ export function Chat() {
         setActiveSession(null)
         setMessages([])
         setCitations([])
+        setCitationsByMessage({})
         setWarnings([])
       }
     } finally {
@@ -72,6 +83,7 @@ export function Chat() {
     setInput("")
     setLoading(true)
     setSrCreated(null)
+    let responseCitations: Citation[] = []
 
     const userMsg: ChatMessage = { id: "user-" + Date.now(), session_id: activeSession, role: "user", content: input, created_at: new Date().toISOString() }
     const botMsg: ChatMessage = { id: "streaming", session_id: activeSession, role: "assistant", content: "", created_at: new Date().toISOString() }
@@ -85,16 +97,20 @@ export function Chat() {
           content += event.token
           setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content } : m))
         } else if (event.type === "citations") {
-          setCitations(event.citations || [])
+          responseCitations = event.citations || []
+          setCitations(responseCitations)
           setWarnings(event.warnings || [])
         } else if (event.type === "done") {
           messageId = event.messageId || ""
+          if (messageId && responseCitations.length) {
+            setCitationsByMessage(prev => ({ ...prev, [messageId]: responseCitations }))
+          }
           if (event.sr_draft) {
             setSrCreated({ id: event.sr_draft.id, title: event.sr_draft.title })
           }
         }
       }
-      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId, content } : m))
+      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m))
       setSessions(prev => prev.map(s => s.id === activeSession && !s.title ? { ...s, title: input.slice(0, 50) } : s))
     } catch {
       setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: "오류가 발생했습니다. 다시 시도해주세요." } : m))
@@ -107,13 +123,24 @@ export function Chat() {
     if (!feedbackText.trim() || !user?.id) return
     setFeedbackSubmitting(true)
     try {
-      const citation = citations.find(c => c.document_id)
-      await api.createFeedback({
+      const message = messages.find(m => m.id === messageId)
+      const messageCitations = message?.citations?.length
+        ? message.citations
+        : citationsByMessage[messageId] || citations
+      const citation = messageCitations.find(c => c.document_id)
+      const result = await api.createFeedback({
         user_id: user.id,
         chat_message_id: messageId,
         document_id: citation?.document_id,
+        chunk_id: citation?.chunk_id || undefined,
         feedback_text: feedbackText,
       })
+      setFeedbackNotice(prev => ({
+        ...prev,
+        [messageId]: result.proposed_change
+          ? "AI 수정안이 생성되어 승인 관리로 전달되었습니다"
+          : "오류 제보가 접수되었습니다",
+      }))
       setFeedbackSuccess(messageId)
       setFeedbackFor(null)
       setFeedbackText("")
@@ -149,7 +176,7 @@ export function Chat() {
         }`}
       >
         <button
-          onClick={() => { setActiveSession(s.id); setCitations([]); setWarnings([]) }}
+          onClick={() => { setActiveSession(s.id); setCitations([]); setWarnings([]); setCitationsByMessage({}) }}
           className={`flex-1 text-left px-3 py-2 text-sm truncate transition-colors ${
             activeSession === s.id ? "text-[#00288e] font-medium" : "text-[#191c1e]"
           }`}
@@ -290,35 +317,41 @@ export function Chat() {
                             </div>
 
                             {/* Citations inside message */}
-                            {msg.id !== "streaming" && citations.length > 0 && msg === messages[messages.length - 1] && (
-                              <>
-                                <div className="h-px w-full bg-[#e0e3e5] my-4" />
-                                <div className="space-y-3">
-                                  <div className="flex items-center gap-1 text-[#444653]">
-                                    <span className="material-symbols-outlined text-sm">menu_book</span>
-                                    <span className="text-xs font-semibold">참고 문서 (출처)</span>
-                                  </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {citations.map((c, i) => (
-                                      <a key={i} href="#" className="flex flex-col gap-1 p-3 bg-[#f7f9fb] rounded-lg border border-[#c4c5d5] hover:border-[#b8c4ff] hover:bg-white hover:shadow-sm transition-all group">
-                                        <div className="flex items-start justify-between">
-                                          <div className="flex items-center gap-1 overflow-hidden">
-                                            <span className="material-symbols-outlined text-base text-[#00288e] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
-                                            <span className="text-sm text-[#191c1e] font-semibold truncate group-hover:text-[#00288e] transition-colors">{c.document_title}</span>
+                            {(() => {
+                              const messageCitations = msg.citations?.length
+                                ? msg.citations
+                                : citationsByMessage[msg.id] || (msg === messages[messages.length - 1] ? citations : [])
+                              if (msg.id === "streaming" || messageCitations.length === 0) return null
+                              return (
+                                <>
+                                  <div className="h-px w-full bg-[#e0e3e5] my-4" />
+                                  <div className="space-y-3">
+                                    <div className="flex items-center gap-1 text-[#444653]">
+                                      <span className="material-symbols-outlined text-sm">menu_book</span>
+                                      <span className="text-xs font-semibold">참고 문서 (출처)</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      {messageCitations.map((c, i) => (
+                                        <a key={i} href="#" className="flex flex-col gap-1 p-3 bg-[#f7f9fb] rounded-lg border border-[#c4c5d5] hover:border-[#b8c4ff] hover:bg-white hover:shadow-sm transition-all group">
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex items-center gap-1 overflow-hidden">
+                                              <span className="material-symbols-outlined text-base text-[#00288e] shrink-0" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
+                                              <span className="text-sm text-[#191c1e] font-semibold truncate group-hover:text-[#00288e] transition-colors">{c.document_title || "참고 문서"}</span>
+                                            </div>
                                           </div>
-                                        </div>
-                                        {c.quote && (
-                                          <div className="text-xs text-[#444653] truncate flex items-center gap-1 mt-1">
-                                            <span className="material-symbols-outlined text-[14px]">link</span>
-                                            {c.quote}
-                                          </div>
-                                        )}
-                                      </a>
-                                    ))}
+                                          {c.quote && (
+                                            <div className="text-xs text-[#444653] truncate flex items-center gap-1 mt-1">
+                                              <span className="material-symbols-outlined text-[14px]">link</span>
+                                              {c.quote}
+                                            </div>
+                                          )}
+                                        </a>
+                                      ))}
+                                    </div>
                                   </div>
-                                </div>
-                              </>
-                            )}
+                                </>
+                              )
+                            })()}
                           </div>
 
                           {/* Action buttons */}
@@ -337,7 +370,7 @@ export function Chat() {
                               </button>
                               <div className="ml-auto">
                                 {feedbackSuccess === msg.id ? (
-                                  <span className="text-xs text-emerald-600 font-medium">오류 제보 접수 완료</span>
+                                  <span className="text-xs text-emerald-600 font-medium">{feedbackNotice[msg.id] || "오류 제보 접수 완료"}</span>
                                 ) : feedbackFor === msg.id ? (
                                   <div className="bg-[#ffdad6]/30 border border-[#ffdad6] rounded-lg p-3 space-y-2 max-w-sm">
                                     <p className="text-xs font-medium text-[#93000a]">어떤 내용이 실제와 다른가요?</p>
@@ -360,7 +393,7 @@ export function Chat() {
                                 ) : (
                                   <button onClick={() => setFeedbackFor(msg.id)} className="flex items-center gap-1 text-xs text-[#757684] hover:text-[#ba1a1a] hover:bg-[#ffdad6] px-3 py-1 rounded transition-all">
                                     <span className="material-symbols-outlined text-base">report</span>
-                                    실제와 달라요
+                                    오류 수정 요청
                                   </button>
                                 )}
                               </div>
