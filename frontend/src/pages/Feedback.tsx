@@ -119,7 +119,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   const [linkDocId, setLinkDocId] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
   const { data: allDocs } = useApi(() => api.listDocuments(0, 200), [])
-  const { data: proposal, loading: proposalLoading, refetch: refetchProposal } = useApi<ProposedChange>(
+  const { data: proposal, loading: proposalLoading, refetch: refetchProposal } = useApi<ProposedChange | null>(
     () => api.getFeedbackProposal(item.id),
     [item.id]
   )
@@ -140,7 +140,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   }
 
   async function handleDelete() {
-    if (!confirm("이 피드백을 삭제하시겠습니까?")) return
+    if (!confirm("이 오류 제보를 삭제하시겠습니까?")) return
     const res = await api.deleteFeedback(item.id)
     if (res.ok || res.status === 204) {
       onDelete()
@@ -180,10 +180,10 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     try {
       await api.deleteFeedbackProposal(item.id)
       await api.requestDraft(item.id, reviewedText)
-      await refetchProposal()
       onRefetch()
       setActiveSection("draft")
     } finally {
+      refetchProposal()
       setRequesting(false)
     }
   }
@@ -347,7 +347,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
               onClick={handleDelete}
               className="text-xs text-[#dc2626] hover:text-[#991b1b] underline"
             >
-              이 피드백 삭제
+              오류제보 삭제
             </button>
           </div>
         </div>
@@ -393,7 +393,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
                 </div>
                 <span>{Math.round(proposal.confidence * 100)}%</span>
               </div>
-              {!proposal.is_stale && (
+              {!proposal.is_stale && !["approved", "rejected"].includes(proposal.status) && (
                 <div className="flex gap-2 pt-2 border-t border-[#e0e3e5]">
                   <button
                     onClick={handleApplyDraft}
@@ -409,6 +409,16 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
                   >
                     반영 안함
                   </button>
+                </div>
+              )}
+              {proposal.status === "approved" && (
+                <div className="flex items-center gap-2 p-3 bg-[#dcfce7] border border-[#bbf7d0] rounded-lg">
+                  <span className="text-sm text-[#15803d] font-medium">✓ 문서에 반영 완료</span>
+                </div>
+              )}
+              {proposal.status === "rejected" && (
+                <div className="flex items-center gap-2 p-3 bg-[#f2f4f6] border border-[#e0e3e5] rounded-lg">
+                  <span className="text-sm text-[#757684]">반영 안함으로 처리되었습니다.</span>
                 </div>
               )}
             </div>
