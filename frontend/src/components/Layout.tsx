@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils"
 import {
   FileText,
   MessageSquare,
-  CheckCircle,
-  GitMerge,
   LayoutDashboard,
   Ticket,
   Webhook,
@@ -38,15 +36,14 @@ const navSections: NavSection[] = [
     heading: "문서",
     items: [
       { to: "/documents", icon: FileText, label: "문서 관리" },
-      { to: "/manuals", icon: BookOpen, label: "매뉴얼 생성" },
     ],
   },
   {
-    heading: "변경 관리",
+    heading: "문서 현행화",
     items: [
-      { to: "/sr", icon: Ticket, label: "서비스 요청" },
-      { to: "/change-impact", icon: GitMerge, label: "변경 영향" },
-      { to: "/approvals", icon: CheckCircle, label: "승인 관리" },
+      { to: "/manuals", icon: BookOpen, label: "매뉴얼 생성" },
+      { to: "/feedback", icon: LifeBuoy, label: "오류 제보" },
+      { to: "/sr", icon: Ticket, label: "Jira SR" },
     ],
   },
   {

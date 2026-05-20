@@ -9,10 +9,8 @@ import { DocumentDetail } from "@/pages/DocumentDetail"
 import { DocumentEdit } from "@/pages/DocumentEdit"
 import { Chat } from "@/pages/Chat"
 import { Feedback } from "@/pages/Feedback"
-import { Approvals } from "@/pages/Approvals"
 import { TrustScores } from "@/pages/TrustScores"
 import { ServiceRequests } from "@/pages/ServiceRequests"
-import { ChangeImpact } from "@/pages/ChangeImpact"
 import { WebhookLogs } from "@/pages/WebhookLogs"
 import { ManualGenerator } from "@/pages/ManualGenerator"
 import { WidgetDemo } from "@/pages/WidgetDemo"
@@ -46,10 +44,8 @@ export default function App() {
             <Route path="/documents/:id/edit" element={<DocumentEdit />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/feedback" element={<Feedback />} />
-            <Route path="/approvals" element={<Approvals />} />
             <Route path="/trust" element={<TrustScores />} />
             <Route path="/sr" element={<ServiceRequests />} />
-            <Route path="/change-impact" element={<ChangeImpact />} />
             <Route path="/webhook-logs" element={<WebhookLogs />} />
             <Route path="/manuals" element={<ManualGenerator />} />
             <Route path="/widget-conversations" element={<WidgetConversations />} />
