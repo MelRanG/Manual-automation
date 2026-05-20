@@ -5,6 +5,21 @@ from collections.abc import AsyncGenerator
 from app.config import settings
 
 
+def _prepend_context(messages: list[dict], context: str) -> list[dict]:
+    """context가 있으면 첫 번째 user 메시지 앞에 RAG context를 prepend한다."""
+    if not context or not messages:
+        return messages
+    result = list(messages)
+    for i, m in enumerate(result):
+        if m["role"] == "user":
+            result[i] = {
+                "role": "user",
+                "content": f"Context from documentation:\n{context}\n\nUser question: {m['content']}",
+            }
+            break
+    return result
+
+
 class LLMProvider(ABC):
     @abstractmethod
     async def generate(self, system_prompt: str, user_message: str, context: str = "") -> str:
@@ -108,6 +123,27 @@ class BedrockLLMProvider(LLMProvider):
             async for text in stream.text_stream:
                 yield text
 
+    async def generate_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> str:
+        prepared = _prepend_context(messages, context)
+        response = await self.client.messages.create(
+            model=self.model,
+            max_tokens=2048,
+            system=system_prompt,
+            messages=prepared,
+        )
+        return response.content[0].text  # type: ignore[union-attr]
+
+    async def generate_stream_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> AsyncGenerator[str, None]:
+        prepared = _prepend_context(messages, context)
+        async with self.client.messages.stream(
+            model=self.model,
+            max_tokens=2048,
+            system=system_prompt,
+            messages=prepared,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+
 
 class AnthropicLLMProvider(LLMProvider):
     def __init__(self):
@@ -137,6 +173,27 @@ class AnthropicLLMProvider(LLMProvider):
             max_tokens=2048,
             system=system_prompt,
             messages=[{"role": "user", "content": full_message}],
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+
+    async def generate_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> str:
+        prepared = _prepend_context(messages, context)
+        response = await self.client.messages.create(
+            model="claude-sonnet-4-6-20251101",
+            max_tokens=2048,
+            system=system_prompt,
+            messages=prepared,
+        )
+        return response.content[0].text  # type: ignore[union-attr]
+
+    async def generate_stream_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> AsyncGenerator[str, None]:
+        prepared = _prepend_context(messages, context)
+        async with self.client.messages.stream(
+            model="claude-sonnet-4-6-20251101",
+            max_tokens=2048,
+            system=system_prompt,
+            messages=prepared,
         ) as stream:
             async for text in stream.text_stream:
                 yield text
@@ -173,6 +230,27 @@ class OpenAILLMProvider(LLMProvider):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": full_message},
             ],
+            max_tokens=2048,
+            stream=True,
+        )
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+    async def generate_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> str:
+        prepared = _prepend_context(messages, context)
+        response = await self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": system_prompt}] + prepared,
+            max_tokens=2048,
+        )
+        return response.choices[0].message.content
+
+    async def generate_stream_with_history(self, system_prompt: str, messages: list[dict], context: str = "") -> AsyncGenerator[str, None]:
+        prepared = _prepend_context(messages, context)
+        stream = await self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": system_prompt}] + prepared,
             max_tokens=2048,
             stream=True,
         )

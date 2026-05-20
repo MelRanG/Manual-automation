@@ -1,4 +1,7 @@
+import asyncio
+import pytest
 from app.services.chat_service import _extract_sr_proposal, _strip_sr_block
+from app.services.llm_service import MockLLMProvider
 
 
 def test_extract_sr_proposal_returns_none_when_no_block():
@@ -32,11 +35,6 @@ def test_strip_sr_block_removes_block():
     assert "SR을 등록했습니다." in result
 
 
-import asyncio
-import pytest
-from app.services.llm_service import MockLLMProvider
-
-
 @pytest.mark.asyncio
 async def test_mock_generate_with_history_uses_last_message():
     """generate_with_history는 마지막 user 메시지를 기반으로 응답을 생성한다."""
@@ -48,7 +46,7 @@ async def test_mock_generate_with_history_uses_last_message():
     ]
     result = await llm.generate_with_history("system", messages)
     assert isinstance(result, str)
-    assert len(result) > 0
+    assert "두 번째 질문" in result  # MockLLMProvider.generate는 user_message[:50]을 응답에 포함
 
 
 @pytest.mark.asyncio
