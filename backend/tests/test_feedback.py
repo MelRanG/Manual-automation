@@ -351,3 +351,36 @@ async def test_apply_draft_stale_returns_409(client: AsyncClient, test_user: dic
     })
     assert resp.status_code == 409
     assert "만료" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_proposal_is_not_stale_after_apply(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Apply No Stale Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Original content to fix."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Fix this",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Fix this",
+    })
+
+    # 반영
+    apply_resp = await client.post(f"/api/feedback/{feedback_id}/apply-draft", json={
+        "action": "apply",
+        "reviewer_id": test_user["id"],
+    })
+    assert apply_resp.status_code == 200
+
+    # 반영 후 get_proposal → is_stale must be False
+    proposal_resp = await client.get(f"/api/feedback/{feedback_id}/proposal")
+    assert proposal_resp.status_code == 200
+    assert proposal_resp.json()["is_stale"] is False
+    assert proposal_resp.json()["status"] == "approved"

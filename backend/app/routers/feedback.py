@@ -69,11 +69,12 @@ async def get_proposal(
         raise HTTPException(status_code=404, detail="No proposal found")
 
     is_stale = False
-    if proposal.document_version_id and proposal.document_id:
-        doc_result = await db.execute(select(Document).where(Document.id == proposal.document_id))
-        doc = doc_result.scalar_one_or_none()
-        if doc and doc.current_version_id != proposal.document_version_id:
-            is_stale = True
+    if proposal.status not in ("approved", "rejected"):
+        if proposal.document_version_id and proposal.document_id:
+            doc_result = await db.execute(select(Document).where(Document.id == proposal.document_id))
+            doc = doc_result.scalar_one_or_none()
+            if doc and doc.current_version_id != proposal.document_version_id:
+                is_stale = True
 
     return ProposedChangeResponse.model_validate(proposal, from_attributes=True).model_copy(
         update={"is_stale": is_stale}
@@ -193,22 +194,25 @@ async def apply_draft(
     if not approval:
         approval = await approval_service.create_approval_request(db, proposal.id)
 
-    if body.action == "apply":
-        if body.edited_text and body.edited_text.strip() != proposal.proposed_text.strip():
+    try:
+        if body.action == "apply":
+            if body.edited_text and body.edited_text.strip() != proposal.proposed_text.strip():
+                await approval_service.review_approval(
+                    db, approval.id, body.reviewer_id, "edit_and_approve",
+                    edited_content=body.edited_text,
+                )
+            else:
+                await approval_service.review_approval(
+                    db, approval.id, body.reviewer_id, "approved",
+                )
+        elif body.action == "reject":
             await approval_service.review_approval(
-                db, approval.id, body.reviewer_id, "edit_and_approve",
-                edited_content=body.edited_text,
+                db, approval.id, body.reviewer_id, "rejected",
             )
         else:
-            await approval_service.review_approval(
-                db, approval.id, body.reviewer_id, "approved",
-            )
-    elif body.action == "reject":
-        await approval_service.review_approval(
-            db, approval.id, body.reviewer_id, "rejected",
-        )
-    else:
-        raise HTTPException(status_code=400, detail="action must be 'apply' or 'reject'")
+            raise HTTPException(status_code=400, detail="action must be 'apply' or 'reject'")
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
     await db.refresh(feedback)
     updated_proposal = await feedback_service.get_proposed_change(db, feedback_id)
@@ -236,6 +240,12 @@ async def delete_feedback(
     feedback = result.scalar_one_or_none()
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback not found")
+    proposal_result = await db.execute(
+        select(ProposedDocumentChange).where(ProposedDocumentChange.feedback_report_id == feedback_id)
+    )
+    proposal = proposal_result.scalar_one_or_none()
+    if proposal:
+        await db.execute(delete(ApprovalRequest).where(ApprovalRequest.proposed_change_id == proposal.id))
     await db.execute(delete(ProposedDocumentChange).where(ProposedDocumentChange.feedback_report_id == feedback_id))
     await db.execute(delete(FeedbackReport).where(FeedbackReport.id == feedback_id))
     await db.commit()
