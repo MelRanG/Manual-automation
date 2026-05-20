@@ -1,6 +1,7 @@
-import { useState } from "react"
-import { api, type FeedbackReport, type ProposedChange } from "@/lib/api"
+import { useState, useEffect } from "react"
+import { api, type FeedbackReport, type ProposedChange, type ChangeHistory } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
+import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
 
 type Tab = "all" | "review" | "done"
@@ -118,11 +119,29 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   const [linkDocId, setLinkDocId] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
   const { data: allDocs } = useApi(() => api.listDocuments(0, 200), [])
-  const { data: proposal, refetch: refetchProposal } = useApi<ProposedChange>(
+  const { data: proposal, loading: proposalLoading, refetch: refetchProposal } = useApi<ProposedChange>(
     () => api.getFeedbackProposal(item.id),
     [item.id]
   )
 
+  const { user } = useAuth()
+  const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
+  const [editedText, setEditedText] = useState("")
+  const [applying, setApplying] = useState(false)
+  const { data: history, loading: historyLoading } = useApi<ChangeHistory[]>(
+    () => api.listHistory("feedback", item.id),
+    [item.id]
+  )
+
+  // These are used in the UI rendering part (Task 8) — suppress unused warnings
+  void proposalLoading
+  void applying
+  void history
+  void historyLoading
+
+  useEffect(() => {
+    if (proposal) setEditedText(proposal.proposed_text)
+  }, [proposal?.id])
 
   async function handleDelete() {
     if (!confirm("이 피드백을 삭제하시겠습니까?")) return
@@ -131,6 +150,52 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
       onDelete()
     }
   }
+
+  async function handleApplyDraft() {
+    if (!proposal) return
+    setApplying(true)
+    try {
+      await api.applyFeedbackDraft(item.id, {
+        action: "apply",
+        edited_text: editedText !== proposal.proposed_text ? editedText : undefined,
+        reviewer_id: reviewerId,
+      })
+      await refetchProposal()
+      onRefetch()
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  async function handleRejectDraft() {
+    if (!proposal) return
+    setApplying(true)
+    try {
+      await api.applyFeedbackDraft(item.id, { action: "reject", reviewer_id: reviewerId })
+      await refetchProposal()
+      onRefetch()
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  async function handleRegenerateDraft() {
+    setRequesting(true)
+    try {
+      await api.deleteFeedbackProposal(item.id)
+      await api.requestDraft(item.id, reviewedText)
+      await refetchProposal()
+      onRefetch()
+      setActiveSection("draft")
+    } finally {
+      setRequesting(false)
+    }
+  }
+
+  // These handler functions are used in the UI rendering part (Task 8)
+  void handleApplyDraft
+  void handleRejectDraft
+  void handleRegenerateDraft
 
   async function handleRequestDraft() {
     setRequesting(true)
