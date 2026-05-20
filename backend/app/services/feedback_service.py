@@ -66,10 +66,12 @@ async def generate_correction(
         if chunk:
             original_text = chunk.content
 
+    report_text = feedback.reviewed_text or feedback.feedback_text
+
     llm = get_llm_provider()
     proposed_text = await llm.generate(
         CORRECTION_SYSTEM_PROMPT,
-        f"Error report: {feedback.feedback_text}\n\nOriginal text:\n{original_text}",
+        f"Error report: {report_text}\n\nOriginal text:\n{original_text}",
     )
 
     diff = "\n".join(
@@ -90,7 +92,7 @@ async def generate_correction(
         original_text=original_text,
         proposed_text=proposed_text,
         diff=diff or "(no difference detected)",
-        reasoning=f"AI correction based on feedback: {feedback.feedback_text[:200]}",
+        reasoning=f"AI correction based on feedback: {report_text[:200]}",
         confidence=0.8,
         source_type="feedback",
         status="pending",
