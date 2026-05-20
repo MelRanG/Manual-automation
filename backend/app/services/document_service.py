@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +23,7 @@ async def create_document(
     content: str,
     source_file_url: str | None = None,
     original_file_path: str | None = None,
-    status: str = "active",
+    status: Literal["active", "converting"] = "active",
 ) -> Document:
     doc = Document(
         id=uuid.uuid4(),
@@ -277,18 +278,19 @@ async def convert_and_finalize(
 
             doc.current_version_id = version.id
             doc.status = "active"
+            doc_title = doc.title  # commit 전에 캡처
             await db.commit()
             await db.refresh(version)
-
             asyncio.create_task(_embed_in_background(version.id))
 
-            if owner_id:
+        if owner_id:
+            async with SessionLocal() as notif_db:
                 await create_notification(
-                    db,
+                    notif_db,
                     user_id=owner_id,
                     type="document_converted",
                     title="문서 변환 완료",
-                    message=f"'{doc.title}' 파일 변환이 완료되었습니다.",
+                    message=f"'{doc_title}' 파일 변환이 완료되었습니다.",
                     document_id=document_id,
                 )
     except Exception:
@@ -298,14 +300,45 @@ async def convert_and_finalize(
                 doc.status = "conversion_failed"
                 await db.commit()
 
-            if owner_id:
+        if owner_id:
+            async with SessionLocal() as notif_db:
                 await create_notification(
-                    db,
+                    notif_db,
                     user_id=owner_id,
                     type="conversion_failed",
                     title="문서 변환 실패",
                     message=f"파일 변환 중 오류가 발생했습니다: {filename}",
+                    document_id=document_id,
                 )
+
+
+async def convert_and_finalize_version(
+    version_id: uuid.UUID,
+    file_bytes: bytes,
+    filename: str,
+) -> None:
+    """create_version 백그라운드 변환: 버전 content 갱신."""
+    from app.services.file_converter import convert_to_markdown as _file_convert
+
+    async with SessionLocal() as db:
+        result = await db.execute(
+            select(DocumentVersion).where(DocumentVersion.id == version_id)
+        )
+        version = result.scalar_one_or_none()
+        if not version:
+            return
+        try:
+            content = await _file_convert(
+                file_bytes=file_bytes,
+                filename=filename,
+                document_id=str(version.document_id),
+            )
+            version.content = content
+            await db.commit()
+            asyncio.create_task(_embed_in_background(version_id))
+        except Exception:
+            version.content = f"[변환 실패: {filename}]"
+            await db.commit()
 
 
 async def suggest_tags(title: str, description: str, content: str) -> list[str]:

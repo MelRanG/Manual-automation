@@ -254,7 +254,8 @@ async def get_document_versions(
 @router.post("/{document_id}/versions", response_model=DocumentVersionResponse, status_code=201)
 async def create_version(
     document_id: uuid.UUID,
-    content: str = Form(...),
+    background_tasks: BackgroundTasks,
+    content: str = Form(""),
     change_summary: str = Form(None),
     file: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_db),
@@ -268,7 +269,20 @@ async def create_version(
         file_bytes = await file.read()
         filename = file.filename or "upload.txt"
         file_url = await document_service.save_uploaded_file(filename, file_bytes)
-        content = file_bytes.decode("utf-8", errors="replace")
+
+        ext = Path(filename).suffix.lower()
+        needs_conversion = ext in (".pdf", ".pptx", ".docx", ".xlsx", ".xls")
+        if needs_conversion:
+            version = await document_service.create_new_version(
+                db, document_id, "", change_summary=change_summary, source_file_url=file_url
+            )
+            background_tasks.add_task(
+                document_service.convert_and_finalize_version,
+                version.id, file_bytes, filename,
+            )
+            return version
+        else:
+            content = file_bytes.decode("utf-8", errors="replace")
 
     version = await document_service.create_new_version(
         db, document_id, content, change_summary=change_summary, source_file_url=file_url
