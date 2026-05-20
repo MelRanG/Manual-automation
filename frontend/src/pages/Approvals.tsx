@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useSearchParams } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { api, type ApprovalRequest } from "@/lib/api"
@@ -7,15 +6,13 @@ import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 
 type Tab = "feedback" | "playwright" | "jira_sr"
+type JiraSrFilter = "all" | "doc_review_pending" | "jira_sr_pending" | "done"
 type ReviewMode = "approve" | "reject" | "edit_and_approve" | "request_review" | null
 
 export function Approvals() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>("feedback")
-  const [statusFilter, setStatusFilter] = useState<"processing" | "completed">(() => {
-    return searchParams.get("status") === "completed" ? "completed" : "processing"
-  })
+  const [jiraSrFilter, setJiraSrFilter] = useState<JiraSrFilter>("all")
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [reviewingId, setReviewingId] = useState<string | null>(null)
@@ -34,11 +31,13 @@ export function Approvals() {
   const processingItems = processingData?.items ?? []
   const feedbackProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "feedback").length
   const playwrightProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "playwright").length
-  const jiraSrProcessingCount = processingItems.filter(a => a.proposed_change?.source_type === "jira_sr").length
+  const jiraSrProcessingCount = processingItems.filter(
+    a => a.proposed_change?.source_type === "jira_sr" || a.approval_type === "doc_review"
+  ).length
 
   const { data: result, refetch: refetchMain } = useApi(
-    () => api.listApprovals({ status: statusFilter, skip: (page - 1) * pageSize, limit: pageSize }),
-    [statusFilter, page, pageSize]
+    () => api.listApprovals({ status: "processing", skip: (page - 1) * pageSize, limit: pageSize }),
+    [page, pageSize]
   )
 
   const approvals = result?.items ?? []
@@ -47,12 +46,30 @@ export function Approvals() {
 
   const feedbackApprovals = approvals.filter(a => a.proposed_change?.source_type === "feedback")
   const playwrightApprovals = approvals.filter(a => a.proposed_change?.source_type === "playwright")
-  const jiraSrApprovals = approvals.filter(a => a.proposed_change?.source_type === "jira_sr")
-  const currentList = tab === "feedback" ? feedbackApprovals : tab === "playwright" ? playwrightApprovals : jiraSrApprovals
 
-  const tabTotal = statusFilter === "processing"
-    ? (tab === "feedback" ? feedbackProcessingCount : tab === "playwright" ? playwrightProcessingCount : jiraSrProcessingCount)
-    : total
+  const jiraSrAllApprovals = approvals.filter(
+    a => a.proposed_change?.source_type === "jira_sr" || a.approval_type === "doc_review"
+  )
+  const jiraSrFiltered = (() => {
+    if (jiraSrFilter === "all") return jiraSrAllApprovals
+    if (jiraSrFilter === "doc_review_pending")
+      return jiraSrAllApprovals.filter(a => a.approval_type === "doc_review" && a.status === "pending")
+    if (jiraSrFilter === "jira_sr_pending")
+      return jiraSrAllApprovals.filter(
+        a => a.proposed_change?.source_type === "jira_sr" && (a.status === "pending" || a.status === "needs_review")
+      )
+    if (jiraSrFilter === "done")
+      return jiraSrAllApprovals.filter(a => a.status === "approved" || a.status === "rejected")
+    return jiraSrAllApprovals
+  })()
+
+  const currentList = tab === "feedback" ? feedbackApprovals
+    : tab === "playwright" ? playwrightApprovals
+    : jiraSrFiltered
+
+  const tabTotal = tab === "feedback" ? feedbackProcessingCount
+    : tab === "playwright" ? playwrightProcessingCount
+    : jiraSrProcessingCount
 
   const openReview = (id: string, proposedText: string) => {
     setReviewingId(id)
@@ -70,8 +87,12 @@ export function Approvals() {
 
   const refetch = () => { refetchMain(); refetchCounts() }
 
-  const handleTabChange = (t: Tab) => { setTab(t); setPage(1); closeReview() }
-  const handleFilterChange = (f: "processing" | "completed") => { setStatusFilter(f); setPage(1) }
+  const handleTabChange = (t: Tab) => {
+    setTab(t)
+    setPage(1)
+    closeReview()
+    if (t !== "jira_sr") setJiraSrFilter("all")
+  }
 
   const handleSubmit = async (id: string) => {
     if (reviewMode === "request_review" && !comment.trim()) return
@@ -154,42 +175,16 @@ export function Approvals() {
         </button>
       </div>
 
-      {/* 상태 필터 */}
+      {/* 탭 카운트 */}
       <div className="flex items-center gap-2 py-2">
-        {(["processing", "completed"] as const).map((f) => {
-          const labels: Record<"processing" | "completed", string> = { processing: "처리 중", completed: "완료" }
-          const isActive = statusFilter === f
-          return (
-            <button
-              key={f}
-              onClick={() => handleFilterChange(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                isActive
-                  ? "bg-[#00288e] text-white"
-                  : "bg-white border border-[#c4c5d5] text-[#444653] hover:border-[#00288e]"
-              }`}
-            >
-              {labels[f]}
-              {isActive && tabTotal > 0 && (
-                <span className="ml-1.5 opacity-80">{tabTotal}</span>
-              )}
-            </button>
-          )
-        })}
         <span className="ml-auto text-xs text-[#757684]">총 {tabTotal}건</span>
       </div>
 
       {currentList.length === 0 ? (
         <div className="text-center py-16">
           <span className="material-symbols-outlined text-5xl text-[#c4c5d5]">task_alt</span>
-          <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">
-            {statusFilter === "completed" ? "완료된 항목이 없습니다" : "처리 중인 항목이 없습니다"}
-          </h3>
-          <p className="mt-2 text-sm text-[#757684]">
-            {statusFilter === "completed"
-              ? "아직 승인 또는 반려된 항목이 없습니다"
-              : "현재 대기 중인 승인 요청이 없습니다"}
-          </p>
+          <h3 className="mt-4 text-lg font-semibold text-[#191c1e]">처리 중인 항목이 없습니다</h3>
+          <p className="mt-2 text-sm text-[#757684]">현재 대기 중인 승인 요청이 없습니다</p>
         </div>
       ) : (
         <>
