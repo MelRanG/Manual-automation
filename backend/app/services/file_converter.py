@@ -1,3 +1,4 @@
+import asyncio
 import io
 from pathlib import Path
 
@@ -8,7 +9,6 @@ async def convert_to_markdown(
     document_id: str,
     static_dir: Path,
 ) -> str:
-    import asyncio
     return await asyncio.to_thread(
         _convert_sync, file_bytes, filename, document_id, static_dir
     )
@@ -24,7 +24,7 @@ def _convert_sync(
 
     if ext == ".pdf":
         return _pdf_to_markdown(file_bytes, document_id, static_dir)
-    if ext in (".pptx", ".ppt"):
+    if ext == ".pptx":
         return _pptx_to_markdown(file_bytes, document_id, static_dir)
     if ext == ".docx":
         return _docx_to_markdown(file_bytes, document_id, static_dir)
@@ -96,15 +96,16 @@ def _docx_to_markdown(file_bytes: bytes, document_id: str, static_dir: Path) -> 
     import markdownify
 
     img_dir = _image_dir(static_dir, document_id)
-    img_counter = [0]
+    img_counter = 0
 
     def handle_image(image):
+        nonlocal img_counter
         with image.open() as f:
             img_bytes = f.read()
         content_type = image.content_type or "image/png"
         ext = content_type.split("/")[-1]
-        img_filename = f"img{img_counter[0]}.{ext}"
-        img_counter[0] += 1
+        img_filename = f"img{img_counter}.{ext}"
+        img_counter += 1
         (img_dir / img_filename).write_bytes(img_bytes)
         return {"src": f"/static/images/{document_id}/{img_filename}"}
 
