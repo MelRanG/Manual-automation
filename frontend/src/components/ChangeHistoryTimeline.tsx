@@ -32,13 +32,17 @@ interface Props {
 }
 
 export function ChangeHistoryTimeline({ entityType, entityId }: Props) {
-  const { data: events, loading } = useApi<ChangeHistory[]>(
+  const { data: events, loading, error } = useApi<ChangeHistory[]>(
     () => api.listHistory(entityType, entityId),
     [entityType, entityId]
   )
 
   if (loading) {
     return <div className="text-xs text-[#757684] py-4">이력 로딩 중...</div>
+  }
+
+  if (error) {
+    return <p className="text-sm text-red-500 px-4">이력을 불러오지 못했습니다.</p>
   }
 
   if (!events || events.length === 0) {

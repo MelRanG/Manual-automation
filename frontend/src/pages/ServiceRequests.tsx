@@ -29,6 +29,7 @@ export function ServiceRequests() {
   const [tab, setTab] = useState<Tab>("all")
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedSR, setSelectedSR] = useState<SRDraft | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
   const [title, setTitle] = useState("")
@@ -36,39 +37,42 @@ export function ServiceRequests() {
   const [priority, setPriority] = useState("medium")
   const [targetUrl, setTargetUrl] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
-  const userId = user?.id ?? "00000000-0000-0000-0000-000000000001"
-
-  const { data: result, refetch } = useApi(
-    () => api.listSRDrafts({ status: tab === "all" ? undefined : tab, skip: 0, limit: 500 }),
-    [tab]
+  // Always fetch all items for accurate tab counts and client-side filtering
+  const { data: srResult, refetch } = useApi(
+    () => api.listSRDrafts({ skip: 0, limit: 500 }),
+    []
   )
+  const allSRs = srResult?.items ?? []
 
-  const allItems = result?.items ?? []
-
-  const filtered = allItems.filter(sr => {
-    if (sourceFilter === "direct") return !sr.created_by_ai
-    if (sourceFilter === "chatbot") return sr.created_by_ai
-    return true
+  const displayItems = allSRs.filter(sr => {
+    const tabMatch = tab === "all" || sr.status === tab
+    const sourceMatch =
+      sourceFilter === "all" ||
+      (sourceFilter === "direct" ? !sr.created_by_ai : sr.created_by_ai)
+    return tabMatch && sourceMatch
   })
 
-  const selected = allItems.find(s => s.id === selectedId) ?? null
+  const tabCount = (t: Tab) => allSRs.filter(s => s.status === t).length
 
-  const tabCount = (t: Tab) => {
-    if (t === "all") return allItems.length
-    return allItems.filter(s => s.status === t).length
-  }
+  const { data: docsResult } = useApi(() => api.listDocuments(0, 500), [])
+  const docs = docsResult?.documents ?? []
 
   const handleCreate = async () => {
+    if (!user?.id) return
     if (!title.trim() || !description.trim()) return
     setSubmitting(true)
+    setCreateError(null)
     try {
       const normalizedUrl = targetUrl.trim()
         ? (targetUrl.trim().startsWith("http") ? targetUrl.trim() : `https://${targetUrl.trim()}`)
         : undefined
-      await api.createSRDraft({ user_id: userId, title, description, priority, target_url: normalizedUrl })
+      await api.createSRDraft({ user_id: user.id, title, description, priority, target_url: normalizedUrl })
       setTitle(""); setDescription(""); setTargetUrl(""); setShowCreate(false)
       refetch()
+    } catch {
+      setCreateError("SR 생성에 실패했습니다.")
     } finally {
       setSubmitting(false)
     }
@@ -135,6 +139,7 @@ export function ServiceRequests() {
               </select>
               <input className="flex-1 px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-sm outline-none focus:border-[#00288e]" placeholder="관련 URL (선택)" value={targetUrl} onChange={e => setTargetUrl(e.target.value)} />
             </div>
+            {createError && <p className="text-red-500 text-xs">{createError}</p>}
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 border border-[#c4c5d5] rounded-lg text-xs hover:bg-[#f2f4f6]">취소</button>
               <button onClick={handleCreate} disabled={!title.trim() || !description.trim() || submitting} className="px-3 py-1.5 bg-[#00288e] text-white rounded-lg text-xs font-medium hover:bg-[#1e40af] disabled:opacity-50">
@@ -145,13 +150,13 @@ export function ServiceRequests() {
         )}
 
         <div className="flex-1 overflow-y-auto divide-y divide-[#f2f4f6]">
-          {filtered.length === 0 ? (
+          {displayItems.length === 0 ? (
             <div className="px-5 py-10 text-center text-sm text-[#9a9bad]">항목이 없습니다</div>
           ) : (
-            filtered.map(sr => (
+            displayItems.map(sr => (
               <button
                 key={sr.id}
-                onClick={() => setSelectedId(sr.id)}
+                onClick={() => { setSelectedId(sr.id); setSelectedSR(sr) }}
                 className={`w-full text-left px-5 py-4 hover:bg-[#f7f9fb] transition-colors ${selectedId === sr.id ? "bg-[#eef2ff]" : ""}`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -177,8 +182,8 @@ export function ServiceRequests() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {selected ? (
-          <SRDetail sr={selected} onRefetch={refetch} />
+        {selectedSR ? (
+          <SRDetail sr={selectedSR} onRefetch={refetch} docs={docs} />
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
             목록에서 항목을 선택하세요
@@ -189,18 +194,19 @@ export function ServiceRequests() {
   )
 }
 
-function SRDetail({ sr, onRefetch }: { sr: SRDraft; onRefetch: () => void }) {
+function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void; docs: Document[] }) {
   const [activeSection, setActiveSection] = useState<"info" | "review" | "history">("info")
   const [submittingId, setSubmittingId] = useState(false)
-
-  const { data: docData } = useApi(() => api.listDocuments(0, 500), [])
-  const docs = docData?.documents ?? []
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const handleSubmitSR = async () => {
     setSubmittingId(true)
+    setSubmitError(null)
     try {
       await api.submitSR(sr.id)
       onRefetch()
+    } catch {
+      setSubmitError("SR 제출에 실패했습니다.")
     } finally {
       setSubmittingId(false)
     }
@@ -254,10 +260,11 @@ function SRDetail({ sr, onRefetch }: { sr: SRDraft; onRefetch: () => void }) {
             )}
           </div>
           {sr.status === "draft" && (
-            <div className="pt-2">
+            <div className="pt-2 space-y-1">
               <button onClick={handleSubmitSR} disabled={submittingId} className="px-4 py-2 bg-[#00288e] text-white rounded-lg text-sm font-medium hover:bg-[#1e40af] disabled:opacity-50">
                 {submittingId ? "제출 중..." : "SR 제출"}
               </button>
+              {submitError && <p className="text-red-500 text-xs">{submitError}</p>}
             </div>
           )}
         </div>
