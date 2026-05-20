@@ -119,8 +119,7 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   const [linkDocId, setLinkDocId] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
   const { data: allDocs } = useApi(() => api.listDocuments(0, 200), [])
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { data: proposal, loading: _proposalLoading, refetch: refetchProposal } = useApi<ProposedChange>(
+  const { data: proposal, loading: proposalLoading, refetch: refetchProposal } = useApi<ProposedChange>(
     () => api.getFeedbackProposal(item.id),
     [item.id]
   )
@@ -128,10 +127,8 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
   const { user } = useAuth()
   const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
   const [editedText, setEditedText] = useState("")
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_applying, _setApplying] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { data: _history, loading: _historyLoading } = useApi<ChangeHistory[]>(
+  const [applying, setApplying] = useState(false)
+  const { data: history, loading: historyLoading } = useApi<ChangeHistory[]>(
     () => api.listHistory("feedback", item.id),
     [item.id]
   )
@@ -149,11 +146,9 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     }
   }
 
-  // @ts-expect-error TS6133 - used in Task 8
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleApplyDraft() {
     if (!proposal) return
-    _setApplying(true)
+    setApplying(true)
     try {
       await api.applyFeedbackDraft(item.id, {
         action: "apply",
@@ -163,26 +158,22 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
       await refetchProposal()
       onRefetch()
     } finally {
-      _setApplying(false)
+      setApplying(false)
     }
   }
 
-  // @ts-expect-error TS6133 - used in Task 8
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleRejectDraft() {
     if (!proposal) return
-    _setApplying(true)
+    setApplying(true)
     try {
       await api.applyFeedbackDraft(item.id, { action: "reject", reviewer_id: reviewerId })
       await refetchProposal()
       onRefetch()
     } finally {
-      _setApplying(false)
+      setApplying(false)
     }
   }
 
-  // @ts-expect-error TS6133 - used in Task 8
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleRegenerateDraft() {
     setRequesting(true)
     try {
@@ -230,25 +221,42 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
     <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <h3 className="text-lg font-bold text-[#191c1e] flex-1">오류 제보 상세</h3>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-          item.status === "processed" ? "bg-[#dcfce7] text-[#15803d]" : "bg-[#fff3dc] text-[#92600a]"
-        }`}>{item.status === "processed" ? "완료" : "검토요청"}</span>
-        <button
-          onClick={handleDelete}
-          className="text-xs font-medium text-[#dc2626] hover:text-[#991b1b] px-3 py-1.5 rounded-lg border border-[#fca5a5] hover:border-[#f87171] transition-colors"
-        >
-          삭제
-        </button>
+        <span className={`text-xs font-medium px-2.5 py-1 border-l-2 ${
+          item.status === "processed"
+            ? "border-[#15803d] bg-[#dcfce7] text-[#15803d]"
+            : "border-[#92600a] bg-[#fff3dc] text-[#92600a]"
+        }`}>
+          {item.status === "processed" ? "완료" : "검토요청"}
+        </span>
       </div>
 
-      <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
-        {([["info", "요청 정보"], ["draft", "AI 수정 초안"], ["history", "변경 이력"]] as ["info" | "draft" | "history", string][]).map(([s, label]) => (
-          <button key={s} onClick={() => setActiveSection(s)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${activeSection === s ? "border-[#00288e] text-[#00288e]" : "border-transparent text-[#757684] hover:text-[#191c1e]"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {(() => {
+        const tabDisabled: Record<"info" | "draft" | "history", boolean> = {
+          info: false,
+          draft: !proposalLoading && !proposal,
+          history: !historyLoading && (!history || history.length === 0),
+        }
+        return (
+          <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
+            {([["info", "요청 정보"], ["draft", "AI 수정 초안"], ["history", "변경 이력"]] as ["info" | "draft" | "history", string][]).map(([s, label]) => (
+              <button
+                key={s}
+                onClick={() => { if (!tabDisabled[s]) setActiveSection(s) }}
+                disabled={tabDisabled[s]}
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  tabDisabled[s]
+                    ? "border-transparent text-[#9a9bad] cursor-not-allowed opacity-40"
+                    : activeSection === s
+                      ? "border-[#00288e] text-[#00288e]"
+                      : "border-transparent text-[#757684] hover:text-[#191c1e]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       {activeSection === "info" && (
         <div className="space-y-4 text-sm">
@@ -300,12 +308,17 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
             <div className="pt-4 border-t border-[#e0e3e5]">
               <p className="text-xs font-semibold text-[#757684] mb-2">관리자 검토 내용</p>
               {proposal ? (
-                <p className="text-xs text-[#9a9bad] bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">
-                  초안이 생성되었습니다.{" "}
-                  <button onClick={() => setActiveSection("draft")} className="text-[#00288e] underline">
-                    AI 수정 초안 보기
-                  </button>
-                </p>
+                <>
+                  <p className="text-sm text-[#444653] bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5] whitespace-pre-wrap">
+                    {item.reviewed_text ?? item.feedback_text}
+                  </p>
+                  <p className="text-xs text-[#9a9bad] mt-2">
+                    초안이 생성되었습니다.{" "}
+                    <button onClick={() => setActiveSection("draft")} className="text-[#00288e] underline">
+                      AI 수정 초안 보기
+                    </button>
+                  </p>
+                </>
               ) : (
                 <>
                   <textarea
@@ -327,6 +340,15 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
               )}
             </div>
           )}
+
+          <div className="pt-4 border-t border-[#e0e3e5]">
+            <button
+              onClick={handleDelete}
+              className="text-xs text-[#dc2626] hover:text-[#991b1b] underline"
+            >
+              이 피드백 삭제
+            </button>
+          </div>
         </div>
       )}
 
@@ -334,6 +356,18 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
         <div>
           {proposal ? (
             <div className="space-y-4">
+              {proposal.is_stale && (
+                <div className="bg-[#fff3dc] border border-[#fcd34d] rounded-lg p-3 flex items-center gap-2">
+                  <span className="text-sm text-[#92600a]">이 초안은 생성 이후 문서가 변경되었습니다.</span>
+                  <button
+                    onClick={handleRegenerateDraft}
+                    disabled={requesting}
+                    className="text-xs text-[#00288e] underline shrink-0"
+                  >
+                    {requesting ? "재생성 중..." : "초안 재생성"}
+                  </button>
+                </div>
+              )}
               <div>
                 <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 근거</p>
                 <p className="text-sm text-[#444653] bg-[#f7f9fb] p-3 rounded-lg border border-[#e0e3e5]">{proposal.reasoning}</p>
@@ -344,7 +378,12 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
               </div>
               <div>
                 <p className="text-xs font-semibold text-[#757684] mb-2">수정 제안</p>
-                <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-48">{proposal.proposed_text}</pre>
+                <textarea
+                  value={editedText}
+                  onChange={e => setEditedText(e.target.value)}
+                  rows={8}
+                  className="w-full px-3 py-2 text-xs font-mono border border-[#e0e3e5] rounded-lg focus:outline-none focus:border-[#00288e] resize-none bg-[#f0fdf4]"
+                />
               </div>
               <div className="flex items-center gap-2 text-xs text-[#757684]">
                 <span>신뢰도</span>
@@ -353,6 +392,24 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
                 </div>
                 <span>{Math.round(proposal.confidence * 100)}%</span>
               </div>
+              {!proposal.is_stale && (
+                <div className="flex gap-2 pt-2 border-t border-[#e0e3e5]">
+                  <button
+                    onClick={handleApplyDraft}
+                    disabled={applying}
+                    className="px-4 py-2 text-sm font-medium bg-[#00288e] text-white rounded-lg disabled:opacity-40 hover:bg-[#001f6b] transition-colors"
+                  >
+                    {applying ? "처리 중..." : "문서에 반영"}
+                  </button>
+                  <button
+                    onClick={handleRejectDraft}
+                    disabled={applying}
+                    className="px-4 py-2 text-sm font-medium border border-[#dc2626] text-[#dc2626] rounded-lg disabled:opacity-40 hover:bg-[#fef2f2] transition-colors"
+                  >
+                    반영 안함
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-sm text-[#9a9bad]">AI 수정 초안이 없습니다.</div>
@@ -370,7 +427,12 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
               <p className="text-sm text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap">{item.reviewed_text}</p>
             </div>
           )}
-          <ChangeHistoryTimeline entityType="feedback" entityId={item.id} />
+          <ChangeHistoryTimeline
+            entityType="feedback"
+            entityId={item.id}
+            events={history}
+            loading={historyLoading}
+          />
         </div>
       )}
     </div>
