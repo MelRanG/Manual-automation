@@ -191,7 +191,7 @@ async def apply_draft(
     )
     approval = approval_result.scalar_one_or_none()
     if not approval:
-        raise HTTPException(status_code=404, detail="No approval request found")
+        approval = await approval_service.create_approval_request(db, proposal.id)
 
     if body.action == "apply":
         if body.edited_text and body.edited_text.strip() != proposal.proposed_text.strip():
