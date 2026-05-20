@@ -127,3 +127,12 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## Current AWS Deployment
+
+- GitHub Actions workflow: `.github/workflows/deploy-aws.yml`
+- Push to `main`, `master`, or `aws` deploys through Terraform to ECS Fargate.
+- Terraform stack lives in `infra/terraform` and manages ECS, ECR, RDS PostgreSQL, S3 uploads, Secrets Manager, IAM, logs, and networking.
+- Document uploads are S3-only. `UPLOADS_S3_BUCKET` is required; there is no local upload fallback.
+- DB migrations include pgvector support for `document_chunks.embedding`.
+- Latest deployed ALB URL is stored in `infra/terraform/last-deployment-url.txt`.
