@@ -57,9 +57,10 @@ async def create_feedback(
 @router.get("", response_model=list[FeedbackReportResponse])
 async def list_feedback(
     document_id: uuid.UUID | None = None,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    return await feedback_service.list_feedback(db, document_id)
+    return await feedback_service.list_feedback(db, document_id, status)
 
 
 @router.get("/{feedback_id}/proposal", response_model=ProposedChangeResponse)

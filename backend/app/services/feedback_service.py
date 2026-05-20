@@ -104,11 +104,15 @@ async def generate_correction(
 
 
 async def list_feedback(
-    db: AsyncSession, document_id: uuid.UUID | None = None
+    db: AsyncSession,
+    document_id: uuid.UUID | None = None,
+    status: str | None = None,
 ) -> list[FeedbackReportResponse]:
     stmt = select(FeedbackReport).order_by(FeedbackReport.created_at.desc())
     if document_id:
         stmt = stmt.where(FeedbackReport.document_id == document_id)
+    if status:
+        stmt = stmt.where(FeedbackReport.status == status)
     result = await db.execute(stmt)
     reports = list(result.scalars().all())
 
