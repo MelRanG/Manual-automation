@@ -3,7 +3,7 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_create_feedback_with_proposal(client: AsyncClient, test_user: dict):
+async def test_create_feedback_no_auto_proposal(client: AsyncClient, test_user: dict):
     doc_resp = await client.post("/api/documents", json={
         "title": "Policy Doc",
         "owner_id": test_user["id"],
@@ -17,10 +17,8 @@ async def test_create_feedback_with_proposal(client: AsyncClient, test_user: dic
     })
     assert resp.status_code == 201
     data = resp.json()
-    assert data["feedback"]["status"] == "processed"
-    assert data["proposed_change"] is not None
-    assert data["proposed_change"]["status"] == "pending"
-    assert data["proposed_change"]["confidence"] > 0
+    assert data["feedback"]["status"] == "pending"
+    assert data["proposed_change"] is None
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -61,6 +59,11 @@ async def test_get_proposal(client: AsyncClient, test_user: dict):
     })
     feedback_id = feedback_resp.json()["feedback"]["id"]
 
+    draft_resp = await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Fix the spelling errors",
+    })
+    assert draft_resp.status_code == 200
+
     resp = await client.get(f"/api/feedback/{feedback_id}/proposal")
     assert resp.status_code == 200
     assert resp.json()["document_id"] == doc_id
@@ -68,26 +71,28 @@ async def test_get_proposal(client: AsyncClient, test_user: dict):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_feedback_list_has_proposed_change_status(client: AsyncClient, test_user: dict):
-    # 문서 생성 후 피드백 제출 (수정안 자동 생성됨)
     doc_resp = await client.post("/api/documents", json={
         "title": "Status Field Test Doc",
         "owner_id": test_user["id"],
     }, params={"content": "Some content."})
     doc_id = doc_resp.json()["id"]
 
-    await client.post("/api/feedback", json={
+    feedback_resp = await client.post("/api/feedback", json={
         "user_id": test_user["id"],
         "document_id": doc_id,
         "feedback_text": "This needs fixing",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "This needs fixing",
     })
 
     list_resp = await client.get("/api/feedback")
     assert list_resp.status_code == 200
     items = list_resp.json()
-    # proposed_change_status 필드가 있어야 함
     assert all("proposed_change_status" in item for item in items)
 
-    # 방금 만든 항목은 proposed_change_status가 "pending"이어야 함
     target = next((i for i in items if i["document_id"] == doc_id), None)
     assert target is not None
     assert target["proposed_change_status"] == "pending"
@@ -105,3 +110,80 @@ async def test_feedback_without_document_has_null_proposed_change_status(client:
     no_doc = next((i for i in items if i["document_id"] is None), None)
     assert no_doc is not None
     assert no_doc["proposed_change_status"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_request_draft_uses_reviewed_text(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Draft Test Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Original content here."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Original feedback",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    resp = await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "Admin reviewed: the content needs update",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["proposed_change"] is not None
+    assert data["feedback"]["reviewed_text"] == "Admin reviewed: the content needs update"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_request_draft_duplicate_returns_400(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Duplicate Draft Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "document_id": doc_id,
+        "feedback_text": "Some feedback",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+
+    await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "first request",
+    })
+    resp = await client.post(f"/api/feedback/{feedback_id}/request-draft", json={
+        "reviewed_text": "second request",
+    })
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_link_document(client: AsyncClient, test_user: dict):
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Link Target Doc",
+        "owner_id": test_user["id"],
+    }, params={"content": "Content."})
+    doc_id = doc_resp.json()["id"]
+
+    feedback_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "feedback_text": "No document attached",
+    })
+    feedback_id = feedback_resp.json()["feedback"]["id"]
+    assert feedback_resp.json()["feedback"]["document_id"] is None
+
+    resp = await client.patch(f"/api/feedback/{feedback_id}/link-document", json={
+        "document_id": doc_id,
+    })
+    assert resp.status_code == 200
+    assert resp.json()["document_id"] == doc_id
+    assert resp.json()["document_title"] == "Link Target Doc"
+
+    # 이미 연결된 상태에서 재시도 → 400
+    resp2 = await client.patch(f"/api/feedback/{feedback_id}/link-document", json={
+        "document_id": doc_id,
+    })
+    assert resp2.status_code == 400
