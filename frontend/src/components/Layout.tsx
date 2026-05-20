@@ -70,7 +70,7 @@ export function Layout() {
     : user?.email?.slice(0, 2).toUpperCase() ?? "U"
 
   return (
-    <div className="flex min-h-[100dvh] bg-background">
+    <div className="flex h-[100dvh] bg-background">
       <aside className="w-[240px] border-r border-border bg-card flex flex-col shrink-0">
         <div className="p-5 pb-4">
           <div className="flex items-center gap-2 mb-1">
