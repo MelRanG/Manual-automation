@@ -91,9 +91,10 @@ async def request_draft(
     await db.refresh(feedback)
 
     proposal = await feedback_service.generate_correction(db, feedback_id)
-    approval = None
-    if proposal:
-        approval = await approval_service.create_approval_request(db, proposal.id)
+    if not proposal:
+        raise HTTPException(status_code=500, detail="Failed to generate draft")
+
+    approval = await approval_service.create_approval_request(db, proposal.id)
 
     return FeedbackWithProposalResponse(
         feedback=feedback,
