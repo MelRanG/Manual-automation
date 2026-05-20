@@ -14,7 +14,7 @@ from app.services.search_service import search_similar_chunks
 
 logger = logging.getLogger(__name__)
 
-RAG_SYSTEM_PROMPT = """당신은 Manual Automation 문서 관리 시스템의 AI 어시스턴트입니다.
+RAG_SYSTEM_PROMPT = """당신은 DocOps AI 문서 관리 시스템의 AI 어시스턴트입니다.
 문서 컨텍스트를 기반으로 질문에 답변합니다.
 
 사용자 메시지가 "[변경 요청]"으로 시작하면, 이것은 문서/시스템 변경 요청입니다.

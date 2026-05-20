@@ -241,7 +241,7 @@ export function Chat() {
             </div>
             <h2 className="text-xl font-semibold text-[#191c1e] mt-4 text-center">무엇을 도와드릴까요?</h2>
             <p className="text-sm text-[#444653] text-center max-w-md mt-2">
-              사내 규정, 재무 데이터, 기술 문서 등 Manual Automation에 등록된 모든 지식을 기반으로 답변해 드립니다.
+              사내 규정, 재무 데이터, 기술 문서 등 DocOps AI에 등록된 모든 지식을 기반으로 답변해 드립니다.
             </p>
             <button
               onClick={createSession}
@@ -263,7 +263,7 @@ export function Chat() {
                     </div>
                     <h2 className="text-xl font-semibold text-[#191c1e] text-center">무엇을 도와드릴까요?</h2>
                     <p className="text-sm text-[#444653] text-center max-w-md">
-                      사내 규정, 재무 데이터, 기술 문서 등 Manual Automation에 등록된 모든 지식을 기반으로 답변해 드립니다.
+                      사내 규정, 재무 데이터, 기술 문서 등 DocOps AI에 등록된 모든 지식을 기반으로 답변해 드립니다.
                     </p>
                   </div>
                 )}
