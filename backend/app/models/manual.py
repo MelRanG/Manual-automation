@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +28,8 @@ class ManualGenerationJob(Base, UUIDMixin, TimestampMixin):
     screenshots: Mapped[dict | None] = mapped_column(JSONB)
     error_message: Mapped[str | None] = mapped_column(Text)
 
+    # 1:1 in practice. `manual_job_id`에 DB unique 제약은 없으므로
+    # 방어적으로 `order_by` desc를 두어 (이론적) 다중 행이 생기면 최신 것을 사용한다.
     proposed_change: Mapped["ProposedDocumentChange | None"] = relationship(  # noqa: F821
         "ProposedDocumentChange",
         back_populates="manual_job",
@@ -36,7 +38,7 @@ class ManualGenerationJob(Base, UUIDMixin, TimestampMixin):
     )
 
     @property
-    def approval(self):
+    def approval(self) -> "ApprovalRequest | None":  # noqa: F821
         """`proposed_change.approval_request` 편의 노출 (Pydantic from_attributes에서 사용)."""
         pc = self.proposed_change
         if pc is None:
