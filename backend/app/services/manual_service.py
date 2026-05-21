@@ -167,16 +167,20 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                     click_pos = None
                     clicked = False
                     click_target = _extract_click_target(step)
+                    fail_reason: str | None = None
 
-                    try:
-                        # 링크 우선, 없으면 버튼, 그 다음 텍스트 요소
-                        locator = page.locator(f'a:has-text("{click_target}")').first
-                        if not await locator.is_visible(timeout=1500):
-                            locator = page.locator(f'button:has-text("{click_target}")').first
-                        if not await locator.is_visible(timeout=1000):
-                            locator = page.get_by_text(click_target, exact=False).first
+                    locator, match_reason = await _find_click_locator(page, click_target)
 
-                        if await locator.is_visible(timeout=2000):
+                    if locator is None:
+                        fail_reason = match_reason
+                        logger.warning(
+                            f"manual click failed for step '{step}': {match_reason}"
+                        )
+                    else:
+                        logger.info(
+                            f"manual click {match_reason} for step '{step}' → '{click_target}'"
+                        )
+                        try:
                             box = await locator.bounding_box()
                             if box:
                                 click_pos = {
@@ -203,8 +207,11 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                                     pass
                             clicked = True
                             await asyncio.sleep(1.5)
-                    except Exception:
-                        pass
+                        except Exception as click_err:
+                            fail_reason = f"click 실행 실패: {click_err}"
+                            logger.warning(
+                                f"manual click execution failed for step '{step}': {click_err}"
+                            )
 
                     try:
                         # 클릭 후 결과 화면
@@ -231,11 +238,14 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                                 "click_pos": None,
                             })
                         else:
+                            desc_suffix = (
+                                f" (클릭 실패: {fail_reason})" if fail_reason else " (클릭 실패)"
+                            )
                             screenshots.append({
                                 "step": i,
                                 "filename": f"{job.id}_step{i}a.jpg",
                                 "url": page.url,
-                                "description": f"{step} (클릭 실패)",
+                                "description": f"{step}{desc_suffix}",
                                 "page_text": step_text[:2000] if step_text else "",
                                 "click_pos": None,
                             })
