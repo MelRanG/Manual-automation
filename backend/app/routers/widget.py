@@ -4,6 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -18,10 +19,14 @@ WIDGET_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
 
 
 async def ensure_widget_user(db: AsyncSession):
-    result = await db.execute(select(User).where(User.id == WIDGET_USER_ID))
-    if not result.scalar_one_or_none():
-        db.add(User(id=WIDGET_USER_ID, name="Widget Anonymous", email="widget@docops.ai", role="widget"))
-        await db.commit()
+    stmt = pg_insert(User).values(
+        id=WIDGET_USER_ID,
+        name="Widget Anonymous",
+        email="widget@docops.ai",
+        role="widget",
+    ).on_conflict_do_nothing()
+    await db.execute(stmt)
+    await db.commit()
 
 
 @router.post("/sessions", response_model=WidgetSessionResponse, status_code=201)
