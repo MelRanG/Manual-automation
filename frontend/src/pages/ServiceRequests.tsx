@@ -1,6 +1,6 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { api, type SRDraft, type Document, type ChangeProposal } from "@/lib/api"
+import { api, type SRDraft, type Document, type ChangeProposal, type AiDocRecommendation } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
@@ -405,6 +405,50 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
   const [confirmingNone, setConfirmingNone] = useState(false)
   const [savingNone, setSavingNone] = useState(false)
   const [noneError, setNoneError] = useState<string | null>(null)
+  const [recommendation, setRecommendation] = useState<AiDocRecommendation | null>(null)
+  const [recLoading, setRecLoading] = useState(false)
+  const [recError, setRecError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (sr.status !== "pending_doc_review") return
+    let ignore = false
+    ;(async () => {
+      // 1. latest-proposal로 이전 상태 복원
+      const latest = await api.getLatestProposal(sr.id).catch(() => null)
+      if (ignore) return
+      let restoredDocId: string | null = null
+      if (latest) {
+        setDocMode(latest.doc_mode_hint as DocMode)
+        if (latest.proposal?.document_id) {
+          setSelectedDocId(latest.proposal.document_id)
+          restoredDocId = latest.proposal.document_id
+        }
+        if (latest.proposal) setProposal(latest.proposal)
+        setStep(3)
+      }
+
+      // 2. AI 추천 — 캐시 우선
+      setRecLoading(true)
+      let rec: AiDocRecommendation | null = null
+      try {
+        rec = await api.getAiDocRecommendation(sr.id)
+        if (!rec) rec = await api.postAiDocRecommendation(sr.id)
+      } catch (e) {
+        if (!ignore) setRecError(e instanceof Error ? e.message : "AI 추천 사용 불가")
+      }
+      if (ignore) return
+      setRecLoading(false)
+      setRecommendation(rec)
+      if (
+        !restoredDocId &&
+        rec?.recommendation === "existing" &&
+        rec.suggested_document_id
+      ) {
+        setSelectedDocId(rec.suggested_document_id)
+      }
+    })()
+    return () => { ignore = true }
+  }, [sr.id, sr.status])
 
   const handleSelectNone = () => {
     setConfirmingNone(true)
@@ -454,26 +498,92 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
 
       {step === 1 && (
         <div className="space-y-3">
+          {recLoading && (
+            <div className="p-3 bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg text-xs text-[#757684]">
+              AI 분석 중...
+            </div>
+          )}
+          {!recLoading && recError && (
+            <div className="p-3 bg-[#fff7f7] border border-[#fecaca] rounded-lg text-xs text-[#b91c1c] flex items-center justify-between">
+              <span>AI 추천 사용 불가. 직접 선택해주세요.</span>
+              <button
+                onClick={async () => {
+                  setRecError(null); setRecLoading(true)
+                  try {
+                    const r = await api.postAiDocRecommendation(sr.id, true)
+                    setRecommendation(r)
+                  } catch (e) {
+                    setRecError(e instanceof Error ? e.message : "재시도 실패")
+                  } finally { setRecLoading(false) }
+                }}
+                className="text-[#00288e] underline"
+              >
+                재시도
+              </button>
+            </div>
+          )}
+          {!recLoading && !recError && recommendation && (
+            <div className="p-3 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-[#4a4bdc]">
+                  ✨ AI 추천: {recommendation.recommendation === "new" ? "신규 문서 작성"
+                    : recommendation.recommendation === "existing" ? "기존 문서 수정"
+                    : "문서 수정 없음"}
+                </p>
+                <button
+                  onClick={async () => {
+                    setRecLoading(true)
+                    try {
+                      const r = await api.postAiDocRecommendation(sr.id, true)
+                      setRecommendation(r)
+                    } catch (e) {
+                      setRecError(e instanceof Error ? e.message : "재생성 실패")
+                    } finally { setRecLoading(false) }
+                  }}
+                  className="text-[10px] text-[#4a4bdc] hover:underline"
+                >
+                  재생성
+                </button>
+              </div>
+              <p className="text-xs text-[#444653] whitespace-pre-wrap">{recommendation.reason}</p>
+            </div>
+          )}
+
           <p className="text-sm font-medium text-[#191c1e]">문서 반영 방식을 선택하세요</p>
           <div className="grid grid-cols-3 gap-3">
             <button
               onClick={() => { setDocMode("new"); setStep(3) }}
-              className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#00288e] transition-colors group"
+              className={`p-4 border-2 rounded-xl text-left hover:border-[#00288e] transition-colors group relative ${
+                recommendation?.recommendation === "new" ? "border-[#4a4bdc]" : "border-[#c4c5d5]"
+              }`}
             >
+              {recommendation?.recommendation === "new" && (
+                <span className="absolute top-2 right-2 text-[9px] font-semibold text-[#4a4bdc]">✨ 추천</span>
+              )}
               <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#00288e]">신규 문서 작성</p>
               <p className="text-xs text-[#757684] mt-1">새 문서를 생성합니다</p>
             </button>
             <button
               onClick={() => { setDocMode("existing"); setStep(2) }}
-              className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#00288e] transition-colors group"
+              className={`p-4 border-2 rounded-xl text-left hover:border-[#00288e] transition-colors group relative ${
+                recommendation?.recommendation === "existing" ? "border-[#4a4bdc]" : "border-[#c4c5d5]"
+              }`}
             >
+              {recommendation?.recommendation === "existing" && (
+                <span className="absolute top-2 right-2 text-[9px] font-semibold text-[#4a4bdc]">✨ 추천</span>
+              )}
               <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#00288e]">기존 문서 수정</p>
               <p className="text-xs text-[#757684] mt-1">기존 문서에 반영합니다</p>
             </button>
             <button
               onClick={handleSelectNone}
-              className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#92600a] transition-colors group bg-[#fafafa]"
+              className={`p-4 border-2 rounded-xl text-left hover:border-[#92600a] transition-colors group bg-[#fafafa] relative ${
+                recommendation?.recommendation === "none" ? "border-[#4a4bdc]" : "border-[#c4c5d5]"
+              }`}
             >
+              {recommendation?.recommendation === "none" && (
+                <span className="absolute top-2 right-2 text-[9px] font-semibold text-[#4a4bdc]">✨ 추천</span>
+              )}
               <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#92600a]">문서 수정 없음</p>
               <p className="text-xs text-[#757684] mt-1">문서 변경 없이 SR을 종료합니다</p>
             </button>
