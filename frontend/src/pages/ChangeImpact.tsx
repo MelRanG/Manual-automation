@@ -316,15 +316,8 @@ export function ChangeImpact() {
                       )}
 
                       {normalized === "pending_review" && (
-                        <div className="border-t border-[#e0e3e5] pt-3 flex items-center justify-between">
-                          <p className="text-sm text-[#444653]">수정안이 생성되었습니다. 승인 관리에서 검토하세요.</p>
-                          <button
-                            onClick={() => navigate("/approvals?status=processing")}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00288e] text-white text-xs font-medium rounded-lg hover:bg-[#1e40af] transition-colors"
-                          >
-                            <span className="material-symbols-outlined text-sm">task</span>
-                            승인 관리로 이동
-                          </button>
+                        <div className="border-t border-[#e0e3e5] pt-3">
+                          <p className="text-sm text-[#444653]">수정안이 생성되었습니다. 알림에서 확인하세요.</p>
                         </div>
                       )}
 
