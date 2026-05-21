@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Info, AlertTriangle, X, Camera, CloudRain } from "lucide-react"
+import { useChatSession } from "@/hooks/useChatSession"
+import { buildWidgetAdapter } from "@/lib/chatAdapters"
+import { ChatPanel } from "@/components/chat/ChatPanel"
 import { CUSTOMER, DEFAULT_MESSAGE, REASONS, TOAST, type ReasonKey } from "./DemoWidget.constants"
 
 export interface DemoWidgetProps {
@@ -14,6 +17,70 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
   const [reason, setReason] = useState<ReasonKey | null>(null)
   const [reasonEtcText, setReasonEtcText] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const adapter = useMemo(() => buildWidgetAdapter(null), [])
+  const chat = useChatSession({ sessionId, userId: null, api: adapter })
+
+  const pendingSendRef = useRef(false)
+
+  async function ensureSession(): Promise<string> {
+    if (sessionId) return sessionId
+    const res = await fetch("/api/widget/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        site_id: "demo_courier",
+        anonymous_id: "demo_courier_user",
+        user_id: null,
+      }),
+    })
+    const data = await res.json()
+    const id = data.id as string
+    setSessionId(id)
+    return id
+  }
+
+  const sendWithSession = async () => {
+    if (!sessionId) {
+      pendingSendRef.current = true
+      await ensureSession()
+      return
+    }
+    chat.send()
+  }
+
+  useEffect(() => {
+    if (sessionId && pendingSendRef.current) {
+      pendingSendRef.current = false
+      chat.send()
+    }
+    // chat.send is intentionally in deps so we always have the latest closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, chat.send])
+
+  const chatWithLazySend = { ...chat, send: sendWithSession }
+
+  const emptyState = (
+    <div className="text-center text-sm text-[#444653] mt-8">
+      <span
+        className="material-symbols-outlined text-4xl text-[#00288e] mb-2 block"
+        style={{ fontVariationSettings: "'FILL' 1" }}
+      >
+        smart_toy
+      </span>
+      안녕하세요! 배송 도우미입니다.<br />무엇을 도와드릴까요?
+    </div>
+  )
+
+  useEffect(() => {
+    if (!chatOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [chatOpen])
 
   useEffect(() => {
     const id = window.setTimeout(() => setToastOpen(true), 2000)
@@ -250,6 +317,52 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
             </button>
           </div>
         </div>
+      )}
+
+      {/* Floating Chatbot */}
+      {chatOpen ? (
+        <div className="fixed z-50 inset-0 md:inset-auto md:bottom-8 md:right-8 md:flex md:flex-col md:items-end">
+          <div className="w-full bg-white flex flex-col overflow-hidden h-[100dvh] md:w-[400px] md:h-[550px] md:rounded-xl md:shadow-[0_10px_25px_rgba(0,0,0,0.15)] md:border md:border-[#c4c5d5]">
+            <div className="bg-[#00288e] text-white p-4 pt-[calc(env(safe-area-inset-top)+1rem)] flex-shrink-0 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
+                  smart_toy
+                </span>
+                <span className="text-xl font-semibold">DocOps AI 어시스턴트</span>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setChatOpen(false)}
+                  className="text-white/80 hover:text-white transition-colors p-1"
+                  aria-label="닫기"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ChatPanel chat={chatWithLazySend} variant="compact" emptyState={emptyState} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-8 right-8 z-50 w-14 h-14 rounded-full bg-[#00288e] text-white shadow-lg hover:bg-[#1e40af] transition-all hover:scale-105 flex items-center justify-center"
+          aria-label="챗봇 열기"
+        >
+          <span
+            className="material-symbols-outlined text-2xl"
+            style={{ fontVariationSettings: "'FILL' 1" }}
+          >
+            smart_toy
+          </span>
+        </button>
       )}
     </div>
   )
