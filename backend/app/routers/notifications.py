@@ -6,7 +6,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -71,6 +71,11 @@ class NotificationResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class NotificationListResponse(BaseModel):
+    items: list[NotificationResponse]
+    total: int
+
+
 def _serialize(n: Notification) -> NotificationResponse:
     return NotificationResponse(
         id=str(n.id),
@@ -94,18 +99,33 @@ def _get_user_id(x_user_id: str | None = Header(default=None, alias="X-User-Id")
     return x_user_id
 
 
-@router.get("", response_model=list[NotificationResponse])
+@router.get("", response_model=NotificationListResponse)
 async def list_notifications(
+    type: str | None = None,
+    unread_only: bool = False,
+    skip: int = 0,
+    limit: int = 50,
     user_id: str = Depends(_get_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Notification)
-        .where(Notification.user_id == uuid.UUID(user_id))
-        .order_by(Notification.is_read.asc(), Notification.created_at.desc())
-        .limit(50)
+    base = select(Notification).where(Notification.user_id == uuid.UUID(user_id))
+    if type:
+        base = base.where(Notification.type == type)
+    if unread_only:
+        base = base.where(Notification.is_read.is_(False))
+
+    count_stmt = select(func.count()).select_from(base.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    items_stmt = (
+        base.order_by(Notification.is_read.asc(), Notification.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
-    return [_serialize(n) for n in result.scalars().all()]
+    result = await db.execute(items_stmt)
+    items = [_serialize(n) for n in result.scalars().all()]
+
+    return NotificationListResponse(items=items, total=total)
 
 
 @router.post("/{notification_id}/read")

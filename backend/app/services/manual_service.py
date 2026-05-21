@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import uuid
 
 from sqlalchemy import select
@@ -166,16 +167,20 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                     click_pos = None
                     clicked = False
                     click_target = _extract_click_target(step)
+                    fail_reason: str | None = None
 
-                    try:
-                        # 링크 우선, 없으면 버튼, 그 다음 텍스트 요소
-                        locator = page.locator(f'a:has-text("{click_target}")').first
-                        if not await locator.is_visible(timeout=1500):
-                            locator = page.locator(f'button:has-text("{click_target}")').first
-                        if not await locator.is_visible(timeout=1000):
-                            locator = page.get_by_text(click_target, exact=False).first
+                    locator, match_reason = await _find_click_locator(page, click_target)
 
-                        if await locator.is_visible(timeout=2000):
+                    if locator is None:
+                        fail_reason = match_reason
+                        logger.warning(
+                            f"manual click failed for step '{step}': {match_reason}"
+                        )
+                    else:
+                        logger.info(
+                            f"manual click {match_reason} for step '{step}' → '{click_target}'"
+                        )
+                        try:
                             box = await locator.bounding_box()
                             if box:
                                 click_pos = {
@@ -202,8 +207,11 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                                     pass
                             clicked = True
                             await asyncio.sleep(1.5)
-                    except Exception:
-                        pass
+                        except Exception as click_err:
+                            fail_reason = f"click 실행 실패: {click_err}"
+                            logger.warning(
+                                f"manual click execution failed for step '{step}': {click_err}"
+                            )
 
                     try:
                         # 클릭 후 결과 화면
@@ -230,11 +238,14 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                                 "click_pos": None,
                             })
                         else:
+                            desc_suffix = (
+                                f" (클릭 실패: {fail_reason})" if fail_reason else " (클릭 실패)"
+                            )
                             screenshots.append({
                                 "step": i,
                                 "filename": f"{job.id}_step{i}a.jpg",
                                 "url": page.url,
-                                "description": f"{step} (클릭 실패)",
+                                "description": f"{step}{desc_suffix}",
                                 "page_text": step_text[:2000] if step_text else "",
                                 "click_pos": None,
                             })
@@ -257,12 +268,84 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
     return screenshots
 
 
+_TRAILING_PUNCT = re.compile(r"[\s.…!?。·]+$")
+_ACTION_SUFFIX = re.compile(
+    r"(을|를|으로|로)?\s*(클릭|선택|이동|진입|들어가기|누르기|tap|click)(하기|하세요|해|해요|함)?$",
+    re.IGNORECASE,
+)
+_DESCRIPTOR_SUFFIX = re.compile(r"\s*(버튼|링크|메뉴|탭|항목|아이콘|박스|카드)$")
+
+
 def _extract_click_target(step: str) -> str:
-    """'뉴스 클릭', '뉴스클릭', '뉴스 선택' 등에서 타겟 텍스트 추출."""
-    for suffix in [" 클릭", "클릭", " 선택", "선택", " 이동", "이동"]:
-        if step.endswith(suffix):
-            return step[: -len(suffix)].strip()
-    return step.strip()
+    """자연어 step에서 click target text를 추출한다.
+
+    1) trailing punctuation 제거
+    2) 동작 어미(조사+동사+활용형) 절단
+    3) descriptor(버튼/링크 등) 절단 — 단 결과가 빈 문자열이면 descriptor 유지
+    """
+    s = _TRAILING_PUNCT.sub("", step).strip()
+    if not s:
+        return ""
+
+    after_action = _ACTION_SUFFIX.sub("", s).strip()
+    if after_action:
+        s = after_action
+
+    after_descriptor = _DESCRIPTOR_SUFFIX.sub("", s).strip()
+    if after_descriptor:
+        return after_descriptor
+    return s
+
+
+async def _find_click_locator(page, target: str):
+    """target text에 대해 다양한 locator 전략을 cascade로 시도한다.
+
+    Returns:
+        (locator, reason) — 매칭된 locator와 사유 문자열
+        (None, reason)    — 모두 실패. reason은 사용자 친화 메시지.
+    """
+    if not target:
+        return None, "extract 결과 빈 문자열"
+
+    escaped = re.escape(target)
+    name_re = re.compile(escaped, re.IGNORECASE)
+
+    strategies = [
+        ("role=link",       page.get_by_role("link",   name=name_re)),
+        ("role=button",     page.get_by_role("button", name=name_re)),
+        ("a:has-text",      page.locator(f'a:has-text("{target}")')),
+        ("button:has-text", page.locator(f'button:has-text("{target}")')),
+        ("text",            page.get_by_text(target, exact=False)),
+        ("aria-label",      page.locator(f'[aria-label*="{target}" i]')),
+        ("title",           page.locator(f'[title*="{target}" i]')),
+    ]
+
+    for name, loc in strategies:
+        try:
+            first = loc.first
+            if await first.is_visible(timeout=1000):
+                return first, f"matched: {name}"
+        except Exception:
+            continue
+
+    tokens = [t for t in target.split() if len(t) > 1]
+    if len(tokens) >= 2:
+        for tok in tokens:
+            tok_re = re.compile(re.escape(tok), re.IGNORECASE)
+            partial_strategies = [
+                ("role=link",   page.get_by_role("link",   name=tok_re)),
+                ("role=button", page.get_by_role("button", name=tok_re)),
+                ("text",        page.get_by_text(tok, exact=False)),
+            ]
+            for name, loc in partial_strategies:
+                try:
+                    first = loc.first
+                    if await first.is_visible(timeout=800):
+                        return first, f"matched: partial '{tok}' via {name}"
+                except Exception:
+                    continue
+
+    return None, f"'{target}' 일치 요소 없음"
 
 
 def _resize_screenshot(filepath: "Path", max_width: int = 1280, quality: int = 75) -> None:
