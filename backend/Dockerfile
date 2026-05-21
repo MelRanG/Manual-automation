@@ -9,7 +9,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-RUN uv run playwright install --with-deps chromium
+RUN uv run playwright install --with-deps chromium chromium-headless-shell
 
 COPY app/ app/
 COPY alembic/ alembic/
