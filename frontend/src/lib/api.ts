@@ -99,10 +99,9 @@ export const api = {
     request<ChatSession>('/chat/sessions', { method: 'POST', body: JSON.stringify({ user_id: userId, title }) }),
   listSessions: (userId: string) => request<ChatSession[]>(`/chat/sessions?user_id=${userId}`),
   getMessages: (sessionId: string) => request<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`),
-  deleteSession: async (sessionId: string) => {
+  deleteSession: async (sessionId: string): Promise<void> => {
     const res = await fetch(`${BASE}/chat/sessions/${sessionId}`, { method: 'DELETE', headers: getAuthHeaders() })
     if (!res.ok) throw new Error(`Failed to delete session: ${res.status}`)
-    return res
   },
   askQuestion: (sessionId: string, question: string) =>
     request<AskResponse>(`/chat/sessions/${sessionId}/ask`, {
