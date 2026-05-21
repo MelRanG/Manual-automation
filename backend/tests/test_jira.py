@@ -447,3 +447,79 @@ async def test_webhook_creates_notifications_for_admins_and_owner(client, db_ses
     assert len(owner_notifs) == 1
     assert "알림 테스트 SR" in owner_notifs[0].message
     assert owner_notifs[0].link_path == "/approvals?tab=jira_sr"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_notification_failure_does_not_break_response(client, db_session):
+    """create_notification이 raise해도 webhook 응답 200, SR 상태 전환 정상"""
+    import uuid
+    from unittest.mock import patch
+    from sqlalchemy import select
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraConfig
+    from app.models.feedback import ApprovalRequest
+
+    resp = await client.post("/api/users", json={
+        "name": "Owner Fail",
+        "email": f"owner_fail_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    owner_id = uuid.UUID(resp.json()["id"])
+
+    config = JiraConfig(
+        id=uuid.uuid4(),
+        base_url="https://test.atlassian.net",
+        user_email="t@example.com",
+        api_token="token",
+        project_key="TEST",
+        is_active=True,
+        trigger_status_names=None,
+    )
+    db_session.add(config)
+
+    unique_key = f"TEST-FAIL-{uuid.uuid4().hex[:6]}"
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=owner_id,
+        title="알림 실패 SR",
+        description="설명",
+        priority="medium",
+        status="submitted",
+        created_by_ai=False,
+        jira_issue_key=unique_key,
+    )
+    db_session.add(sr)
+    await db_session.commit()
+
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": unique_key,
+            "fields": {
+                "status": {
+                    "name": "Done",
+                    "statusCategory": {"key": "done"},
+                }
+            },
+        },
+    }
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("simulated push failure")
+
+    with patch("app.routers.jira.create_notification", side_effect=boom):
+        resp = await client.post("/api/jira/webhook", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending_doc_review"
+
+    # SR 상태가 정상 전환됐는지
+    await db_session.refresh(sr)
+    assert sr.status == "pending_doc_review"
+
+    # ApprovalRequest가 생성됐는지
+    approvals = (await db_session.execute(
+        select(ApprovalRequest).where(ApprovalRequest.sr_draft_id == sr.id)
+    )).scalars().all()
+    assert len(approvals) == 1
