@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models.sr import SRDraft, WebhookDeliveryLog, ChangeImpactAnalysis
-from app.schemas.sr import SRDraftCreate, CompletedSREvent
+from app.schemas.sr import SRDraftCreate, CompletedSREvent, SRDraftResponse
 from app.services.llm_service import get_llm_provider
 
 logger = logging.getLogger(__name__)
@@ -333,4 +333,25 @@ SR 설명: {draft.description}
 
     draft.status = "pending_document_selection"
     await db.commit()
+
+
+async def build_sr_response(db: AsyncSession, draft: SRDraft) -> SRDraftResponse:
+    """Convert an SRDraft ORM instance to a response with a freshly computed jira_issue_url."""
+    from app.services import jira_service
+    config = await jira_service.get_active_config(db)
+    response = SRDraftResponse.model_validate(draft)
+    response.jira_issue_url = jira_service.build_jira_issue_url(draft.jira_issue_key, config)
+    return response
+
+
+async def build_sr_responses(db: AsyncSession, drafts: list[SRDraft]) -> list[SRDraftResponse]:
+    """Same as build_sr_response but fetches config once for a batch."""
+    from app.services import jira_service
+    config = await jira_service.get_active_config(db)
+    out: list[SRDraftResponse] = []
+    for draft in drafts:
+        response = SRDraftResponse.model_validate(draft)
+        response.jira_issue_url = jira_service.build_jira_issue_url(draft.jira_issue_key, config)
+        out.append(response)
+    return out
 
