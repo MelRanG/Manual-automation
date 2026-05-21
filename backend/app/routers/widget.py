@@ -106,6 +106,11 @@ async def admin_list_widget_sessions(
     result = await db.execute(
         select(ChatSession)
         .where(ChatSession.title.like("widget:%"))
+        .where(
+            select(ChatMessage.id)
+            .where(ChatMessage.session_id == ChatSession.id)
+            .exists()
+        )
         .order_by(ChatSession.created_at.desc())
         .limit(50)
     )

@@ -10,6 +10,7 @@ export function Chat() {
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [activeSession, setActiveSession] = useState<string | null>(null)
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
+  const [isDrafting, setIsDrafting] = useState(false)
 
   const adapter = useMemo(
     () => buildChatAdapter(user?.id ?? "placeholder"),
@@ -20,6 +21,11 @@ export function Chat() {
     sessionId: activeSession,
     userId: user?.id ?? null,
     api: adapter,
+    onSessionCreated: (session) => {
+      setSessions(prev => [session, ...prev])
+      setActiveSession(session.id)
+      setIsDrafting(false)
+    },
   })
 
   useEffect(() => {
@@ -28,11 +34,9 @@ export function Chat() {
     }
   }, [user?.id])
 
-  const createSession = async () => {
-    if (!user?.id) return
-    const session = await api.createSession(user.id)
-    setSessions([session, ...sessions])
-    setActiveSession(session.id)
+  const startDraft = () => {
+    setActiveSession(null)
+    setIsDrafting(true)
     chat.resetAll()
   }
 
@@ -44,6 +48,7 @@ export function Chat() {
       setSessions(prev => prev.filter(s => s.id !== sessionId))
       if (activeSession === sessionId) {
         setActiveSession(null)
+        setIsDrafting(false)
         chat.resetAll()
       }
     } finally {
@@ -76,7 +81,10 @@ export function Chat() {
         }`}
       >
         <button
-          onClick={() => setActiveSession(s.id)}
+          onClick={() => {
+            setActiveSession(s.id)
+            setIsDrafting(false)
+          }}
           className={`flex-1 text-left px-3 py-2 text-sm truncate transition-colors ${
             activeSession === s.id ? "text-[#00288e] font-medium" : "text-[#191c1e]"
           }`}
@@ -110,7 +118,7 @@ export function Chat() {
       <div className="w-64 bg-white border-r border-[#c4c5d5] flex flex-col shrink-0">
         <div className="p-4 border-b border-[#c4c5d5] flex justify-between items-center">
           <h2 className="text-xs font-semibold text-[#191c1e]">최근 대화</h2>
-          <button onClick={createSession} className="text-[#444653] hover:text-[#00288e] transition-colors">
+          <button onClick={startDraft} className="text-[#444653] hover:text-[#00288e] transition-colors">
             <span className="material-symbols-outlined text-base">edit_square</span>
           </button>
         </div>
@@ -136,11 +144,11 @@ export function Chat() {
         </div>
       </div>
 
-      {!activeSession ? (
+      {!activeSession && !isDrafting ? (
         <div className="flex-1 flex flex-col items-center justify-center bg-[#f7f9fb] py-8">
           {emptyState}
           <button
-            onClick={createSession}
+            onClick={startDraft}
             className="mt-6 bg-[#00288e] text-white text-sm font-semibold rounded-lg px-5 py-2.5 hover:bg-[#1e40af] transition-colors shadow-sm flex items-center gap-2"
           >
             <span className="material-symbols-outlined text-base">add</span>새 대화 시작

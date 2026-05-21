@@ -89,6 +89,11 @@ async def list_sessions(db: AsyncSession, user_id: uuid.UUID) -> list[ChatSessio
     result = await db.execute(
         select(ChatSession)
         .where(ChatSession.user_id == user_id)
+        .where(
+            select(ChatMessage.id)
+            .where(ChatMessage.session_id == ChatSession.id)
+            .exists()
+        )
         .order_by(ChatSession.created_at.desc())
     )
     return list(result.scalars().all())

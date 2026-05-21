@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import type {
-  ChatMessage, Citation, DocumentWarning, SRDraftCreated,
+  ChatMessage, Citation, DocumentWarning, SRDraftCreated, ChatSession,
 } from "@/lib/api"
 import type { ChatApiAdapter } from "@/lib/chatAdapters"
 
@@ -12,6 +12,8 @@ export interface UseChatSessionArgs {
   userId: string | null
   /** Must be a stable reference (wrap in useMemo). The hook reloads messages when `api` identity changes. */
   api: ChatApiAdapter
+  /** Called after lazy-create. Parent must reflect this in sidebar + activeSession. */
+  onSessionCreated?: (session: ChatSession) => void
 }
 
 export interface ChatSessionState {
@@ -49,7 +51,7 @@ export interface ChatSessionState {
   resetAll: () => void
 }
 
-export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSessionState {
+export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSessionArgs): ChatSessionState {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [citations, setCitations] = useState<Citation[]>([])
   const [citationsByMessage, setCitationsByMessage] = useState<Record<string, Citation[]>>({})
@@ -57,7 +59,6 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
   const [loading, setLoading] = useState(false)
   const [input, setInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("question")
-
   const [srDraftsByMessage, setSrDraftsByMessage] = useState<Record<string, SRDraftCreated>>({})
   const [srSendingId, setSrSendingId] = useState<string | null>(null)
   const [srSentById, setSrSentById] = useState<Record<string, string>>({})
@@ -74,6 +75,10 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
   // effect and send() race; without this, getMessages([]) overwrites the
   // [user, streaming] placeholders and SSE tokens have nothing to update.
   const inFlightRef = useRef(false)
+  // Synchronous guard for lazy session creation. React state updates are
+  // async, so isCreating state alone cannot prevent two rapid clicks from
+  // both passing the guard and calling ensureSession() twice.
+  const isCreatingRef = useRef(false)
 
   const canSubmitSR = typeof api.submitSR === "function"
   const canSubmitFeedback = typeof api.submitFeedback === "function"
@@ -112,7 +117,21 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
   }, [sessionId, api, resetAll])
 
   const send = useCallback(async () => {
-    if (!input.trim() || !sessionId) return
+    if (!input.trim() || isCreatingRef.current) return
+    let activeSessionId = sessionId
+    if (!activeSessionId) {
+      if (!api.ensureSession) return
+      isCreatingRef.current = true
+      try {
+        const created = await api.ensureSession()
+        activeSessionId = created.id
+        onSessionCreated?.(created)
+      } catch {
+        return
+      } finally {
+        isCreatingRef.current = false
+      }
+    }
     inFlightRef.current = true
     const question = chatMode === "change_request" ? `[변경 요청] ${input}` : input
     const userInput = input
@@ -122,14 +141,14 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
 
     const userMsg: ChatMessage = {
       id: "user-" + Date.now(),
-      session_id: sessionId,
+      session_id: activeSessionId,
       role: "user",
       content: userInput,
       created_at: new Date().toISOString(),
     }
     const botMsg: ChatMessage = {
       id: "streaming",
-      session_id: sessionId,
+      session_id: activeSessionId,
       role: "assistant",
       content: "",
       created_at: new Date().toISOString(),
@@ -140,7 +159,7 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
       let content = ""
       let messageId = ""
       let srDraft: SRDraftCreated | undefined
-      for await (const event of api.askStream(sessionId, question)) {
+      for await (const event of api.askStream(activeSessionId, question)) {
         if (event.type === "token" && event.token) {
           content += event.token
           setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content } : m))
@@ -171,7 +190,7 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
       setLoading(false)
       inFlightRef.current = false
     }
-  }, [input, sessionId, chatMode, api])
+  }, [input, sessionId, chatMode, api, onSessionCreated])
 
   const sendSR = useCallback(async (draft: SRDraftCreated) => {
     if (!api.submitSR) return

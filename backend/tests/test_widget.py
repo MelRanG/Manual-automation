@@ -157,3 +157,35 @@ async def test_feedback_allowed_for_authenticated_user(
     })
     # 200/201 or other non-403 acceptable; 403 must NOT occur.
     assert resp.status_code != 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_widget_admin_list_excludes_empty(client: AsyncClient):
+    empty_resp = await client.post("/api/widget/sessions", json={
+        "site_id": "site-empty",
+        "anonymous_id": "anon-empty",
+    })
+    assert empty_resp.status_code == 201
+    empty_id = empty_resp.json()["id"]
+
+    full_resp = await client.post("/api/widget/sessions", json={
+        "site_id": "site-full",
+        "anonymous_id": "anon-full",
+    })
+    assert full_resp.status_code == 201
+    full_id = full_resp.json()["id"]
+
+    # DB 에 직접 메시지 row 만들어 "메시지 있음" 상태 만듦
+    from app.models.chat import ChatMessage
+    from app.db import SessionLocal
+
+    async with SessionLocal() as db:
+        db.add(ChatMessage(id=uuid.uuid4(), session_id=uuid.UUID(full_id),
+                            role="user", content="hi"))
+        await db.commit()
+
+    admin_resp = await client.get("/api/widget/admin/sessions")
+    assert admin_resp.status_code == 200
+    ids = [s["id"] for s in admin_resp.json()]
+    assert full_id in ids
+    assert empty_id not in ids

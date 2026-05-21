@@ -1,4 +1,4 @@
-import { api, type ChatMessage, type StreamEvent } from "@/lib/api"
+import { api, type ChatMessage, type StreamEvent, type ChatSession } from "@/lib/api"
 import { parseSSE } from "@/lib/sse"
 
 export type { StreamEvent } from "@/lib/api"
@@ -18,6 +18,8 @@ export interface FeedbackResult {
 export interface ChatApiAdapter {
   getMessages(sessionId: string): Promise<ChatMessage[]>
   askStream(sessionId: string, question: string): AsyncIterable<StreamEvent>
+  /** Lazy-create a session on first send. Returns the created session. */
+  ensureSession?(): Promise<ChatSession>
   submitSR?(draftId: string): Promise<{ jira_issue_key?: string }>
   submitFeedback?(payload: FeedbackPayload): Promise<FeedbackResult>
 }
@@ -26,6 +28,7 @@ export function buildChatAdapter(userId: string): ChatApiAdapter {
   return {
     getMessages: (id) => api.getMessages(id),
     askStream: (id, q) => api.askQuestionStream(id, q),
+    ensureSession: () => api.createSession(userId),
     submitSR: (draftId) => api.submitSR(draftId),
     submitFeedback: (payload) =>
       api.createFeedback({ ...payload, user_id: userId }) as Promise<FeedbackResult>,

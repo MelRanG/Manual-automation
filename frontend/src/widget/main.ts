@@ -57,6 +57,7 @@ class WidgetApp {
   private messages: WidgetMessage[] = []
   private isOpen = false
   private isStreaming = false
+  private isCreating = false
   private panel: HTMLElement | null = null
   private messagesEl: HTMLElement | null = null
   private inputEl: HTMLInputElement | null = null
@@ -115,9 +116,7 @@ class WidgetApp {
     trigger.addEventListener("click", () => this.toggle())
     close.addEventListener("click", () => this.toggle())
 
-    this.inputEl.addEventListener("input", () => {
-      sendBtn.disabled = !this.inputEl!.value.trim() || this.isStreaming
-    })
+    this.inputEl.addEventListener("input", () => this.updateSendBtnState())
     this.inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !sendBtn.disabled) this.send()
     })
@@ -128,25 +127,18 @@ class WidgetApp {
     this.isOpen = !this.isOpen
     this.panel!.classList.toggle("hidden", !this.isOpen)
 
-    if (this.isOpen && !this.sessionId) {
-      await this.initSession()
-    } else if (this.isOpen && this.sessionId && this.messages.length === 0) {
+    if (!this.isOpen) return
+    if (this.sessionId && this.messages.length === 0) {
       await this.loadHistory()
+    } else if (!this.sessionId && this.messages.length === 0) {
+      this.startDraft()
     }
   }
 
-  private async initSession() {
-    try {
-      const anonymousId = localStorage.getItem(`docops_anon_${this.config.siteId}`) || Math.random().toString(36).slice(2, 10)
-      localStorage.setItem(`docops_anon_${this.config.siteId}`, anonymousId)
-
-      const session = await createSession(this.config, anonymousId)
-      this.sessionId = session.id
-      this.saveSession()
-      this.addBotMessage("안녕하세요! 무엇을 도와드릴까요?")
-    } catch {
-      this.addBotMessage("연결에 실패했습니다. 잠시 후 다시 시도해주세요.")
-    }
+  private startDraft() {
+    this.messages = []
+    this.renderMessages()
+    this.addBotMessage("안녕하세요! 무엇을 도와드릴까요?")
   }
 
   private async loadHistory() {
@@ -155,15 +147,48 @@ class WidgetApp {
       const msgs = await getMessages(this.config, this.sessionId)
       this.messages = msgs
       this.renderMessages()
-    } catch { /* ignore */ }
+      if (msgs.length === 0) {
+        this.addBotMessage("안녕하세요! 무엇을 도와드릴까요?")
+      }
+    } catch (e) {
+      const isStale = e instanceof Error && e.message.includes("404")
+      if (isStale) {
+        localStorage.removeItem(`docops_widget_${this.config.siteId}`)
+        this.sessionId = null
+        this.messages = []
+        this.startDraft()
+      }
+      // Other errors: keep session, user can retry on next open.
+    }
   }
 
   private async send() {
     const question = this.inputEl!.value.trim()
-    if (!question || !this.sessionId || this.isStreaming) return
+    if (!question || this.isStreaming || this.isCreating) return
+
+    if (!this.sessionId) {
+      this.isCreating = true
+      this.updateSendBtnState()
+      try {
+        const anonymousId = localStorage.getItem(`docops_anon_${this.config.siteId}`)
+          || Math.random().toString(36).slice(2, 10)
+        localStorage.setItem(`docops_anon_${this.config.siteId}`, anonymousId)
+        const session = await createSession(this.config, anonymousId)
+        this.sessionId = session.id
+        this.saveSession()
+      } catch {
+        this.addBotMessage("연결에 실패했습니다. 잠시 후 다시 시도해주세요.")
+        this.isCreating = false
+        this.updateSendBtnState()
+        return
+      }
+      this.isCreating = false
+      this.updateSendBtnState()
+    }
 
     this.inputEl!.value = ""
     this.isStreaming = true
+    this.updateSendBtnState()
     this.messages.push({ id: "temp-user", role: "user", content: question })
     this.renderMessages()
 
@@ -190,6 +215,7 @@ class WidgetApp {
     }
 
     this.isStreaming = false
+    this.updateSendBtnState()
     this.renderMessages()
   }
 
@@ -212,6 +238,12 @@ class WidgetApp {
       })
       .join("")
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight
+  }
+
+  private updateSendBtnState() {
+    const sendBtn = this.container.querySelector(".docops-input-area button") as HTMLButtonElement | null
+    if (!sendBtn || !this.inputEl) return
+    sendBtn.disabled = !this.inputEl.value.trim() || this.isStreaming || this.isCreating
   }
 
   private escapeHtml(str: string): string {
