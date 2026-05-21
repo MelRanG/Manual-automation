@@ -16,12 +16,23 @@ async def test_create_chat_session(client: AsyncClient, test_user: dict):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_list_chat_sessions(client: AsyncClient, test_user: dict):
-    await client.post("/api/chat/sessions", json={
+    # 문서 + ask 로 메시지 있는 세션 보장
+    await client.post("/api/documents", json={
+        "title": "Doc for list",
+        "description": "x",
+        "owner_id": test_user["id"],
+    }, params={"content": "content"})
+    sess_resp = await client.post("/api/chat/sessions", json={
         "user_id": test_user["id"],
+    })
+    sess_id = sess_resp.json()["id"]
+    await client.post(f"/api/chat/sessions/{sess_id}/ask", json={
+        "question": "anything?",
     })
     resp = await client.get("/api/chat/sessions", params={"user_id": test_user["id"]})
     assert resp.status_code == 200
-    assert len(resp.json()) >= 1
+    ids = [s["id"] for s in resp.json()]
+    assert sess_id in ids
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -107,3 +118,37 @@ async def test_delete_session_without_messages(client: AsyncClient, test_user: d
 
     resp = await client.delete(f"/api/chat/sessions/{session_id}")
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_sessions_excludes_empty(client: AsyncClient, test_user: dict):
+    # 메시지가 없는 빈 세션 생성
+    empty_resp = await client.post("/api/chat/sessions", json={
+        "user_id": test_user["id"],
+        "title": "Empty Session",
+    })
+    assert empty_resp.status_code == 201
+    empty_id = empty_resp.json()["id"]
+
+    # 메시지가 있는 세션 생성 (문서 등록 후 ask)
+    await client.post("/api/documents", json={
+        "title": "Leave Policy",
+        "description": "HR",
+        "owner_id": test_user["id"],
+    }, params={"content": "Employees get 20 days paid leave."})
+    sess_resp = await client.post("/api/chat/sessions", json={
+        "user_id": test_user["id"],
+        "title": "Has Message",
+    })
+    sess_id = sess_resp.json()["id"]
+    ask_resp = await client.post(f"/api/chat/sessions/{sess_id}/ask", json={
+        "question": "How many leave days?",
+    })
+    assert ask_resp.status_code == 200
+
+    # list 응답에서 빈 세션은 없어야 함
+    list_resp = await client.get("/api/chat/sessions", params={"user_id": test_user["id"]})
+    assert list_resp.status_code == 200
+    ids = [s["id"] for s in list_resp.json()]
+    assert sess_id in ids
+    assert empty_id not in ids
