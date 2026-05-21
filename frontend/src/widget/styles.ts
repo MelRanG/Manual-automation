@@ -147,5 +147,29 @@ export function getWidgetStyles(primaryColor: string): string {
     .docops-input-area button svg { width: 16px; height: 16px; fill: white; }
 
     .hidden { display: none !important; }
+
+    .docops-citations {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed #c4c5d5;
+      font-size: 11px;
+      color: #444653;
+      line-height: 1.4;
+    }
+    .docops-warning {
+      background: rgba(255, 219, 206, 0.4);
+      border: 1px solid #ffdbce;
+      color: #611e00;
+      padding: 6px 10px;
+      margin-top: 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .docops-warning::before {
+      content: "⚠";
+    }
   `
 }
