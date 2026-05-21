@@ -333,7 +333,17 @@ Write a clear step-by-step guide. Format as clean markdown with numbered steps."
 
 async def list_jobs(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[ManualGenerationJob]:
     from sqlalchemy import select as sa_select
-    stmt = sa_select(ManualGenerationJob).order_by(ManualGenerationJob.created_at.desc())
+    from sqlalchemy.orm import selectinload
+    from app.models.feedback import ProposedDocumentChange
+
+    stmt = (
+        sa_select(ManualGenerationJob)
+        .options(
+            selectinload(ManualGenerationJob.proposed_change)
+            .selectinload(ProposedDocumentChange.approval_request)
+        )
+        .order_by(ManualGenerationJob.created_at.desc())
+    )
     if user_id:
         stmt = stmt.where(ManualGenerationJob.user_id == user_id)
     result = await db.execute(stmt)
@@ -341,5 +351,16 @@ async def list_jobs(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[
 
 
 async def get_job(db: AsyncSession, job_id: uuid.UUID) -> ManualGenerationJob | None:
-    result = await db.execute(select(ManualGenerationJob).where(ManualGenerationJob.id == job_id))
+    from sqlalchemy.orm import selectinload
+    from app.models.feedback import ProposedDocumentChange
+
+    stmt = (
+        select(ManualGenerationJob)
+        .options(
+            selectinload(ManualGenerationJob.proposed_change)
+            .selectinload(ProposedDocumentChange.approval_request)
+        )
+        .where(ManualGenerationJob.id == job_id)
+    )
+    result = await db.execute(stmt)
     return result.scalar_one_or_none()
