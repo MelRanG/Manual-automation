@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import uuid
 
 from sqlalchemy import select
@@ -257,12 +258,33 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
     return screenshots
 
 
+_TRAILING_PUNCT = re.compile(r"[\s.…!?。·]+$")
+_ACTION_SUFFIX = re.compile(
+    r"(을|를|으로|로)?\s*(클릭|선택|이동|진입|들어가기|누르기|tap|click)(하기|하세요|해|해요|함)?$",
+    re.IGNORECASE,
+)
+_DESCRIPTOR_SUFFIX = re.compile(r"\s*(버튼|링크|메뉴|탭|항목|아이콘|박스|카드)$")
+
+
 def _extract_click_target(step: str) -> str:
-    """'뉴스 클릭', '뉴스클릭', '뉴스 선택' 등에서 타겟 텍스트 추출."""
-    for suffix in [" 클릭", "클릭", " 선택", "선택", " 이동", "이동"]:
-        if step.endswith(suffix):
-            return step[: -len(suffix)].strip()
-    return step.strip()
+    """자연어 step에서 click target text를 추출한다.
+
+    1) trailing punctuation 제거
+    2) 동작 어미(조사+동사+활용형) 절단
+    3) descriptor(버튼/링크 등) 절단 — 단 결과가 빈 문자열이면 descriptor 유지
+    """
+    s = _TRAILING_PUNCT.sub("", step).strip()
+    if not s:
+        return ""
+
+    after_action = _ACTION_SUFFIX.sub("", s).strip()
+    if after_action:
+        s = after_action
+
+    after_descriptor = _DESCRIPTOR_SUFFIX.sub("", s).strip()
+    if after_descriptor:
+        return after_descriptor
+    return s
 
 
 def _resize_screenshot(filepath: "Path", max_width: int = 1280, quality: int = 75) -> None:
