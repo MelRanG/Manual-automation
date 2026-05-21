@@ -15,7 +15,7 @@ class JiraConfigUpsert(BaseModel):
 
 class JiraConfigResponse(BaseModel):
     id: uuid.UUID
-    site_url: str | None
+    site_url: str | None = None
     base_url: str  # server-derived (read-only from client perspective)
     user_email: str
     api_token_masked: str  # "****" + 마지막 4자
