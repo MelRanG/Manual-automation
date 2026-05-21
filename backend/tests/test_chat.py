@@ -26,9 +26,10 @@ async def test_list_chat_sessions(client: AsyncClient, test_user: dict):
         "user_id": test_user["id"],
     })
     sess_id = sess_resp.json()["id"]
-    await client.post(f"/api/chat/sessions/{sess_id}/ask", json={
+    ask_resp = await client.post(f"/api/chat/sessions/{sess_id}/ask", json={
         "question": "anything?",
     })
+    assert ask_resp.status_code == 200
     resp = await client.get("/api/chat/sessions", params={"user_id": test_user["id"]})
     assert resp.status_code == 200
     ids = [s["id"] for s in resp.json()]
