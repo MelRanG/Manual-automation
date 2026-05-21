@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { api, type ManualJob } from "@/lib/api"
@@ -27,7 +27,7 @@ function jobBadgeLabel(j: ManualJob): { label: string; cls: string } {
 
 export function ManualGenerator() {
   const { user } = useAuth()
-  const { startJob } = useManualJob()
+  const { startJob, completionVersion } = useManualJob()
   const [tab, setTab] = useState<Tab>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -44,6 +44,12 @@ export function ManualGenerator() {
     () => api.listManualJobs(user?.id),
     [user?.id]
   )
+
+  // 백그라운드 폴링이 완료/실패를 감지하면 jobs 목록을 새로 가져와
+  // AI 초안 탭의 stale "생성 중" 표시를 해소한다.
+  useEffect(() => {
+    if (completionVersion > 0) refetch()
+  }, [completionVersion, refetch])
 
   const allJobs = jobs ?? []
 

@@ -14,6 +14,7 @@ interface ManualJobContextValue {
   currentStatus: ManualJob["status"] | null
   startJob: (job: ManualJob) => void
   clearJob: () => void
+  completionVersion: number
 }
 
 const ManualJobContext = createContext<ManualJobContextValue>({
@@ -21,6 +22,7 @@ const ManualJobContext = createContext<ManualJobContextValue>({
   currentStatus: null,
   startJob: () => {},
   clearJob: () => {},
+  completionVersion: 0,
 })
 
 export function ManualJobProvider({ children }: { children: ReactNode }) {
@@ -33,6 +35,7 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
     }
   })
   const [currentStatus, setCurrentStatus] = useState<ManualJob["status"] | null>(null)
+  const [completionVersion, setCompletionVersion] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const clearJob = useCallback(() => {
@@ -49,10 +52,9 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
       try {
         const updated = await api.getManualJob(jobId)
         setCurrentStatus(updated.status)
-        if (updated.status === "completed") {
+        if (updated.status === "completed" || updated.status === "failed") {
           clearJob()
-        } else if (updated.status === "failed") {
-          clearJob()
+          setCompletionVersion((v) => v + 1)
         }
       } catch {
         // 일시적 오류 무시
@@ -81,7 +83,7 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ManualJobContext.Provider value={{ runningJob, currentStatus, startJob, clearJob }}>
+    <ManualJobContext.Provider value={{ runningJob, currentStatus, startJob, clearJob, completionVersion }}>
       {children}
     </ManualJobContext.Provider>
   )
