@@ -294,7 +294,38 @@ export type LatestProposalResponse = {
   proposal: ChangeProposal | null
   doc_mode_hint: "new" | "existing"
 }
-export interface ManualJob { id: string; user_id: string; target_url: string; login_url: string | null; status: string; output_document_id: string | null; screenshots: { step: number; filename: string | null; url: string; description: string }[] | null; error_message: string | null; created_at: string }
+export interface ProposedChangeBrief {
+  id: string
+  proposed_text: string
+  reasoning: string
+  confidence: number
+  source_type: "feedback" | "playwright" | "jira_sr"
+  status: string
+}
+
+export interface ApprovalBrief {
+  id: string
+  status: string
+  approval_type: string
+  comment: string | null
+  reviewer_id: string | null
+  reviewed_at: string | null
+  created_at: string
+}
+
+export interface ManualJob {
+  id: string
+  user_id: string
+  target_url: string
+  login_url: string | null
+  status: string
+  output_document_id: string | null
+  screenshots: { step: number; filename: string | null; url: string; description: string }[] | null
+  error_message: string | null
+  created_at: string
+  proposed_change: ProposedChangeBrief | null
+  approval: ApprovalBrief | null
+}
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
 export interface JiraConfig {
   id: string

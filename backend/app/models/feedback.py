@@ -61,6 +61,11 @@ class ProposedDocumentChange(Base, UUIDMixin, TimestampMixin):
     approval_request: Mapped["ApprovalRequest | None"] = relationship(
         back_populates="proposed_change"
     )
+    manual_job: Mapped["ManualGenerationJob | None"] = relationship(
+        "ManualGenerationJob",
+        back_populates="proposed_change",
+        foreign_keys=[manual_job_id],
+    )
 
 
 class ApprovalRequest(Base, UUIDMixin, TimestampMixin):

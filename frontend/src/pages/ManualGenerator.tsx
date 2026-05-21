@@ -1,23 +1,28 @@
 import { useState } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { api, type ManualJob } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { useManualJob } from "@/contexts/ManualJobContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
+import { ApprovalReviewPanel } from "@/components/ApprovalReviewPanel"
 
 type Tab = "all" | "review" | "done"
 
-const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-[#fff3dc] text-[#92600a]",
-  running: "bg-[#d5e3fc] text-[#00288e]",
-  completed: "bg-[#dcfce7] text-[#15803d]",
-  failed: "bg-[#ffdad6] text-[#ba1a1a]",
-}
-const STATUS_LABEL: Record<string, string> = {
-  pending: "대기",
-  running: "생성 중",
-  completed: "완료",
-  failed: "실패",
+function jobBadgeLabel(j: ManualJob): { label: string; cls: string } {
+  if (j.status === "running" || j.status === "pending") {
+    return { label: "생성 중", cls: "bg-[#d5e3fc] text-[#00288e]" }
+  }
+  if (j.status === "failed") {
+    return { label: "실패", cls: "bg-[#ffdad6] text-[#ba1a1a]" }
+  }
+  const a = j.approval?.status
+  if (a === "pending") return { label: "검토 대기", cls: "bg-[#fff3dc] text-[#92600a]" }
+  if (a === "needs_review") return { label: "추가 확인", cls: "bg-[#e8f0fe] text-[#1a56db]" }
+  if (a === "approved") return { label: "승인 완료", cls: "bg-[#dcfce7] text-[#15803d]" }
+  if (a === "rejected") return { label: "반려", cls: "bg-[#fce4ec] text-[#c62828]" }
+  return { label: j.status, cls: "bg-[#f2f4f6] text-[#757684]" }
 }
 
 export function ManualGenerator() {
@@ -42,15 +47,20 @@ export function ManualGenerator() {
 
   const allJobs = jobs ?? []
 
+  const isPendingReview = (j: ManualJob) =>
+    j.approval?.status === "pending" || j.approval?.status === "needs_review"
+  const isClosed = (j: ManualJob) =>
+    j.approval?.status === "approved" || j.approval?.status === "rejected"
+
   const filtered = allJobs.filter(j => {
     if (tab === "all") return true
-    if (tab === "review") return j.status === "completed" && !j.output_document_id
-    if (tab === "done") return j.status === "completed" && !!j.output_document_id
+    if (tab === "review") return isPendingReview(j)
+    if (tab === "done") return isClosed(j)
     return true
   })
 
   const selected = allJobs.find(j => j.id === selectedId) ?? null
-  const reviewCount = allJobs.filter(j => j.status === "completed" && !j.output_document_id).length
+  const reviewCount = allJobs.filter(isPendingReview).length
 
   const normalizeUrl = (url: string) => {
     const v = url.trim()
@@ -175,9 +185,14 @@ export function ManualGenerator() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{job.target_url}</p>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[job.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
-                    {STATUS_LABEL[job.status] ?? job.status}
-                  </span>
+                  {(() => {
+                    const b = jobBadgeLabel(job)
+                    return (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${b.cls}`}>
+                        {b.label}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <p className="text-xs text-[#9a9bad] mt-1">{new Date(job.created_at).toLocaleDateString("ko-KR")}</p>
               </button>
@@ -199,19 +214,22 @@ export function ManualGenerator() {
   )
 }
 
-function ManualDetail({ job }: { job: ManualJob; onRefetch?: () => void }) {
+function ManualDetail({ job, onRefetch }: { job: ManualJob; onRefetch: () => void }) {
+  const { user } = useAuth()
   const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">("info")
 
   return (
     <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <h3 className="text-lg font-bold text-[#191c1e] flex-1 truncate">{job.target_url}</h3>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-          job.status === "completed" ? "bg-[#dcfce7] text-[#15803d]" :
-          job.status === "running" ? "bg-[#d5e3fc] text-[#00288e]" :
-          job.status === "failed" ? "bg-[#ffdad6] text-[#ba1a1a]" :
-          "bg-[#fff3dc] text-[#92600a]"
-        }`}>{job.status === "completed" ? "완료" : job.status === "running" ? "생성 중" : job.status === "failed" ? "실패" : "대기"}</span>
+        {(() => {
+          const b = jobBadgeLabel(job)
+          return (
+            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${b.cls}`}>
+              {b.label}
+            </span>
+          )
+        })()}
       </div>
 
       <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
@@ -243,22 +261,74 @@ function ManualDetail({ job }: { job: ManualJob; onRefetch?: () => void }) {
         </div>
       )}
 
-      {activeSection === "draft" && (
-        <div>
-          {job.output_document_id ? (
-            <div className="text-sm text-[#444653]">
-              <p className="mb-2 text-[#15803d] font-medium">문서가 생성되었습니다.</p>
-              <a href={`/documents/${job.output_document_id}`} className="text-[#00288e] hover:underline text-sm">생성된 문서 보기 →</a>
+      {activeSection === "draft" && (() => {
+        if (job.status === "pending" || job.status === "running") {
+          return (
+            <div className="flex items-center gap-3 p-4 bg-[#d5e3fc] rounded-xl text-sm text-[#00288e]">
+              <span className="material-symbols-outlined animate-spin">progress_activity</span>
+              매뉴얼 생성 중입니다. 잠시 후 다시 확인해주세요.
             </div>
-          ) : job.status === "completed" ? (
-            <div className="p-4 bg-[#fff3dc] rounded-xl text-sm text-[#92600a]">
-              매뉴얼이 생성되었습니다. 문서 관리 메뉴에서 확인하세요.
+          )
+        }
+        if (job.status === "failed") {
+          return (
+            <div className="p-4 bg-[#ffdad6] rounded-xl text-sm text-[#ba1a1a]">
+              매뉴얼 생성에 실패했습니다.
+              {job.error_message && <pre className="mt-2 text-xs whitespace-pre-wrap">{job.error_message}</pre>}
             </div>
-          ) : (
-            <div className="text-sm text-[#9a9bad]">매뉴얼 생성이 완료된 후 초안을 확인할 수 있습니다.</div>
-          )}
-        </div>
-      )}
+          )
+        }
+        const a = job.approval
+        const c = job.proposed_change
+        if (!a || !c) {
+          return <p className="text-sm text-[#9a9bad]">AI 초안 데이터가 없습니다.</p>
+        }
+        if (a.status === "pending" || a.status === "needs_review") {
+          return (
+            <ApprovalReviewPanel
+              key={a.id}
+              approval={{ id: a.id, status: a.status, approval_type: a.approval_type, comment: a.comment, proposed_change: c }}
+              reviewerId={user?.id ?? "00000000-0000-0000-0000-000000000001"}
+              variant="playwright"
+              onReviewed={onRefetch}
+            />
+          )
+        }
+        if (a.status === "approved") {
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-[#dcfce7] rounded-lg">
+                <span className="text-sm font-medium text-[#15803d]">승인 완료. 문서가 생성되었습니다.</span>
+                {job.output_document_id && (
+                  <a
+                    href={`/documents/${job.output_document_id}`}
+                    className="text-sm text-[#00288e] hover:underline"
+                  >
+                    문서 관리에서 열기 →
+                  </a>
+                )}
+              </div>
+              <div className="bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg p-4 prose prose-sm max-w-none">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.proposed_text}</ReactMarkdown>
+              </div>
+            </div>
+          )
+        }
+        if (a.status === "rejected") {
+          return (
+            <div className="space-y-4">
+              <div className="p-3 bg-[#fce4ec] rounded-lg">
+                <p className="text-sm font-medium text-[#c62828]">반려됨</p>
+                {a.comment && <p className="mt-1 text-xs text-[#444653]">{a.comment}</p>}
+              </div>
+              <div className="bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg p-4 prose prose-sm max-w-none opacity-70">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.proposed_text}</ReactMarkdown>
+              </div>
+            </div>
+          )
+        }
+        return null
+      })()}
 
       {activeSection === "history" && (
         <ChangeHistoryTimeline entityType="manual" entityId={job.id} />
