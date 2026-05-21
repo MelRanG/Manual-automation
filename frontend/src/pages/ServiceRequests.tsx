@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { api, type SRDraft, type Document, type ChangeProposal, type AiDocRecommendation } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
@@ -51,6 +51,7 @@ const VALID_TABS: Tab[] = ["all", "draft", "active", "pending_doc_review", "done
 
 export function ServiceRequests() {
   const { user } = useAuth()
+  const reviewerId = user?.id ?? "00000000-0000-0000-0000-000000000001"
   const [searchParams, setSearchParams] = useSearchParams()
   const initialTab = (() => {
     const q = searchParams.get("tab")
@@ -222,7 +223,7 @@ export function ServiceRequests() {
 
       <div className="flex-1 overflow-y-auto">
         {selectedSR ? (
-          <SRDetail key={selectedSR.id} sr={selectedSR} onRefetch={refetch} docs={docs} />
+          <SRDetail key={selectedSR.id} sr={selectedSR} onRefetch={refetch} docs={docs} reviewerId={reviewerId} />
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
             목록에서 항목을 선택하세요
@@ -233,7 +234,7 @@ export function ServiceRequests() {
   )
 }
 
-function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void; docs: Document[] }) {
+function SRDetail({ sr, onRefetch, docs, reviewerId }: { sr: SRDraft; onRefetch: () => void; docs: Document[]; reviewerId: string }) {
   const navigate = useNavigate()
   const [activeSection, setActiveSection] = useState<"info" | "review" | "history">("info")
   const [submittingId, setSubmittingId] = useState(false)
@@ -378,7 +379,7 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
       )}
 
       {activeSection === "review" && (
-        <SRReview sr={sr} docs={docs} onRefetch={onRefetch} />
+        <SRReview sr={sr} docs={docs} onRefetch={onRefetch} reviewerId={reviewerId} />
       )}
 
       {activeSection === "history" && (
@@ -388,7 +389,7 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
   )
 }
 
-function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRefetch: () => void }) {
+function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Document[]; onRefetch: () => void; reviewerId: string }) {
   const [step, setStep] = useState<ReviewStep>(1)
   const [docMode, setDocMode] = useState<DocMode>(null)
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
@@ -403,6 +404,8 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
   const [recommendation, setRecommendation] = useState<AiDocRecommendation | null>(null)
   const [recLoading, setRecLoading] = useState(false)
   const [recError, setRecError] = useState<string | null>(null)
+  const [editedContent, setEditedContent] = useState<string>("")
+  const editTaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (sr.status !== "pending_doc_review") return
@@ -446,15 +449,34 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
     return () => { ignore = true }
   }, [sr.id, sr.status])
 
+  useEffect(() => {
+    if (proposal) setEditedContent(proposal.proposed_content)
+  }, [proposal])
+
+  useEffect(() => {
+    const el = editTaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [editedContent])
+
   const handleSelectNone = () => {
     setConfirmingNone(true)
   }
 
   const handleConfirmNone = async () => {
+    if (!sr.pending_doc_review_approval_id) {
+      setNoneError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
+      return
+    }
     setSavingNone(true)
     setNoneError(null)
     try {
-      await api.updateSRDraft(sr.id, { status: "done_no_proposal" })
+      await api.reviewDocApproval(sr.pending_doc_review_approval_id, {
+        reviewer_id: reviewerId,
+        action: "reject",
+        comment: "문서 변경 불필요",
+      })
       onRefetch()
       setConfirmingNone(false)
     } catch (e) {
@@ -732,12 +754,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
               {generateError && (
                 <div className="mt-3 p-3 bg-[#fff7f7] border border-[#fecaca] rounded-lg text-xs text-[#b91c1c] flex items-center justify-between">
                   <span>{generateError}</span>
-                  <button
-                    onClick={() => setGenerateError(null)}
-                    className="text-[#00288e] underline"
-                  >
-                    닫기
-                  </button>
+                  <button onClick={() => setGenerateError(null)} className="text-[#00288e] underline">닫기</button>
                 </div>
               )}
             </div>
@@ -747,26 +764,45 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-xs font-semibold text-[#757684] mb-2">기존 내용</p>
-                    <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-64">{proposal.original_content}</pre>
+                    <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-96">{proposal.original_content}</pre>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안</p>
-                    <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-64">{proposal.proposed_content}</pre>
+                    <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (편집 가능)</p>
+                    <textarea
+                      ref={editTaRef}
+                      value={editedContent}
+                      onChange={(e) => setEditedContent(e.target.value)}
+                      className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
+                    />
                   </div>
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안</p>
-                  <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-64">{proposal.proposed_content}</pre>
+                  <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (편집 가능)</p>
+                  <textarea
+                    ref={editTaRef}
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
+                  />
                 </div>
               )}
               <div className="flex gap-2">
                 <button
                   onClick={async () => {
+                    if (!sr.pending_doc_review_approval_id) {
+                      setGenerateError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
+                      return
+                    }
                     setApplying(true)
                     try {
-                      await api.updateSRDraft(sr.id, { status: "done_synced" })
+                      await api.reviewDocApproval(sr.pending_doc_review_approval_id, {
+                        reviewer_id: reviewerId,
+                        action: "approve_doc",
+                      })
                       onRefetch()
+                    } catch (e) {
+                      setGenerateError(e instanceof Error ? e.message : "승인 실패")
                     } finally {
                       setApplying(false)
                     }
@@ -775,6 +811,35 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                   className="px-4 py-2 bg-[#15803d] text-white rounded-lg text-sm font-medium hover:bg-[#166534] disabled:opacity-50"
                 >
                   {applying ? "반영 중..." : "승인"}
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!sr.pending_doc_review_approval_id) {
+                      setGenerateError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
+                      return
+                    }
+                    if (editedContent === proposal.proposed_content) {
+                      setGenerateError("수정된 내용이 없습니다. '승인'을 사용하세요.")
+                      return
+                    }
+                    setApplying(true)
+                    try {
+                      await api.reviewDocApproval(sr.pending_doc_review_approval_id, {
+                        reviewer_id: reviewerId,
+                        action: "edit_and_approve",
+                        edited_content: editedContent,
+                      })
+                      onRefetch()
+                    } catch (e) {
+                      setGenerateError(e instanceof Error ? e.message : "수정 후 승인 실패")
+                    } finally {
+                      setApplying(false)
+                    }
+                  }}
+                  disabled={applying || editedContent === proposal.proposed_content}
+                  className="px-4 py-2 bg-[#4a4bdc] text-white rounded-lg text-sm font-medium hover:bg-[#3b3cd0] disabled:opacity-50"
+                >
+                  수정 후 승인
                 </button>
                 <button onClick={() => setProposal(null)} className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm hover:bg-[#f2f4f6]">
                   다시 생성
