@@ -21,10 +21,10 @@ export function ChatInput({
     : (variant === "full" ? "문서 내용에 대해 질문해보세요..." : "질문을 입력하세요...")
 
   return (
-    <div className={variant === "full" ? "bg-[#f7f9fb]/80 backdrop-blur-md border-t border-[#c4c5d5] p-4 flex justify-center" : "p-3 bg-white border-t border-[#c4c5d5] flex flex-col gap-2"}>
+    <div className={variant === "full" ? "bg-[#f7f9fb]/80 backdrop-blur-md border-t border-[#c4c5d5] p-4 flex flex-col items-center gap-2" : "p-3 bg-white border-t border-[#c4c5d5] flex flex-col gap-2"}>
       {showModeTabs && (
         <div className={variant === "full"
-          ? "w-full max-w-4xl flex items-center gap-1 mb-2"
+          ? "w-full max-w-4xl flex items-center gap-1"
           : "flex items-center gap-1 mb-1"
         }>
           <button
@@ -60,9 +60,9 @@ export function ChatInput({
           />
         ) : (
           <textarea
-            className="flex-1 max-h-32 min-h-[44px] bg-transparent border-none focus:ring-0 resize-none text-base text-[#191c1e] py-2 px-2 outline-none"
+            className="flex-1 max-h-64 min-h-[60px] bg-transparent border-none focus:ring-0 resize-none text-base text-[#191c1e] py-2 px-2 outline-none whitespace-pre-wrap break-words"
             placeholder={placeholder}
-            rows={1}
+            rows={2}
             value={input}
             onChange={e => onInputChange(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend() } }}
