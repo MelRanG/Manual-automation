@@ -16,7 +16,7 @@ const isRealJiraLink = (sr: SRDraft) =>
 type Tab = "all" | "draft" | "active" | "pending_doc_review" | "done"
 type SourceFilter = "all" | "direct" | "chatbot"
 type ReviewStep = 1 | 2 | 3
-type DocMode = "new" | "existing" | null
+type DocMode = "new" | "existing" | "none" | null
 
 const TAB_LABELS: Record<Tab, string> = {
   all: "전체",
@@ -402,6 +402,27 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
   const [generating, setGenerating] = useState(false)
   const [proposal, setProposal] = useState<ChangeProposal | null>(null)
   const [applying, setApplying] = useState(false)
+  const [confirmingNone, setConfirmingNone] = useState(false)
+  const [savingNone, setSavingNone] = useState(false)
+  const [noneError, setNoneError] = useState<string | null>(null)
+
+  const handleSelectNone = () => {
+    setConfirmingNone(true)
+  }
+
+  const handleConfirmNone = async () => {
+    setSavingNone(true)
+    setNoneError(null)
+    try {
+      await api.updateSRDraft(sr.id, { status: "done_no_proposal" })
+      onRefetch()
+      setConfirmingNone(false)
+    } catch (e) {
+      setNoneError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingNone(false)
+    }
+  }
 
   if (sr.status !== "pending_doc_review") {
     return (
@@ -434,7 +455,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
       {step === 1 && (
         <div className="space-y-3">
           <p className="text-sm font-medium text-[#191c1e]">문서 반영 방식을 선택하세요</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <button
               onClick={() => { setDocMode("new"); setStep(3) }}
               className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#00288e] transition-colors group"
@@ -448,6 +469,13 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
             >
               <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#00288e]">기존 문서 수정</p>
               <p className="text-xs text-[#757684] mt-1">기존 문서에 반영합니다</p>
+            </button>
+            <button
+              onClick={handleSelectNone}
+              className="p-4 border-2 border-[#c4c5d5] rounded-xl text-left hover:border-[#92600a] transition-colors group bg-[#fafafa]"
+            >
+              <p className="text-sm font-semibold text-[#191c1e] group-hover:text-[#92600a]">문서 수정 없음</p>
+              <p className="text-xs text-[#757684] mt-1">문서 변경 없이 SR을 종료합니다</p>
             </button>
           </div>
         </div>
@@ -484,6 +512,34 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
           >
             다음: AI 초안 생성
           </button>
+        </div>
+      )}
+
+      {confirmingNone && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-5 space-y-4">
+            <h4 className="text-base font-semibold text-[#191c1e]">SR 종료 확인</h4>
+            <p className="text-sm text-[#444653]">
+              이 SR을 문서 수정 없이 종료 처리합니까? 이 동작은 되돌릴 수 없습니다.
+            </p>
+            {noneError && <p className="text-red-500 text-xs">{noneError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmingNone(false)}
+                disabled={savingNone}
+                className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm hover:bg-[#f2f4f6]"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleConfirmNone}
+                disabled={savingNone}
+                className="px-4 py-2 bg-[#92600a] text-white rounded-lg text-sm font-medium hover:bg-[#7a4f08] disabled:opacity-50"
+              >
+                {savingNone ? "처리 중..." : "종료 처리"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
