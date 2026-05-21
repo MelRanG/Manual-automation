@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { api, type ManualJob } from "@/lib/api"
@@ -28,8 +29,11 @@ function jobBadgeLabel(j: ManualJob): { label: string; cls: string } {
 export function ManualGenerator() {
   const { user } = useAuth()
   const { startJob, completionVersion } = useManualJob()
+  const [searchParams] = useSearchParams()
+  const initialJobFromUrl = searchParams.get("job")
+  const initialTabFromUrl = searchParams.get("tab")
   const [tab, setTab] = useState<Tab>("all")
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialJobFromUrl)
   const [showForm, setShowForm] = useState(false)
 
   const [targetUrl, setTargetUrl] = useState("")
@@ -209,7 +213,16 @@ export function ManualGenerator() {
 
       <div className="flex-1 overflow-y-auto">
         {selected ? (
-          <ManualDetail job={selected} onRefetch={refetch} />
+          <ManualDetail
+            key={selected.id}
+            job={selected}
+            onRefetch={refetch}
+            initialSection={
+              selected.id === initialJobFromUrl && initialTabFromUrl === "draft"
+                ? "draft"
+                : undefined
+            }
+          />
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-[#9a9bad]">
             목록에서 항목을 선택하세요
@@ -220,9 +233,9 @@ export function ManualGenerator() {
   )
 }
 
-function ManualDetail({ job, onRefetch }: { job: ManualJob; onRefetch: () => void }) {
+function ManualDetail({ job, onRefetch, initialSection }: { job: ManualJob; onRefetch: () => void; initialSection?: "info" | "draft" | "history" }) {
   const { user } = useAuth()
-  const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">("info")
+  const [activeSection, setActiveSection] = useState<"info" | "draft" | "history">(initialSection ?? "info")
 
   return (
     <div className="p-6 max-w-3xl">

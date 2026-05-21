@@ -268,7 +268,15 @@ export const api = {
   listJiraCallbackLogs: () => request<JiraCallbackLog[]>('/jira/callback-logs'),
 
   // Notifications
-  listNotifications: () => request<Notification[]>('/notifications'),
+  listNotifications: (opts?: { type?: string; unread_only?: boolean; skip?: number; limit?: number }) => {
+    const params = new URLSearchParams()
+    if (opts?.type) params.set('type', opts.type)
+    if (opts?.unread_only) params.set('unread_only', 'true')
+    if (opts?.skip !== undefined) params.set('skip', String(opts.skip))
+    if (opts?.limit !== undefined) params.set('limit', String(opts.limit))
+    const qs = params.toString()
+    return request<NotificationListResponse>(`/notifications${qs ? `?${qs}` : ''}`)
+  },
   markNotificationRead: (id: string) =>
     request<{ ok: boolean }>(`/notifications/${id}/read`, { method: 'POST' }),
   markAllNotificationsRead: () =>
@@ -347,6 +355,7 @@ export interface ManualJob {
   approval: ApprovalBrief | null
 }
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; link_path: string | null; is_read: boolean; created_at: string }
+export interface NotificationListResponse { items: Notification[]; total: number }
 export interface JiraConfig {
   id: string
   site_url: string | null

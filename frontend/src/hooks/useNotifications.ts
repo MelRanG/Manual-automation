@@ -18,8 +18,8 @@ export function useNotifications(userId: string | undefined): UseNotificationsRe
   const loadNotifications = useCallback(async () => {
     if (!userId) return
     try {
-      const data = await api.listNotifications()
-      setNotifications(data)
+      const data = await api.listNotifications({ limit: 50 })
+      setNotifications(data.items)
     } catch {
       // 인증 실패 등 무시
     }

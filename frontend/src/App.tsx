@@ -13,6 +13,7 @@ import { TrustScores } from "@/pages/TrustScores"
 import { ServiceRequests } from "@/pages/ServiceRequests"
 import { WebhookLogs } from "@/pages/WebhookLogs"
 import { ManualGenerator } from "@/pages/ManualGenerator"
+import { Notifications } from "@/pages/Notifications"
 import { WidgetDemo } from "@/pages/WidgetDemo"
 import { WidgetConversations } from "@/pages/WidgetConversations"
 
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/sr" element={<ServiceRequests />} />
             <Route path="/webhook-logs" element={<WebhookLogs />} />
             <Route path="/manuals" element={<ManualGenerator />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/widget-conversations" element={<WidgetConversations />} />
           </Route>
         </Routes>
