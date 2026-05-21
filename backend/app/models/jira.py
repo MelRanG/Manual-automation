@@ -10,6 +10,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 class JiraConfig(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "jira_configs"
 
+    site_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     base_url: Mapped[str] = mapped_column(String(500))
     user_email: Mapped[str] = mapped_column(String(255))
     api_token: Mapped[str] = mapped_column(Text)
