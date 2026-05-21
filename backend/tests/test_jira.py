@@ -356,7 +356,6 @@ async def test_webhook_creates_notifications_for_admins_and_owner(client, db_ses
     """webhook 완료 처리 시 admin 전원 + 작성자에게 알림 생성"""
     import uuid
     from sqlalchemy import select
-    from app.models.user import User
     from app.models.sr import SRDraft
     from app.models.jira import JiraConfig
     from app.models.notification import Notification
@@ -453,7 +452,6 @@ async def test_webhook_creates_notifications_for_admins_and_owner(client, db_ses
 async def test_webhook_notification_failure_does_not_break_response(client, db_session):
     """create_notification이 raise해도 webhook 응답 200, SR 상태 전환 정상"""
     import uuid
-    from unittest.mock import patch
     from sqlalchemy import select
     from app.models.sr import SRDraft
     from app.models.jira import JiraConfig
@@ -529,7 +527,7 @@ async def test_webhook_notification_failure_does_not_break_response(client, db_s
 async def test_process_jira_done_notifies_all_admins(client, db_session):
     """process_jira_done은 admin 전원에게 jira_sr_proposals_ready 알림 발송"""
     import uuid
-    from unittest.mock import patch, MagicMock, AsyncMock
+    from unittest.mock import MagicMock
     from sqlalchemy import select
     from app.models.sr import SRDraft
     from app.models.jira import JiraCallbackLog
