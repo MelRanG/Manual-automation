@@ -529,7 +529,6 @@ async def test_webhook_notification_failure_does_not_break_response(client, db_s
 async def test_process_jira_done_notifies_all_admins(client, db_session):
     """process_jira_done은 admin 전원에게 jira_sr_proposals_ready 알림 발송"""
     import uuid
-    import json
     from unittest.mock import patch, MagicMock, AsyncMock
     from sqlalchemy import select
     from app.models.sr import SRDraft

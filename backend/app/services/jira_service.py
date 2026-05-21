@@ -361,14 +361,18 @@ SR 설명: {sr.description}
                     logger.warning(f"매뉴얼 생성 판단/등록 실패 (sr={sr_id}): {e}")
 
             if proposals_created > 0:
+                from app.routers.notifications import create_notification
+                from app.models.user import User
                 try:
-                    from app.routers.notifications import create_notification
-                    from app.models.user import User
                     admin_result = await session.execute(
                         select(User).where(User.role == "admin")
                     )
                     admins = admin_result.scalars().all()
-                    for admin in admins:
+                except Exception as e:
+                    logger.warning(f"admin 조회 실패 (sr={sr_id}): {e}")
+                    admins = []
+                for admin in admins:
+                    try:
                         await create_notification(
                             session,
                             user_id=admin.id,
@@ -378,8 +382,8 @@ SR 설명: {sr.description}
                             document_id=None,
                             link_path="/sr",
                         )
-                except Exception as e:
-                    logger.warning(f"알림 전송 실패 (sr={sr_id}): {e}")
+                    except Exception as e:
+                        logger.warning(f"알림 전송 실패 (sr={sr_id}, admin={admin.id}): {e}")
 
             sr.status = "done_synced" if proposals_created > 0 else "done_no_proposal"
             log.status = "processed"
