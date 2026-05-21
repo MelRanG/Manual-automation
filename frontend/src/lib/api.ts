@@ -241,10 +241,27 @@ export const api = {
 
   // Jira
   getJiraConfig: () => request<JiraConfig | null>('/jira/config'),
-  saveJiraConfig: (data: { base_url: string; user_email: string; api_token: string; project_key: string; is_active: boolean; trigger_status_names: string[] | null }) =>
-    request<JiraConfig>('/jira/config', { method: 'PUT', body: JSON.stringify(data) }),
-  testJiraConfig: (data: { base_url: string; user_email: string; api_token: string; project_key: string; is_active: boolean; trigger_status_names: string[] | null }) =>
-    request<{ success: boolean; message: string }>('/jira/config/test', { method: 'POST', body: JSON.stringify(data) }),
+
+  saveJiraConfig: (data: {
+    site_url: string
+    user_email: string
+    api_token: string
+    project_key: string
+    is_active: boolean
+    trigger_status_names: string[] | null
+  }) => request<JiraConfig>('/jira/config', { method: 'PUT', body: JSON.stringify(data) }),
+
+  testJiraConfig: (data: {
+    site_url: string
+    user_email: string
+    api_token: string
+    project_key: string
+    is_active: boolean
+    trigger_status_names: string[] | null
+  }) => request<{ success: boolean; message: string }>('/jira/config/test', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   listJiraCallbackLogs: () => request<JiraCallbackLog[]>('/jira/callback-logs'),
 
   // Notifications
@@ -329,6 +346,7 @@ export interface ManualJob {
 export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
 export interface JiraConfig {
   id: string
+  site_url: string | null
   base_url: string
   user_email: string
   api_token_masked: string
