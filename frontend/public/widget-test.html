@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>DocOps Widget — vanilla embed test</title>
+<style>
+  body { font-family: system-ui, sans-serif; padding: 40px; margin: 0; }
+  .host { max-width: 800px; margin: 0 auto; }
+  h1 { color: #00288e; }
+  .controls { background: #f7f9fb; border: 1px solid #c4c5d5; padding: 16px; border-radius: 8px; margin-bottom: 24px; }
+  code { background: #f2f4f6; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+  ul { line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="host">
+  <h1>Vanilla widget — embed test</h1>
+  <div class="controls">
+    <p>This page loads the widget as a 3rd-party host site would. Open the chat button bottom-right.</p>
+    <ul>
+      <li>Expected: 답변 + citation 한 줄 ("출처: ...") + (간헐) warning 배너.</li>
+      <li><strong>Not</strong> expected: SR 초안 카드, "SR 보내기" 버튼, "오류 신고/제보" 버튼. (SSO/JWT 미구현)</li>
+      <li>Try adding <code>data-user-id="00000000-0000-0000-0000-000000000010"</code> to the script tag below and refresh — UI는 동일하지만 backend 세션은 인증 사용자로 생성됨.</li>
+    </ul>
+    <p>Dev only: served by Vite. For production embed, build the widget bundle separately.</p>
+  </div>
+  <p>Lorem ipsum dolor sit amet, host site content.</p>
+  <p>Pretend this is asiana.com or any external customer site.</p>
+</div>
+
+<script
+  type="module"
+  src="/src/widget/main.ts"
+  data-site-id="vanilla-test"
+  data-api-url="http://localhost:8000"></script>
+</body>
+</html>
