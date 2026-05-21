@@ -29,12 +29,20 @@ async def create_widget_session(
     data: WidgetSessionCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    await ensure_widget_user(db)
+    if data.user_id is not None:
+        result = await db.execute(select(User).where(User.id == data.user_id))
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="User not found")
+        owner_id = data.user_id
+    else:
+        await ensure_widget_user(db)
+        owner_id = WIDGET_USER_ID
+
     anonymous_id = data.anonymous_id or str(uuid.uuid4())[:8]
 
     session = ChatSession(
         id=uuid.uuid4(),
-        user_id=WIDGET_USER_ID,
+        user_id=owner_id,
         title=f"widget:{data.site_id}:{anonymous_id}",
     )
     db.add(session)
@@ -59,8 +67,13 @@ async def widget_ask_stream(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    allow_sr_draft = session.user_id != WIDGET_USER_ID
+
     return StreamingResponse(
-        chat_service.ask_question_stream(db, session_id, data.question),
+        chat_service.ask_question_stream(
+            db, session_id, data.question,
+            allow_sr_draft=allow_sr_draft,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

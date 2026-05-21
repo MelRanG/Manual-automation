@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -34,3 +36,57 @@ def test_widget_session_create_rejects_non_uuid_user_id():
     from app.schemas.widget import WidgetSessionCreate
     with pytest.raises(ValidationError):
         WidgetSessionCreate(site_id="s", user_id="not-a-uuid")
+
+
+from sqlalchemy import select
+from app.models.sr import SRDraft
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_create_widget_session_unknown_user(client: AsyncClient):
+    fake_user_id = str(uuid.uuid4())
+    resp = await client.post("/api/widget/sessions", json={
+        "site_id": "test_site",
+        "user_id": fake_user_id,
+    })
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_widget_ask_stream_anonymous_skips_sr_draft(client: AsyncClient, db_session):
+    create_resp = await client.post("/api/widget/sessions", json={"site_id": "test_site"})
+    session_id = create_resp.json()["id"]
+
+    async with client.stream(
+        "POST", f"/api/widget/sessions/{session_id}/ask-stream",
+        json={"question": "[변경 요청] 정책을 바꿔주세요"},
+    ) as resp:
+        body = ""
+        async for chunk in resp.aiter_text():
+            body += chunk
+
+    assert "sr_draft" not in body
+
+    from app.routers.widget import WIDGET_USER_ID
+    result = await db_session.execute(
+        select(SRDraft).where(SRDraft.user_id == WIDGET_USER_ID)
+    )
+    assert result.scalars().first() is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_widget_ask_stream_authenticated_session_owner(
+    client: AsyncClient, test_user: dict, db_session
+):
+    create_resp = await client.post("/api/widget/sessions", json={
+        "site_id": "test_site",
+        "user_id": test_user["id"],
+    })
+    session_id = create_resp.json()["id"]
+
+    from app.models.chat import ChatSession
+    result = await db_session.execute(
+        select(ChatSession).where(ChatSession.id == uuid.UUID(session_id))
+    )
+    session = result.scalar_one()
+    assert str(session.user_id) == test_user["id"]
