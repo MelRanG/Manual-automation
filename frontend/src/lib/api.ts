@@ -155,7 +155,7 @@ export const api = {
   },
   reviewApproval: (id: string, data: { reviewer_id: string; action: string; comment?: string; edited_content?: string }) =>
     request<ApprovalRequest>(`/approvals/${id}/review`, { method: 'POST', body: JSON.stringify(data) }),
-  reviewDocApproval: (id: string, data: { reviewer_id: string; action: "reject" | "approve_doc" | "approve_manual"; target_url?: string }) =>
+  reviewDocApproval: (id: string, data: { reviewer_id: string; action: "reject" | "approve_doc" | "approve_manual" | "edit_and_approve"; target_url?: string; edited_content?: string; comment?: string }) =>
     request<ApprovalRequest>(`/approvals/${id}/doc-review`, { method: 'POST', body: JSON.stringify(data) }),
 
   // Trust
@@ -179,8 +179,6 @@ export const api = {
     request<SRDraft>('/sr/generate', { method: 'POST', body: JSON.stringify(data) }),
   submitSR: (id: string) =>
     request<{ sr_id: string; status: string; webhook?: { status: string }; jira_issue_key?: string }>(`/sr/drafts/${id}/submit`, { method: 'POST' }),
-  completeSRLocal: (id: string) =>
-    request<{ status: string; message: string }>(`/sr/drafts/${id}/complete-local`, { method: 'POST' }),
   getAiDocRecommendation: async (srId: string): Promise<AiDocRecommendation | null> => {
     const res = await fetch(`${BASE}/sr/drafts/${srId}/ai-doc-recommendation`, {
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -206,6 +204,17 @@ export const api = {
   },
   getLatestProposal: async (srId: string): Promise<LatestProposalResponse | null> => {
     const res = await fetch(`${BASE}/sr/drafts/${srId}/latest-proposal`, {
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    })
+    if (res.status === 404) return null
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(err.detail || res.statusText)
+    }
+    return res.json()
+  },
+  getSRReviewHistory: async (srId: string): Promise<SRReviewHistory | null> => {
+    const res = await fetch(`${BASE}/sr/drafts/${srId}/review-history`, {
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     })
     if (res.status === 404) return null
@@ -298,10 +307,10 @@ export interface DocumentWarning { document_id: string; title: string; reason: "
 export interface Citation { document_id: string; document_title: string; quote: string; chunk_id: string }
 export interface FeedbackReport { id: string; user_id: string; document_id: string | null; feedback_text: string; reviewed_text: string | null; status: string; document_title: string | null; proposed_change_status: string | null; created_at: string }
 export interface ProposedChange { id: string; feedback_report_id: string | null; document_id: string | null; original_text: string; proposed_text: string; diff: string; reasoning: string; confidence: number; source_type: "feedback" | "playwright" | "jira_sr"; status: string; is_stale: boolean }
-export interface ApprovalRequest { id: string; proposed_change_id: string | null; sr_draft_id: string | null; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; approval_type: string; comment: string | null; reviewed_at: string | null; created_at: string }
+export interface ApprovalRequest { id: string; proposed_change_id: string | null; sr_draft_id: string | null; proposed_change: ProposedChange | null; reviewer_id: string | null; status: string; approval_type: string; comment: string | null; reviewed_at: string | null; action: string | null; edited_content: string | null; created_at: string }
 export interface ApprovalListResponse { items: ApprovalRequest[]; total: number }
 export interface TrustScore { id: string; title: string; trust_score: number }
-export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; target_url: string | null; created_at: string }
+export interface SRDraft { id: string; user_id: string; title: string; description: string; priority: string; status: string; created_by_ai: boolean; jira_issue_key: string | null; jira_issue_url: string | null; target_url: string | null; pending_doc_review_approval_id: string | null; created_at: string }
 export interface SRListResponse { items: SRDraft[]; total: number }
 export interface ImpactAnalysis { id: string; source_type: string; source_id: string; related_document_ids: string[] | null; recommended_strategy: string; reasoning: string; confidence: number; status: string; created_at: string }
 export interface ChangeProposal { id: string; impact_analysis_id: string; document_id: string; original_content: string; proposed_content: string; diff: string; status: string; created_at: string }
@@ -390,4 +399,22 @@ export interface ChangeHistory {
   actor_name: string | null
   detail: string | null
   created_at: string
+}
+
+export type ReviewHistoryAction = "approve_doc" | "approve_manual" | "edit_and_approve" | "reject"
+
+export interface SRReviewHistory {
+  status: string  // "done_synced" | "done_no_proposal" | "in_review"
+  message?: string | null
+  ai_recommendation: { recommendation: string; reason: string; suggested_document_id?: string | null; model?: string; created_at?: string } | null
+  selected_doc_mode: "new" | "existing" | "none" | null
+  selected_document_id: string | null
+  selected_document_title: string | null
+  final_proposal: { proposed_content: string | null; original_content: string | null; diff: string | null } | null
+  reviewer_id: string | null
+  reviewer_name: string | null
+  reviewed_at: string | null
+  action: ReviewHistoryAction | null
+  comment: string | null
+  edited_content: string | null
 }

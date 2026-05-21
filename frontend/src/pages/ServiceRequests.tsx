@@ -255,18 +255,6 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
     }
   }
 
-  const handleLocalComplete = async () => {
-    setSubmittingId(true)
-    try {
-      await api.completeSRLocal(sr.id)
-      onRefetch()
-      setActiveSection("review")
-    } catch (e) {
-      setSubmitError("완료 처리에 실패했습니다: " + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setSubmittingId(false)
-    }
-  }
 
   const handleEditSave = async () => {
     if (!editForm.title.trim() || !editForm.description.trim()) return
@@ -372,16 +360,6 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
                       {submittingId ? "제출 중..." : "SR 제출"}
                     </button>
                   </>
-                )}
-                {["submitted", "jira_created"].includes(sr.status) && (
-                  <button
-                    onClick={handleLocalComplete}
-                    disabled={submittingId}
-                    className="flex items-center gap-2 px-3 py-1.5 border border-[#1a56db] text-[#1a56db] rounded-lg text-xs font-semibold hover:bg-[#e8f0fe] disabled:opacity-50 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                    {submittingId ? "처리 중..." : "완료 처리 (시뮬레이터)"}
-                  </button>
                 )}
                 {sr.status === "pending_document_selection" && (
                   <button
