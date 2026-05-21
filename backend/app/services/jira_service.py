@@ -32,6 +32,26 @@ def is_done_transition(config: JiraConfig, payload: dict) -> bool:
     return category_key == "done"
 
 
+def normalize_site_url(raw: str) -> str:
+    """Strip whitespace + trailing slash, force https scheme."""
+    s = raw.strip().rstrip("/")
+    if s.startswith("http://"):
+        s = "https://" + s[len("http://"):]
+    elif not s.startswith("https://"):
+        s = "https://" + s
+    return s
+
+
+def derive_base_url(cloud_id: str) -> str:
+    """Service-account API URL for a given Atlassian cloudId."""
+    return f"https://api.atlassian.com/ex/jira/{cloud_id}"
+
+
+# TODO(Task 4): implement build_jira_issue_url
+def build_jira_issue_url(site_url: str, issue_key: str) -> str:
+    raise NotImplementedError("build_jira_issue_url is implemented in Task 4")
+
+
 def _auth_header(config: JiraConfig) -> str:
     credentials = f"{config.user_email}:{config.api_token}"
     return "Basic " + b64encode(credentials.encode()).decode()
