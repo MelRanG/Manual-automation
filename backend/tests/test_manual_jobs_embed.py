@@ -110,9 +110,10 @@ async def test_list_manual_jobs_includes_embed(
             status="pending",
         )
     )
+    approval_id = uuid.uuid4()
     db_session.add(
         ApprovalRequest(
-            id=uuid.uuid4(),
+            id=approval_id,
             proposed_change_id=change_id,
             status="pending",
         )
@@ -125,5 +126,7 @@ async def test_list_manual_jobs_includes_embed(
     target = next((j for j in items if j["id"] == str(job_id)), None)
     assert target is not None
     assert target["proposed_change"] is not None
+    assert target["proposed_change"]["id"] == str(change_id)
     assert target["approval"] is not None
+    assert target["approval"]["id"] == str(approval_id)
     assert target["approval"]["status"] == "pending"
