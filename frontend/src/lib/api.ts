@@ -252,6 +252,10 @@ export const api = {
   listManualJobs: (userId?: string) =>
     request<ManualJob[]>(`/manuals/jobs${userId ? `?user_id=${userId}` : ''}`),
   getManualJob: (id: string) => request<ManualJob>(`/manuals/jobs/${id}`),
+  deleteManualJob: async (jobId: string) => {
+    const res = await fetch(`${BASE}/manuals/jobs/${jobId}`, { method: 'DELETE', headers: getAuthHeaders() })
+    if (!res.ok) throw new Error(`Failed to delete manual job: ${res.status}`)
+  },
 
   // Jira
   getJiraConfig: () => request<JiraConfig | null>('/jira/config'),
