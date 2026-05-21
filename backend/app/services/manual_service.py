@@ -91,6 +91,21 @@ async def run_generation(db: AsyncSession, job_id: uuid.UUID) -> ManualGeneratio
         job.screenshots = screenshots
         await db.commit()
 
+        try:
+            from app.routers.notifications import create_notification
+            await create_notification(
+                db,
+                user_id=job.user_id,
+                type="manual_completed",
+                title="매뉴얼 작성 완료",
+                message=job.target_url,
+                link_path=f"/manuals?job={job.id}&tab=draft",
+            )
+        except Exception as notif_err:
+            logger.warning(
+                f"매뉴얼 완료 알림 발행 실패 (job={job_id}): {notif_err}"
+            )
+
     except Exception as e:
         logger.error(f"Manual generation failed for job {job_id}: {e}", exc_info=True)
         job.status = "failed"
