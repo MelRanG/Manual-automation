@@ -356,7 +356,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, rese
         <button
           type="button"
           onClick={() => setChatOpen(true)}
-          className="fixed bottom-8 right-8 z-50 w-14 h-14 rounded-full bg-[#00288e] text-white shadow-lg hover:bg-[#1e40af] transition-all hover:scale-105 flex items-center justify-center"
+          className={`fixed ${reserveSpaceForChat ? "bottom-8" : "bottom-24"} right-8 z-50 w-14 h-14 rounded-full bg-[#00288e] text-white shadow-lg hover:bg-[#1e40af] transition-all hover:scale-105 flex items-center justify-center`}
           aria-label="챗봇 열기"
         >
           <span
