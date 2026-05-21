@@ -5,12 +5,30 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { api } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
+import { TagEditor } from "@/components/TagEditor"
 
 export function DocumentDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: doc } = useApi(() => api.getDocument(id!), [id])
   const { data: versions } = useApi(() => api.getVersions(id!), [id])
+
+  const dismissKey = `docops.tagSuggest.dismissed.${id}`
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(dismissKey) === "1"
+    } catch {
+      return false
+    }
+  })
+  const dismissPanel = () => {
+    try { sessionStorage.setItem(dismissKey, "1") } catch { /* noop */ }
+    setDismissed(true)
+  }
+  const reopenPanel = () => {
+    try { sessionStorage.removeItem(dismissKey) } catch { /* noop */ }
+    setDismissed(false)
+  }
 
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm">("idle")
   const [deleting, setDeleting] = useState(false)
@@ -118,9 +136,9 @@ export function DocumentDetail() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-[#191c1e] leading-tight">{doc.title}</h1>
           {doc.description && <p className="text-sm text-[#444653] mt-2">{doc.description}</p>}
-          {doc.tags && doc.tags.length > 0 && (
+          {(doc.tags ?? []).length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {doc.tags.map(tag => {
+              {doc.tags!.map(tag => {
                 const depth = tag.split("/").length
                 const colorClass = depth === 1 ? "bg-[#dde1ff] text-[#00288e]" : depth === 2 ? "bg-[#d5e3fc] text-[#1a56db]" : "bg-[#e8f0fe] text-[#444653]"
                 return (
@@ -135,6 +153,22 @@ export function DocumentDetail() {
                 )
               })}
             </div>
+          )}
+          {(doc.tags ?? []).length === 0 && (
+            dismissed ? (
+              <button
+                type="button"
+                onClick={reopenPanel}
+                className="mt-3 inline-flex items-center gap-1 text-xs text-[#00288e] hover:underline"
+              >
+                <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                AI 추천 받기
+              </button>
+            ) : (
+              <div className="mt-3">
+                <DetailTagPanel docId={id!} onDismiss={dismissPanel} />
+              </div>
+            )
           )}
           <div className="flex items-center gap-4 mt-3">
             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
@@ -400,6 +434,73 @@ export function DocumentDetail() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function DetailTagPanel({ docId, onDismiss }: { docId: string; onDismiss: () => void }) {
+  const [localTags, setLocalTags] = useState<string[]>([])
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [suggestError, setSuggestError] = useState<unknown>(null)
+  const [attempt, setAttempt] = useState(0)
+
+  const handleChange = async (next: string[]) => {
+    const prev = localTags
+    setLocalTags(next)
+    setSaveError(null)
+    try {
+      await api.updateDocument(docId, { tags: next })
+    } catch (e) {
+      setLocalTags(prev)
+      setSaveError(e instanceof Error ? e.message : "저장 실패")
+    }
+  }
+
+  const retry = () => {
+    setSuggestError(null)
+    setAttempt(a => a + 1)
+  }
+
+  return (
+    <div className="rounded-lg border border-[#dde1ff] bg-[#f7f9ff] p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-[#444653] flex items-center gap-1">
+          <span className="material-symbols-outlined text-[14px] text-[#00288e]">auto_awesome</span>
+          태그 — AI가 추천해드릴게요
+        </span>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-xs text-[#444653] hover:text-[#191c1e] flex items-center gap-0.5"
+          aria-label="추천 패널 닫기"
+        >
+          <span className="material-symbols-outlined text-[14px]">close</span>
+          나중에
+        </button>
+      </div>
+      {suggestError !== null && (
+        <div className="flex items-center gap-2 text-xs text-[#ba1a1a]">
+          <span>추천 불러오기 실패</span>
+          <button type="button" onClick={retry} className="underline hover:no-underline">
+            재시도
+          </button>
+        </div>
+      )}
+      {suggestError === null && (
+        <TagEditor
+          key={attempt}
+          tags={localTags}
+          onChange={handleChange}
+          onSuggest={() => api.suggestTags(docId).then(r => r.tags)}
+          autoSuggestOnMount
+          onSuggestError={setSuggestError}
+        />
+      )}
+      {saveError && (
+        <p className="text-xs text-[#ba1a1a] bg-[#ffdad6] px-3 py-1.5 rounded-md">
+          {saveError}
+        </p>
+      )}
     </div>
   )
 }
