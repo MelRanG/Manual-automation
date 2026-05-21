@@ -270,7 +270,14 @@ async def ask_question_stream(
     db.add(user_msg)
     await db.flush()
 
-    relevant_chunks = await search_similar_chunks(db, question, top_k=5)
+    try:
+        relevant_chunks = await search_similar_chunks(db, question, top_k=5)
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Chat context search failed")
+        error = f"Chat context search failed: {type(e).__name__}: {e}"
+        yield f"event: error\ndata: {json.dumps({'error': error})}\n\n"
+        return
 
     context = "\n\n---\n\n".join(
         f"[{c['document_title']}] {c['content']}" for c in relevant_chunks
@@ -289,7 +296,7 @@ async def ask_question_stream(
     except Exception as e:
         await db.rollback()
         logger.exception("Chat stream failed")
-        error = f"LLM 호출 실패: {type(e).__name__}: {e}"
+        error = f"LLM call failed: {type(e).__name__}: {e}"
         yield f"event: error\ndata: {json.dumps({'error': error})}\n\n"
         return
 
