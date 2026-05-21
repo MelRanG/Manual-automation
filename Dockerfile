@@ -26,6 +26,8 @@ WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+RUN uv run playwright install --with-deps chromium chromium-headless-shell
+
 COPY backend/app/ app/
 COPY backend/alembic/ alembic/
 COPY backend/alembic.ini ./
