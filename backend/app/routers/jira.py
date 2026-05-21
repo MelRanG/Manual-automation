@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 
@@ -18,6 +19,7 @@ from app.schemas.jira import (
 from app.models.feedback import ApprovalRequest as ApprovalRequestModel
 from app.routers.notifications import create_notification
 from app.services import jira_service
+from app.services.sr_service import prefetch_recommendation
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,8 @@ async def receive_jira_webhook(
     db.add(approval)
     draft.status = "pending_doc_review"
     await db.commit()
+
+    asyncio.create_task(prefetch_recommendation(draft.id))
 
     try:
         admin_result = await db.execute(select(User).where(User.role == "admin"))
