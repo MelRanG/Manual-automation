@@ -166,6 +166,10 @@ export const api = {
     request<{ document_id: string; trust_score: number }>(`/trust/${documentId}/recalculate`, { method: 'POST' }),
 
   // SR
+  deleteSRDraft: async (srId: string) => {
+    const res = await fetch(`${BASE}/sr/drafts/${srId}`, { method: 'DELETE', headers: getAuthHeaders() })
+    if (!res.ok) throw new Error(`Failed to delete SR: ${res.status}`)
+  },
   listSRDrafts: (params?: { status?: string; skip?: number; limit?: number; userId?: string }) => {
     const query = new URLSearchParams()
     if (params?.userId) query.set('user_id', params.userId)
