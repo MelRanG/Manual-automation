@@ -244,7 +244,7 @@ function SRDetail({ sr, onRefetch, docs }: { sr: SRDraft; onRefetch: () => void;
     try {
       await api.completeSRLocal(sr.id)
       onRefetch()
-      navigate("/change-impact")
+      setActiveSection("review")
     } catch (e) {
       setSubmitError("완료 처리에 실패했습니다: " + (e instanceof Error ? e.message : String(e)))
     } finally {
