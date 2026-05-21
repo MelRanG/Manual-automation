@@ -398,3 +398,25 @@ async def build_sr_responses(db: AsyncSession, drafts: list[SRDraft]) -> list[SR
         out.append(response)
     return out
 
+
+async def prefetch_recommendation(sr_id: uuid.UUID) -> None:
+    """webhook 백그라운드용. 실패해도 진입 시 fallback이 처리.
+
+    별도 세션을 열어 LLM 호출 시간 동안 메인 요청 트랜잭션을 점유하지 않는다.
+    """
+    from app.db import SessionLocal
+    from app.services import ai_recommendation_service
+
+    async with SessionLocal() as session:
+        result = await session.execute(select(SRDraft).where(SRDraft.id == sr_id))
+        draft = result.scalar_one_or_none()
+        if not draft:
+            logger.warning(f"prefetch recommendation: SR not found sr={sr_id}")
+            return
+        if draft.ai_doc_recommendation:
+            return
+        try:
+            await ai_recommendation_service.recommend_doc_strategy(session, draft)
+        except Exception as e:
+            logger.warning(f"prefetch recommendation 실패 sr={sr_id}: {e}")
+
