@@ -78,8 +78,8 @@ export const api = {
   getDocument: (id: string) => request<Document>(`/documents/${id}`),
   getVersions: (id: string) => request<DocumentVersion[]>(`/documents/${id}/versions`),
   createDocument: (data: { title: string; description?: string; owner_id?: string; source_type?: string; tags?: string[] }, content: string) =>
-    request<Document>(`/documents?content=${encodeURIComponent(content)}`, {
-      method: 'POST', body: JSON.stringify(data),
+    request<Document>('/documents', {
+      method: 'POST', body: JSON.stringify({ ...data, content }),
     }),
   uploadDocument: (form: FormData) =>
     fetch(`${BASE}/documents/upload`, { method: 'POST', body: form }).then(r => r.json()),

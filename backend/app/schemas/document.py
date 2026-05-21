@@ -16,6 +16,7 @@ class DocumentCreate(BaseModel):
     related_sr_id: uuid.UUID | None = None
     jira_issue_key: str | None = None
     tags: list[str] | None = None
+    content: str = ""
 
 
 class DocumentUpdate(BaseModel):
