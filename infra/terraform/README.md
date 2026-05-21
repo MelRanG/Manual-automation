@@ -20,6 +20,7 @@
 - The root `Dockerfile` builds one container containing the frontend and backend.
 - Document uploads are S3-only. `UPLOADS_S3_BUCKET` is required and local upload storage is not used.
 - pgvector support is handled by Alembic migrations for `document_chunks.embedding`.
+- Bedrock embeddings default to `amazon.titan-embed-text-v1` so query vectors match the 1536-dimension pgvector column.
 - The latest deployed ALB URL is recorded in `last-deployment-url.txt`.
 
 ## Local Terraform Checks

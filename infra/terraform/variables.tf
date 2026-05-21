@@ -100,6 +100,12 @@ variable "bedrock_model_id" {
   default     = "us.anthropic.claude-sonnet-4-6"
 }
 
+variable "bedrock_embedding_model_id" {
+  description = "Bedrock embedding model id. Keep dimensions aligned with document_chunks.embedding."
+  type        = string
+  default     = "amazon.titan-embed-text-v1"
+}
+
 variable "bedrock_gateway_url" {
   description = "Optional internal Bedrock/LiteLLM gateway URL."
   type        = string

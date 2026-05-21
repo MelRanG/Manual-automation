@@ -52,6 +52,7 @@ cd backend && uv run mypy .
 - `UPLOADS_S3_BUCKET` is required for upload handling.
 - `UPLOADS_S3_PREFIX` defaults to `uploads`.
 - DB migrations include pgvector support for `document_chunks.embedding`.
+- Production Bedrock embeddings use `BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1` to match the 1536-dimension pgvector column.
 
 ## Harness Policy
 

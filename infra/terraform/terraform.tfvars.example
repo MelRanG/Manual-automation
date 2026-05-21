@@ -8,6 +8,7 @@ environment  = "codex-dev"
 # allowed_http_cidr_blocks = ["203.0.113.10/32"]
 allowed_http_cidr_blocks = ["0.0.0.0/0"]
 
-llm_provider     = "bedrock"
-embedding_model  = "mock"
-bedrock_model_id = "us.anthropic.claude-sonnet-4-6"
+llm_provider                = "bedrock"
+embedding_model             = "bedrock"
+bedrock_model_id            = "us.anthropic.claude-sonnet-4-6"
+bedrock_embedding_model_id  = "amazon.titan-embed-text-v1"

@@ -135,4 +135,5 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Terraform stack lives in `infra/terraform` and manages ECS, ECR, RDS PostgreSQL, S3 uploads, Secrets Manager, IAM, logs, and networking.
 - Document uploads are S3-only. `UPLOADS_S3_BUCKET` is required; there is no local upload fallback.
 - DB migrations include pgvector support for `document_chunks.embedding`.
+- Production Bedrock embeddings use `BEDROCK_EMBEDDING_MODEL_ID=amazon.titan-embed-text-v1` to match the 1536-dimension pgvector column.
 - Latest deployed ALB URL is stored in `infra/terraform/last-deployment-url.txt`.
