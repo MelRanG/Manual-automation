@@ -10,17 +10,19 @@ import { ApprovalReviewPanel } from "@/components/ApprovalReviewPanel"
 
 type Tab = "all" | "review" | "done"
 
-const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-[#fff3dc] text-[#92600a]",
-  running: "bg-[#d5e3fc] text-[#00288e]",
-  completed: "bg-[#dcfce7] text-[#15803d]",
-  failed: "bg-[#ffdad6] text-[#ba1a1a]",
-}
-const STATUS_LABEL: Record<string, string> = {
-  pending: "대기",
-  running: "생성 중",
-  completed: "완료",
-  failed: "실패",
+function jobBadgeLabel(j: ManualJob): { label: string; cls: string } {
+  if (j.status === "running" || j.status === "pending") {
+    return { label: "생성 중", cls: "bg-[#d5e3fc] text-[#00288e]" }
+  }
+  if (j.status === "failed") {
+    return { label: "실패", cls: "bg-[#ffdad6] text-[#ba1a1a]" }
+  }
+  const a = j.approval?.status
+  if (a === "pending") return { label: "검토 대기", cls: "bg-[#fff3dc] text-[#92600a]" }
+  if (a === "needs_review") return { label: "추가 확인", cls: "bg-[#e8f0fe] text-[#1a56db]" }
+  if (a === "approved") return { label: "승인 완료", cls: "bg-[#dcfce7] text-[#15803d]" }
+  if (a === "rejected") return { label: "반려", cls: "bg-[#fce4ec] text-[#c62828]" }
+  return { label: j.status, cls: "bg-[#f2f4f6] text-[#757684]" }
 }
 
 export function ManualGenerator() {
@@ -45,15 +47,20 @@ export function ManualGenerator() {
 
   const allJobs = jobs ?? []
 
+  const isPendingReview = (j: ManualJob) =>
+    j.approval?.status === "pending" || j.approval?.status === "needs_review"
+  const isClosed = (j: ManualJob) =>
+    j.approval?.status === "approved" || j.approval?.status === "rejected"
+
   const filtered = allJobs.filter(j => {
     if (tab === "all") return true
-    if (tab === "review") return j.status === "completed" && !j.output_document_id
-    if (tab === "done") return j.status === "completed" && !!j.output_document_id
+    if (tab === "review") return isPendingReview(j)
+    if (tab === "done") return isClosed(j)
     return true
   })
 
   const selected = allJobs.find(j => j.id === selectedId) ?? null
-  const reviewCount = allJobs.filter(j => j.status === "completed" && !j.output_document_id).length
+  const reviewCount = allJobs.filter(isPendingReview).length
 
   const normalizeUrl = (url: string) => {
     const v = url.trim()
@@ -178,9 +185,14 @@ export function ManualGenerator() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{job.target_url}</p>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[job.status] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
-                    {STATUS_LABEL[job.status] ?? job.status}
-                  </span>
+                  {(() => {
+                    const b = jobBadgeLabel(job)
+                    return (
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${b.cls}`}>
+                        {b.label}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <p className="text-xs text-[#9a9bad] mt-1">{new Date(job.created_at).toLocaleDateString("ko-KR")}</p>
               </button>
@@ -210,12 +222,14 @@ function ManualDetail({ job, onRefetch }: { job: ManualJob; onRefetch: () => voi
     <div className="p-6 max-w-3xl">
       <div className="flex items-center gap-3 mb-6">
         <h3 className="text-lg font-bold text-[#191c1e] flex-1 truncate">{job.target_url}</h3>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-          job.status === "completed" ? "bg-[#dcfce7] text-[#15803d]" :
-          job.status === "running" ? "bg-[#d5e3fc] text-[#00288e]" :
-          job.status === "failed" ? "bg-[#ffdad6] text-[#ba1a1a]" :
-          "bg-[#fff3dc] text-[#92600a]"
-        }`}>{job.status === "completed" ? "완료" : job.status === "running" ? "생성 중" : job.status === "failed" ? "실패" : "대기"}</span>
+        {(() => {
+          const b = jobBadgeLabel(job)
+          return (
+            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${b.cls}`}>
+              {b.label}
+            </span>
+          )
+        })()}
       </div>
 
       <div className="flex gap-1 border-b border-[#e0e3e5] mb-5">
