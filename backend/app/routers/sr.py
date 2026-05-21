@@ -1,12 +1,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.document import Document
 from app.models.feedback import ApprovalRequest, ProposedDocumentChange
+from app.models.jira import JiraCallbackLog
+from app.models.manual import ManualGenerationJob
 from app.models.sr import ChangeImpactAnalysis, DocumentChangeProposal, SRDraft, WebhookDeliveryLog
 from app.models.user import User
 from app.routers.widget import WIDGET_USER_ID
@@ -302,3 +304,37 @@ async def get_review_history(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db
         comment=approval.comment if approval else None,
         edited_content=approval.edited_content if approval else None,
     )
+
+
+@router.delete("/drafts/{sr_id}", status_code=204)
+async def delete_sr_draft(
+    sr_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    sr = await db.get(SRDraft, sr_id)
+    if not sr:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+
+    # Hard delete direct children
+    await db.execute(sa_delete(WebhookDeliveryLog).where(WebhookDeliveryLog.sr_draft_id == sr_id))
+    await db.execute(sa_delete(ApprovalRequest).where(ApprovalRequest.sr_draft_id == sr_id))
+
+    # Detach FK but preserve referenced rows
+    await db.execute(
+        sa_update(ManualGenerationJob)
+        .where(ManualGenerationJob.source_sr_id == sr_id)
+        .values(source_sr_id=None)
+    )
+    await db.execute(
+        sa_update(JiraCallbackLog)
+        .where(JiraCallbackLog.sr_draft_id == sr_id)
+        .values(sr_draft_id=None)
+    )
+    await db.execute(
+        sa_update(Document)
+        .where(Document.related_sr_id == sr_id)
+        .values(related_sr_id=None)
+    )
+
+    await db.execute(sa_delete(SRDraft).where(SRDraft.id == sr_id))
+    await db.commit()

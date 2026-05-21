@@ -232,3 +232,30 @@ async def test_pending_doc_review_response_includes_approval_id(client: AsyncCli
     items = res.json()["items"]
     match = next(i for i in items if i["id"] == str(sr_id))
     assert match["pending_doc_review_approval_id"] == str(approval_id)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_delete_sr_draft(client: AsyncClient, test_user: dict):
+    create_resp = await client.post("/api/sr/drafts", json={
+        "user_id": test_user["id"],
+        "title": "Delete me SR",
+        "description": "to be removed",
+        "priority": "low",
+    })
+    assert create_resp.status_code == 201
+    sr_id = create_resp.json()["id"]
+
+    del_resp = await client.delete(f"/api/sr/drafts/{sr_id}")
+    assert del_resp.status_code == 204
+
+    list_resp = await client.get("/api/sr/drafts", params={"skip": 0, "limit": 500})
+    assert list_resp.status_code == 200
+    ids = [it["id"] for it in list_resp.json()["items"]]
+    assert sr_id not in ids
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_delete_unknown_sr_draft(client: AsyncClient):
+    fake_id = uuid.uuid4()
+    resp = await client.delete(f"/api/sr/drafts/{fake_id}")
+    assert resp.status_code == 404
