@@ -24,8 +24,13 @@ output "ecs_service_name" {
 }
 
 output "load_balancer_dns_name" {
-  description = "Public application URL."
+  description = "Direct ALB URL (HTTP only, for debugging). Use public_app_url for client traffic."
   value       = "http://${aws_lb.app.dns_name}"
+}
+
+output "public_app_url" {
+  description = "Public HTTPS URL fronted by CloudFront. Register this as the Jira webhook target."
+  value       = "https://${aws_cloudfront_distribution.app.domain_name}"
 }
 
 output "rds_endpoint" {

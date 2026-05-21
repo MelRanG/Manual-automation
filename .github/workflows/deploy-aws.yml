@@ -156,14 +156,14 @@ jobs:
 
       - name: Print deployment URL
         working-directory: ${{ env.TF_DIR }}
-        run: terraform output load_balancer_dns_name
+        run: terraform output public_app_url
 
       - name: Record deployment URL
         working-directory: ${{ env.TF_DIR }}
         shell: bash
         run: |
           set -euo pipefail
-          terraform output -raw load_balancer_dns_name > last-deployment-url.txt
+          terraform output -raw public_app_url > last-deployment-url.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add last-deployment-url.txt
