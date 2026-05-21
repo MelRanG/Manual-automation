@@ -2,20 +2,41 @@ import asyncio
 import logging
 import re
 import uuid
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.models.feedback import ProposedDocumentChange
 from app.models.manual import ManualGenerationJob
-from app.services.document_service import UPLOAD_DIR
+from app.services.document_service import UPLOAD_DIR, _put_s3_object
 from app.services.llm_service import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
 SCREENSHOTS_DIR = UPLOAD_DIR / "screenshots"
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _upload_screenshot_to_s3(local_jpg: Path) -> None:
+    """JPG를 S3에 올리고 로컬 파일 제거. Fargate FS는 ephemeral이라 영구화 필요."""
+    if not settings.uploads_s3_bucket:
+        raise RuntimeError("UPLOADS_S3_BUCKET is required for screenshot uploads")
+    prefix = settings.uploads_s3_prefix.strip("/")
+    key = (
+        f"{prefix}/screenshots/{local_jpg.name}"
+        if prefix
+        else f"screenshots/{local_jpg.name}"
+    )
+    content = local_jpg.read_bytes()
+    _put_s3_object(key, content)
+    local_jpg.unlink(missing_ok=True)
+
+
+async def _upload_screenshot_to_s3_async(local_jpg: Path) -> None:
+    await asyncio.to_thread(_upload_screenshot_to_s3, local_jpg)
 
 
 async def create_job(
@@ -152,6 +173,7 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
             await page.screenshot(path=str(png_path), full_page=False)
             _resize_screenshot(png_path)
             filename = f"{job.id}_step1.jpg"
+            await _upload_screenshot_to_s3_async(png_path.with_suffix(".jpg"))
             page_text = await page.evaluate("() => document.body.innerText")
             screenshots.append({
                 "step": 1,
@@ -193,6 +215,7 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                             await page.screenshot(path=str(before_png), full_page=False)
                             _resize_screenshot(before_png)
                             _annotate_click(before_png.with_suffix(".jpg"), click_pos)
+                            await _upload_screenshot_to_s3_async(before_png.with_suffix(".jpg"))
 
                             # target=_blank 링크는 href로 직접 이동
                             href = await locator.get_attribute("href")
@@ -218,6 +241,7 @@ async def capture_screenshots(job: ManualGenerationJob) -> list[dict]:
                         after_png = SCREENSHOTS_DIR / f"{job.id}_step{i}a.png"
                         await page.screenshot(path=str(after_png), full_page=False)
                         _resize_screenshot(after_png)
+                        await _upload_screenshot_to_s3_async(after_png.with_suffix(".jpg"))
                         step_text = await page.evaluate("() => document.body.innerText")
 
                         if clicked and click_pos:
