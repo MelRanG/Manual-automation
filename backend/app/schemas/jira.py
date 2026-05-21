@@ -5,9 +5,9 @@ from pydantic import BaseModel
 
 
 class JiraConfigUpsert(BaseModel):
-    base_url: str
+    site_url: str
     user_email: str
-    api_token: str
+    api_token: str | None = None
     project_key: str
     is_active: bool = True
     trigger_status_names: list[str] | None = None
@@ -15,7 +15,8 @@ class JiraConfigUpsert(BaseModel):
 
 class JiraConfigResponse(BaseModel):
     id: uuid.UUID
-    base_url: str
+    site_url: str | None
+    base_url: str  # server-derived (read-only from client perspective)
     user_email: str
     api_token_masked: str  # "****" + 마지막 4자
     project_key: str
