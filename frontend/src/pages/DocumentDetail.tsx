@@ -153,21 +153,15 @@ export function DocumentDetail() {
               })}
             </div>
           )}
-          {(doc.tags ?? []).length === 0 && (
-            dismissed ? (
-              <button
-                type="button"
-                onClick={reopenPanel}
-                className="mt-3 inline-flex items-center gap-1 text-xs text-[#00288e] hover:underline"
-              >
-                <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-                AI 추천 받기
-              </button>
-            ) : (
-              <div className="mt-3">
-                <DetailTagPanel docId={id!} onDismiss={dismissPanel} />
-              </div>
-            )
+          {(doc.tags ?? []).length === 0 && dismissed && (
+            <button
+              type="button"
+              onClick={reopenPanel}
+              className="mt-3 inline-flex items-center gap-1 text-xs text-[#00288e] hover:underline"
+            >
+              <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+              AI 추천 받기
+            </button>
           )}
           <div className="flex items-center gap-4 mt-3">
             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
@@ -268,6 +262,10 @@ export function DocumentDetail() {
           </div>
         </div>
       </div>
+
+      {(doc.tags ?? []).length === 0 && !dismissed && (
+        <DetailTagPanel docId={id!} onDismiss={dismissPanel} />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Document Content */}
