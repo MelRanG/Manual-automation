@@ -113,9 +113,7 @@ async def create_jira_issue(config: JiraConfig, draft: SRDraft) -> dict:
             body = await resp.json()
             if resp.status not in (200, 201):
                 raise RuntimeError(f"Jira API error {resp.status}: {body}")
-            issue_key = body["key"]
-            issue_url = f"{config.base_url.rstrip('/')}/browse/{issue_key}"
-            return {"key": issue_key, "url": issue_url}
+            return {"key": body["key"]}
 
 
 async def test_connection(config: JiraConfig) -> dict:
