@@ -18,6 +18,7 @@ export interface UseChatSessionArgs {
 
 export interface ChatSessionState {
   messages: ChatMessage[]
+  modesByMessage: Record<string, ChatMode>
   citations: Citation[]
   citationsByMessage: Record<string, Citation[]>
   warnings: DocumentWarning[]
@@ -59,6 +60,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   const [loading, setLoading] = useState(false)
   const [input, setInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("question")
+  const [modesByMessage, setModesByMessage] = useState<Record<string, ChatMode>>({})
   const [srDraftsByMessage, setSrDraftsByMessage] = useState<Record<string, SRDraftCreated>>({})
   const [srSendingId, setSrSendingId] = useState<string | null>(null)
   const [srSentById, setSrSentById] = useState<Record<string, string>>({})
@@ -79,12 +81,14 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   // async, so isCreating state alone cannot prevent two rapid clicks from
   // both passing the guard and calling ensureSession() twice.
   const isCreatingRef = useRef(false)
+  const sendSRRef = useRef<(draft: SRDraftCreated) => Promise<void>>(async () => {})
 
   const canSubmitSR = typeof api.submitSR === "function"
   const canSubmitFeedback = typeof api.submitFeedback === "function"
 
   const resetAll = useCallback(() => {
     setMessages([])
+    setModesByMessage({})
     setCitations([])
     setCitationsByMessage({})
     setWarnings([])
@@ -170,6 +174,9 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
         } else if (event.type === "done") {
           messageId = event.messageId || ""
           srDraft = event.sr_draft
+          if (messageId) {
+            setModesByMessage(prev => ({ ...prev, [messageId]: chatMode }))
+          }
           if (messageId && responseCitations.length) {
             setCitationsByMessage(prev => ({ ...prev, [messageId]: responseCitations }))
           }
@@ -182,6 +189,11 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       setMessages(prev => prev.map(m =>
         m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m
       ))
+      if (srDraft && chatMode === "change_request" && api.submitSR) {
+        const autoDraft = srDraft
+        // 사용자 클릭 없이 즉시 Jira 전송 — 데모 변경요청 흐름.
+        void sendSRRef.current(autoDraft)
+      }
     } catch {
       setMessages(prev => prev.map(m =>
         m.id === "streaming" ? { ...m, content: "오류가 발생했습니다. 다시 시도해주세요." } : m
@@ -213,6 +225,10 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       setSrSendingId(null)
     }
   }, [api])
+
+  useEffect(() => {
+    sendSRRef.current = sendSR
+  }, [sendSR])
 
   const openFeedback = useCallback((msgId: string) => setFeedbackFor(msgId), [])
   const cancelFeedback = useCallback(() => {
@@ -251,7 +267,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   }, [api, feedbackText, messages, citationsByMessage, citations])
 
   return {
-    messages, citations, citationsByMessage, warnings, loading,
+    messages, modesByMessage, citations, citationsByMessage, warnings, loading,
     input, setInput, send,
     chatMode, setChatMode,
     srDraftsByMessage, srSentById, srSendingId, srSendErrorById, sendSR,
