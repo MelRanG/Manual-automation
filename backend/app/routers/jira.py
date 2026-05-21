@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ async def get_config(db: AsyncSession = Depends(get_db)):
         return None
     return JiraConfigResponse(
         id=config.id,
+        site_url=config.site_url,
         base_url=config.base_url,
         user_email=config.user_email,
         api_token_masked=jira_service.mask_token(config.api_token),
@@ -39,9 +40,21 @@ async def get_config(db: AsyncSession = Depends(get_db)):
 
 @router.put("/config", response_model=JiraConfigResponse)
 async def save_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)):
-    config = await jira_service.upsert_config(db, data.model_dump())
+    site_url = jira_service.normalize_site_url(data.site_url)
+    try:
+        cloud_id = await jira_service.resolve_cloud_id(site_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    derived_base_url = jira_service.derive_base_url(cloud_id)
+
+    payload = data.model_dump()
+    payload["site_url"] = site_url
+    payload["base_url"] = derived_base_url
+    config = await jira_service.upsert_config(db, payload)
+
     return JiraConfigResponse(
         id=config.id,
+        site_url=config.site_url,
         base_url=config.base_url,
         user_email=config.user_email,
         api_token_masked=jira_service.mask_token(config.api_token),
