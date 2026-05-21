@@ -349,3 +349,261 @@ async def test_webhook_skips_already_done_sr(client, db_session):
     data = resp.json()
     assert data["status"] == "skipped"
     assert data["reason"] == "SR already processed"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_creates_notifications_for_admins_and_owner(client, db_session):
+    """webhook 완료 처리 시 admin 전원 + 작성자에게 알림 생성"""
+    import uuid
+    from sqlalchemy import select
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraConfig
+    from app.models.notification import Notification
+
+    # admin 2명 생성
+    admin_ids = []
+    for i in range(2):
+        resp = await client.post("/api/users", json={
+            "name": f"Admin {i}",
+            "email": f"admin_{i}_{uuid.uuid4().hex[:8]}@example.com",
+            "role": "admin",
+        })
+        assert resp.status_code == 201
+        admin_ids.append(uuid.UUID(resp.json()["id"]))
+
+    # 작성자 생성
+    resp = await client.post("/api/users", json={
+        "name": "Owner",
+        "email": f"owner_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    owner_id = uuid.UUID(resp.json()["id"])
+
+    # Jira config 활성화
+    config = JiraConfig(
+        id=uuid.uuid4(),
+        base_url="https://test.atlassian.net",
+        user_email="t@example.com",
+        api_token="token",
+        project_key="TEST",
+        is_active=True,
+        trigger_status_names=None,
+    )
+    db_session.add(config)
+
+    # 미처리 SR
+    unique_key = f"TEST-NOTIF-{uuid.uuid4().hex[:6]}"
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=owner_id,
+        title="알림 테스트 SR",
+        description="설명",
+        priority="medium",
+        status="submitted",
+        created_by_ai=False,
+        jira_issue_key=unique_key,
+    )
+    db_session.add(sr)
+    await db_session.commit()
+
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": unique_key,
+            "fields": {
+                "status": {
+                    "name": "Done",
+                    "statusCategory": {"key": "done"},
+                }
+            },
+        },
+    }
+    resp = await client.post("/api/jira/webhook", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending_doc_review"
+
+    # admin 알림 조회 — 각 admin 1건씩
+    for admin_id in admin_ids:
+        admin_notifs = (await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_id,
+                Notification.type == "jira_sr_doc_review_needed",
+            )
+        )).scalars().all()
+        assert len(admin_notifs) == 1
+        n = admin_notifs[0]
+        assert "알림 테스트 SR" in n.title
+        assert n.link_path == "/approvals?tab=jira_sr"
+
+    # 작성자 알림 조회
+    owner_notifs = (await db_session.execute(
+        select(Notification).where(
+            Notification.user_id == owner_id,
+            Notification.type == "jira_sr_done_owner",
+        )
+    )).scalars().all()
+    assert len(owner_notifs) == 1
+    assert "알림 테스트 SR" in owner_notifs[0].message
+    assert owner_notifs[0].link_path == "/approvals?tab=jira_sr"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_notification_failure_does_not_break_response(client, db_session):
+    """create_notification이 raise해도 webhook 응답 200, SR 상태 전환 정상"""
+    import uuid
+    from sqlalchemy import select
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraConfig
+    from app.models.feedback import ApprovalRequest
+
+    resp = await client.post("/api/users", json={
+        "name": "Owner Fail",
+        "email": f"owner_fail_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    owner_id = uuid.UUID(resp.json()["id"])
+
+    config = JiraConfig(
+        id=uuid.uuid4(),
+        base_url="https://test.atlassian.net",
+        user_email="t@example.com",
+        api_token="token",
+        project_key="TEST",
+        is_active=True,
+        trigger_status_names=None,
+    )
+    db_session.add(config)
+
+    unique_key = f"TEST-FAIL-{uuid.uuid4().hex[:6]}"
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=owner_id,
+        title="알림 실패 SR",
+        description="설명",
+        priority="medium",
+        status="submitted",
+        created_by_ai=False,
+        jira_issue_key=unique_key,
+    )
+    db_session.add(sr)
+    await db_session.commit()
+
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": unique_key,
+            "fields": {
+                "status": {
+                    "name": "Done",
+                    "statusCategory": {"key": "done"},
+                }
+            },
+        },
+    }
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("simulated push failure")
+
+    with patch("app.routers.jira.create_notification", side_effect=boom):
+        resp = await client.post("/api/jira/webhook", json=payload)
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending_doc_review"
+
+    # SR 상태가 정상 전환됐는지
+    await db_session.refresh(sr)
+    assert sr.status == "pending_doc_review"
+
+    # ApprovalRequest가 생성됐는지
+    approvals = (await db_session.execute(
+        select(ApprovalRequest).where(ApprovalRequest.sr_draft_id == sr.id)
+    )).scalars().all()
+    assert len(approvals) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_process_jira_done_notifies_all_admins(client, db_session):
+    """process_jira_done은 admin 전원에게 jira_sr_proposals_ready 알림 발송"""
+    import uuid
+    from unittest.mock import MagicMock
+    from sqlalchemy import select
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraCallbackLog
+    from app.models.document import Document, DocumentVersion
+    from app.models.notification import Notification
+    from app.services import jira_service
+
+    # admin 2명
+    admin_ids = []
+    for i in range(2):
+        resp = await client.post("/api/users", json={
+            "name": f"Proc Admin {i}",
+            "email": f"proc_admin_{i}_{uuid.uuid4().hex[:8]}@example.com",
+            "role": "admin",
+        })
+        assert resp.status_code == 201
+        admin_ids.append(uuid.UUID(resp.json()["id"]))
+
+    # 작성자
+    resp = await client.post("/api/users", json={
+        "name": "Proc Owner",
+        "email": f"proc_owner_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    user_id = uuid.UUID(resp.json()["id"])
+
+    doc = Document(
+        id=uuid.uuid4(), title="문서A", description="설명",
+        owner_id=user_id,
+        status="active", priority="medium", trust_score=1.0,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+    version = DocumentVersion(
+        id=uuid.uuid4(), document_id=doc.id, version_number=1,
+        content="내용", created_by=user_id,
+        change_summary="초기",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    doc.current_version_id = version.id
+
+    sr = SRDraft(
+        id=uuid.uuid4(), user_id=user_id,
+        title="모든 관리자 알림 SR", description="설명",
+        priority="medium", status="submitted",
+        created_by_ai=False, target_url=None,
+    )
+    db_session.add(sr)
+    await db_session.flush()
+    log = JiraCallbackLog(
+        id=uuid.uuid4(), jira_issue_key=f"TEST-ALL-{uuid.uuid4().hex[:6]}",
+        event_type="jira:issue_updated", payload={},
+        status="pending", sr_draft_id=sr.id,
+    )
+    db_session.add(log)
+    await db_session.commit()
+
+    mock_chunk = {
+        "document_id": doc.id, "document_title": doc.title,
+        "content": "내용", "distance": 0.1,
+    }
+
+    with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]), \
+         patch("app.services.llm_service.get_llm_provider") as mock_llm_factory:
+        mock_llm = MagicMock()
+        mock_llm.generate = AsyncMock(return_value="수정 내용")
+        mock_llm_factory.return_value = mock_llm
+        await jira_service.process_jira_done(sr.id, log.id, db=db_session)
+
+    for admin_id in admin_ids:
+        notifs = (await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_id,
+                Notification.type == "jira_sr_proposals_ready",
+            )
+        )).scalars().all()
+        assert len(notifs) == 1, f"admin {admin_id} 알림 누락"
