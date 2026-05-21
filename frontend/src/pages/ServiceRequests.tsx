@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { api, type SRDraft, type Document, type ChangeProposal, type AiDocRecommendation } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
@@ -47,9 +47,25 @@ const STATUS_BADGE: Record<string, string> = {
   done: "bg-[#dcfce7] text-[#15803d]",
 }
 
+const VALID_TABS: Tab[] = ["all", "draft", "active", "pending_doc_review", "done"]
+
 export function ServiceRequests() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>("all")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab = (() => {
+    const q = searchParams.get("tab")
+    return q && (VALID_TABS as string[]).includes(q) ? (q as Tab) : "all"
+  })()
+  const [tab, setTabState] = useState<Tab>(initialTab)
+  const setTab = (next: Tab) => {
+    setTabState(next)
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      if (next === "all") params.delete("tab")
+      else params.set("tab", next)
+      return params
+    }, { replace: true })
+  }
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedSR, setSelectedSR] = useState<SRDraft | null>(null)
