@@ -132,6 +132,31 @@ async def test_connection(config: JiraConfig) -> dict:
         return {"success": False, "message": str(e)}
 
 
+async def _fetch_tenant_info(site_url: str) -> dict:
+    """GET {site_url}/_edge/tenant_info. Raises on non-200 or transport error."""
+    url = f"{site_url}/_edge/tenant_info"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=10)
+        ) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"HTTP {resp.status}")
+            return await resp.json()
+
+
+async def resolve_cloud_id(site_url: str) -> str:
+    """Look up cloudId for the given Atlassian site. Raises ValueError on failure."""
+    normalized = normalize_site_url(site_url)
+    try:
+        data = await _fetch_tenant_info(normalized)
+    except Exception as e:
+        raise ValueError(f"tenant_info 호출 실패: {e}")
+    cloud_id = data.get("cloudId")
+    if not cloud_id:
+        raise ValueError("cloudId missing in tenant_info response")
+    return cloud_id
+
+
 async def _find_related_documents(db: AsyncSession, query: str) -> list[dict]:
     """벡터 검색으로 관련 문서 탐색. 실패 시 제목 키워드 매칭으로 폴백."""
     from app.models.document import Document
