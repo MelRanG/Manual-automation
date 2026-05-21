@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Users, MessageSquare, RefreshCw, ChevronRight } from "lucide-react"
+import { Users, MessageSquare, RefreshCw, ChevronRight, Trash2 } from "lucide-react"
 
 interface WidgetSession {
   id: string
@@ -128,8 +128,9 @@ export function WidgetConversations() {
                     onClick={(e) => deleteSession(s.id, e)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-destructive transition-opacity rounded"
                     title="삭제"
+                    aria-label="삭제"
                   >
-                    <span className="material-symbols-outlined text-base">delete</span>
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               ))
