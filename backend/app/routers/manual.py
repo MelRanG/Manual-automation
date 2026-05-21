@@ -1,9 +1,12 @@
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db, SessionLocal
+from app.models.feedback import ApprovalRequest, ProposedDocumentChange
+from app.models.manual import ManualGenerationJob
 from app.schemas.manual import ManualJobCreate, ManualJobResponse
 from app.services import manual_service
 
@@ -52,3 +55,34 @@ async def get_manual_job(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+async def delete_manual_job(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    job = await db.get(ManualGenerationJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Manual job not found")
+
+    pc_ids_result = await db.execute(
+        select(ProposedDocumentChange.id).where(
+            ProposedDocumentChange.manual_job_id == job_id
+        )
+    )
+    pc_ids = pc_ids_result.scalars().all()
+    if pc_ids:
+        await db.execute(
+            sa_delete(ApprovalRequest).where(
+                ApprovalRequest.proposed_change_id.in_(pc_ids)
+            )
+        )
+        await db.execute(
+            sa_delete(ProposedDocumentChange).where(
+                ProposedDocumentChange.id.in_(pc_ids)
+            )
+        )
+
+    await db.execute(sa_delete(ManualGenerationJob).where(ManualGenerationJob.id == job_id))
+    await db.commit()
