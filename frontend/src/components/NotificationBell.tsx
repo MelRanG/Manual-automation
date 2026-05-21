@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { Bell, CheckCheck, Clock } from "lucide-react"
 import type { Notification } from "@/lib/api"
 
@@ -114,6 +114,15 @@ export function NotificationBell({ notifications, unreadCount, onMarkRead, onMar
               })
             )}
           </div>
+
+          {/* 전체 보기 풋터 */}
+          <Link
+            to="/notifications"
+            onClick={() => setOpen(false)}
+            className="block text-center px-4 py-2.5 text-xs font-medium text-[#00288e] hover:bg-[#dde1ff] border-t border-[#e8e9ef]"
+          >
+            전체 알림 보기 →
+          </Link>
         </div>
       )}
     </div>
