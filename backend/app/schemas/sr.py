@@ -27,6 +27,7 @@ class SRDraftResponse(BaseModel):
     jira_issue_url: str | None = None
     target_url: str | None = None
     ai_doc_recommendation: dict[str, Any] | None = None
+    pending_doc_review_approval_id: uuid.UUID | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -341,22 +341,60 @@ SR 설명: {draft.description}
 
 
 async def build_sr_response(db: AsyncSession, draft: SRDraft) -> SRDraftResponse:
-    """Convert an SRDraft ORM instance to a response with a freshly computed jira_issue_url."""
+    """Convert an SRDraft ORM instance to a response with a freshly computed jira_issue_url and approval id."""
     from app.services import jira_service
+    from app.models.feedback import ApprovalRequest
+
     config = await jira_service.get_active_config(db)
     response = SRDraftResponse.model_validate(draft)
     response.jira_issue_url = jira_service.build_jira_issue_url(draft.jira_issue_key, config)
+
+    if draft.status == "pending_doc_review":
+        approval_result = await db.execute(
+            select(ApprovalRequest)
+            .where(
+                ApprovalRequest.sr_draft_id == draft.id,
+                ApprovalRequest.approval_type == "doc_review",
+                ApprovalRequest.status == "pending",
+            )
+            .order_by(ApprovalRequest.created_at.desc())
+            .limit(1)
+        )
+        approval = approval_result.scalar_one_or_none()
+        if approval:
+            response.pending_doc_review_approval_id = approval.id
+
     return response
 
 
 async def build_sr_responses(db: AsyncSession, drafts: list[SRDraft]) -> list[SRDraftResponse]:
     """Same as build_sr_response but fetches config once for a batch."""
     from app.services import jira_service
+    from app.models.feedback import ApprovalRequest
+
     config = await jira_service.get_active_config(db)
+
+    pending_ids = [d.id for d in drafts if d.status == "pending_doc_review"]
+    approval_map: dict[uuid.UUID, uuid.UUID] = {}
+    if pending_ids:
+        approval_result = await db.execute(
+            select(ApprovalRequest)
+            .where(
+                ApprovalRequest.sr_draft_id.in_(pending_ids),
+                ApprovalRequest.approval_type == "doc_review",
+                ApprovalRequest.status == "pending",
+            )
+            .order_by(ApprovalRequest.created_at.desc())
+        )
+        for ar in approval_result.scalars().all():
+            if ar.sr_draft_id is not None:
+                approval_map.setdefault(ar.sr_draft_id, ar.id)
+
     out: list[SRDraftResponse] = []
     for draft in drafts:
         response = SRDraftResponse.model_validate(draft)
         response.jira_issue_url = jira_service.build_jira_issue_url(draft.jira_issue_key, config)
+        response.pending_doc_review_approval_id = approval_map.get(draft.id)
         out.append(response)
     return out
 
