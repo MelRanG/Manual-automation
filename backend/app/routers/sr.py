@@ -5,9 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.models.document import Document
+from app.models.feedback import ApprovalRequest, ProposedDocumentChange
 from app.models.sr import ChangeImpactAnalysis, DocumentChangeProposal, SRDraft, WebhookDeliveryLog
+from app.models.user import User
 from app.routers.widget import WIDGET_USER_ID
-from app.schemas.sr import AiDocRecommendationResponse, ImpactAnalysisSummary, LatestProposalResponse, ProposalSummary, SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
+from app.schemas.sr import AiDocRecommendationResponse, ImpactAnalysisSummary, LatestProposalResponse, ProposalSummary, ReviewHistoryProposal, SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest, SRReviewHistoryResponse
 from app.services import ai_recommendation_service, sr_service
 
 router = APIRouter(prefix="/api/sr", tags=["service-requests"])
@@ -217,4 +220,85 @@ async def get_latest_proposal(sr_id: uuid.UUID, db: AsyncSession = Depends(get_d
         impact_analysis=ImpactAnalysisSummary.model_validate(analysis),
         proposal=ProposalSummary.model_validate(proposal) if proposal else None,
         doc_mode_hint=doc_mode_hint,
+    )
+
+
+@router.get(
+    "/drafts/{sr_id}/review-history",
+    response_model=SRReviewHistoryResponse | None,
+)
+async def get_review_history(sr_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    draft_result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    draft = draft_result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+
+    if draft.status == "pending_doc_review":
+        return SRReviewHistoryResponse(status="in_review", message="검토 진행 중")
+
+    approval_result = await db.execute(
+        select(ApprovalRequest)
+        .where(
+            ApprovalRequest.sr_draft_id == sr_id,
+            ApprovalRequest.approval_type == "doc_review",
+        )
+        .order_by(ApprovalRequest.created_at.desc())
+        .limit(1)
+    )
+    approval = approval_result.scalar_one_or_none()
+
+    proposal = None
+    if approval and approval.proposed_change_id:
+        change_result = await db.execute(
+            select(ProposedDocumentChange).where(
+                ProposedDocumentChange.id == approval.proposed_change_id
+            )
+        )
+        proposal = change_result.scalar_one_or_none()
+
+    selected_doc_mode = "none"
+    selected_document_id = None
+    selected_document_title = None
+    if proposal and proposal.document_id:
+        selected_doc_mode = "existing"
+        selected_document_id = proposal.document_id
+        doc_result = await db.execute(
+            select(Document).where(Document.id == proposal.document_id)
+        )
+        doc = doc_result.scalar_one_or_none()
+        if doc:
+            selected_document_title = doc.title
+    elif proposal:
+        selected_doc_mode = "new"
+
+    reviewer_name = None
+    if approval and approval.reviewer_id:
+        user_result = await db.execute(
+            select(User).where(User.id == approval.reviewer_id)
+        )
+        user = user_result.scalar_one_or_none()
+        if user:
+            reviewer_name = user.name
+
+    final_proposal = None
+    if proposal and approval and approval.action != "reject":
+        final_proposal = ReviewHistoryProposal(
+            proposed_content=proposal.proposed_text,
+            original_content=proposal.original_text,
+            diff=proposal.diff,
+        )
+
+    return SRReviewHistoryResponse(
+        status=draft.status,
+        ai_recommendation=draft.ai_doc_recommendation,
+        selected_doc_mode=selected_doc_mode,
+        selected_document_id=selected_document_id,
+        selected_document_title=selected_document_title,
+        final_proposal=final_proposal,
+        reviewer_id=approval.reviewer_id if approval else None,
+        reviewer_name=reviewer_name,
+        reviewed_at=approval.reviewed_at if approval else None,
+        action=approval.action if approval else None,
+        comment=approval.comment if approval else None,
+        edited_content=approval.edited_content if approval else None,
     )

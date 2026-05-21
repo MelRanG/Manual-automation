@@ -110,3 +110,25 @@ class LatestProposalResponse(BaseModel):
     impact_analysis: ImpactAnalysisSummary
     proposal: ProposalSummary | None = None
     doc_mode_hint: str  # "new" | "existing"
+
+
+class ReviewHistoryProposal(BaseModel):
+    proposed_content: str | None = None
+    original_content: str | None = None
+    diff: str | None = None
+
+
+class SRReviewHistoryResponse(BaseModel):
+    status: str  # done_synced | done_no_proposal | in_review
+    message: str | None = None
+    ai_recommendation: dict[str, Any] | None = None
+    selected_doc_mode: str | None = None  # "new" | "existing" | "none"
+    selected_document_id: uuid.UUID | None = None
+    selected_document_title: str | None = None
+    final_proposal: ReviewHistoryProposal | None = None
+    reviewer_id: uuid.UUID | None = None
+    reviewer_name: str | None = None
+    reviewed_at: str | None = None
+    action: str | None = None  # "approve_doc" | "approve_manual" | "edit_and_approve" | "reject"
+    comment: str | None = None
+    edited_content: str | None = None
