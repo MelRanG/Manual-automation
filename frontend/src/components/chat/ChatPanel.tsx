@@ -30,10 +30,13 @@ export function ChatPanel({ chat, variant, emptyState }: Props) {
               msg={msg}
               variant={variant}
               citations={
-                msg.citations?.length
-                  ? msg.citations
-                  : chat.citationsByMessage[msg.id]
-                    || (msg === chat.messages[chat.messages.length - 1] ? chat.citations : [])
+                // 변경 요청 모드 응답은 참조 문서를 숨김 (데모 UX 요구사항)
+                chat.modesByMessage[msg.id] === "change_request"
+                  ? []
+                  : (msg.citations?.length
+                      ? msg.citations
+                      : chat.citationsByMessage[msg.id]
+                        || (msg === chat.messages[chat.messages.length - 1] ? chat.citations : []))
               }
               srDraft={chat.srDraftsByMessage[msg.id]}
               srSentText={chat.srSentById[chat.srDraftsByMessage[msg.id]?.id]}

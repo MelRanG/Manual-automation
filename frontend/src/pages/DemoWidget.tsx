@@ -5,13 +5,16 @@ import { buildWidgetAdapter } from "@/lib/chatAdapters"
 import { ChatPanel } from "@/components/chat/ChatPanel"
 import { CUSTOMER, DEFAULT_MESSAGE, REASONS, TOAST, type ReasonKey } from "./DemoWidget.constants"
 
+const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
+
 export interface DemoWidgetProps {
   allowAllReasons: boolean
   onSaveBehavior: "none" | "weather-modal"
   showEtcInput: boolean
+  loggedIn: boolean
 }
 
-export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput }: DemoWidgetProps) {
+export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, loggedIn }: DemoWidgetProps) {
   const [toastOpen, setToastOpen] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -20,8 +23,16 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput }: De
   const [modalOpen, setModalOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const adapter = useMemo(() => buildWidgetAdapter(null), [])
-  const chat = useChatSession({ sessionId, userId: null, api: adapter })
+  const adapter = useMemo(
+    () => buildWidgetAdapter(loggedIn ? DEMO_USER_ID : null),
+    [loggedIn]
+  )
+  const chat = useChatSession({
+    sessionId,
+    userId: loggedIn ? DEMO_USER_ID : null,
+    api: adapter,
+    changeRequestContext: `[페이지: ${window.location.pathname}]`,
+  })
 
   const pendingSendRef = useRef(false)
 
@@ -33,7 +44,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput }: De
       body: JSON.stringify({
         site_id: "demo_courier",
         anonymous_id: "demo_courier_user",
-        user_id: null,
+        user_id: loggedIn ? DEMO_USER_ID : null,
       }),
     })
     const data = await res.json()

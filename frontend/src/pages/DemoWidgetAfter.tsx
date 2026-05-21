@@ -1,5 +1,12 @@
 import { DemoWidget } from "./DemoWidget"
 
 export function DemoWidgetAfter() {
-  return <DemoWidget allowAllReasons={true} onSaveBehavior="weather-modal" showEtcInput={true} />
+  return (
+    <DemoWidget
+      allowAllReasons={true}
+      onSaveBehavior="weather-modal"
+      showEtcInput={true}
+      loggedIn={true}
+    />
+  )
 }

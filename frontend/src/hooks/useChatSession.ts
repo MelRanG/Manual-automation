@@ -14,10 +14,13 @@ export interface UseChatSessionArgs {
   api: ChatApiAdapter
   /** Called after lazy-create. Parent must reflect this in sidebar + activeSession. */
   onSessionCreated?: (session: ChatSession) => void
+  /** change_request 모드일 때 질문에 invisibly 덧붙일 컨텍스트 (예: "[페이지: /demo-widget-after]"). */
+  changeRequestContext?: string
 }
 
 export interface ChatSessionState {
   messages: ChatMessage[]
+  modesByMessage: Record<string, ChatMode>
   citations: Citation[]
   citationsByMessage: Record<string, Citation[]>
   warnings: DocumentWarning[]
@@ -51,7 +54,7 @@ export interface ChatSessionState {
   resetAll: () => void
 }
 
-export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSessionArgs): ChatSessionState {
+export function useChatSession({ sessionId, api, onSessionCreated, changeRequestContext }: UseChatSessionArgs): ChatSessionState {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [citations, setCitations] = useState<Citation[]>([])
   const [citationsByMessage, setCitationsByMessage] = useState<Record<string, Citation[]>>({})
@@ -59,6 +62,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   const [loading, setLoading] = useState(false)
   const [input, setInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("question")
+  const [modesByMessage, setModesByMessage] = useState<Record<string, ChatMode>>({})
   const [srDraftsByMessage, setSrDraftsByMessage] = useState<Record<string, SRDraftCreated>>({})
   const [srSendingId, setSrSendingId] = useState<string | null>(null)
   const [srSentById, setSrSentById] = useState<Record<string, string>>({})
@@ -79,12 +83,15 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   // async, so isCreating state alone cannot prevent two rapid clicks from
   // both passing the guard and calling ensureSession() twice.
   const isCreatingRef = useRef(false)
+  const sendSRRef = useRef<(draft: SRDraftCreated) => Promise<void>>(async () => {})
+  const srInFlightRef = useRef<Set<string>>(new Set())
 
   const canSubmitSR = typeof api.submitSR === "function"
   const canSubmitFeedback = typeof api.submitFeedback === "function"
 
   const resetAll = useCallback(() => {
     setMessages([])
+    setModesByMessage({})
     setCitations([])
     setCitationsByMessage({})
     setWarnings([])
@@ -133,7 +140,9 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       }
     }
     inFlightRef.current = true
-    const question = chatMode === "change_request" ? `[변경 요청] ${input}` : input
+    const question = chatMode === "change_request"
+      ? `[변경 요청]${changeRequestContext ? ` ${changeRequestContext}` : ""} ${input}`
+      : input
     const userInput = input
     setInput("")
     setLoading(true)
@@ -170,6 +179,9 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
         } else if (event.type === "done") {
           messageId = event.messageId || ""
           srDraft = event.sr_draft
+          if (messageId) {
+            setModesByMessage(prev => ({ ...prev, [messageId]: chatMode }))
+          }
           if (messageId && responseCitations.length) {
             setCitationsByMessage(prev => ({ ...prev, [messageId]: responseCitations }))
           }
@@ -182,6 +194,10 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       setMessages(prev => prev.map(m =>
         m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m
       ))
+      if (srDraft && chatMode === "change_request" && api.submitSR) {
+        // 사용자 클릭 없이 즉시 Jira 전송 — 데모 변경요청 흐름.
+        void sendSRRef.current(srDraft)
+      }
     } catch {
       setMessages(prev => prev.map(m =>
         m.id === "streaming" ? { ...m, content: "오류가 발생했습니다. 다시 시도해주세요." } : m
@@ -190,10 +206,13 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       setLoading(false)
       inFlightRef.current = false
     }
-  }, [input, sessionId, chatMode, api, onSessionCreated])
+  }, [input, sessionId, chatMode, api, onSessionCreated, changeRequestContext])
 
   const sendSR = useCallback(async (draft: SRDraftCreated) => {
     if (!api.submitSR) return
+    // 자동 전송 + 사용자 클릭 동시 진입 방지 — state 는 비동기라 같은 tick race 를 못 막음.
+    if (srInFlightRef.current.has(draft.id)) return
+    srInFlightRef.current.add(draft.id)
     setSrSendingId(draft.id)
     setSrSendErrorById(prev => ({ ...prev, [draft.id]: "" }))
     try {
@@ -211,8 +230,13 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       }))
     } finally {
       setSrSendingId(null)
+      srInFlightRef.current.delete(draft.id)
     }
   }, [api])
+
+  useEffect(() => {
+    sendSRRef.current = sendSR
+  }, [sendSR])
 
   const openFeedback = useCallback((msgId: string) => setFeedbackFor(msgId), [])
   const cancelFeedback = useCallback(() => {
@@ -251,7 +275,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   }, [api, feedbackText, messages, citationsByMessage, citations])
 
   return {
-    messages, citations, citationsByMessage, warnings, loading,
+    messages, modesByMessage, citations, citationsByMessage, warnings, loading,
     input, setInput, send,
     chatMode, setChatMode,
     srDraftsByMessage, srSentById, srSendingId, srSendErrorById, sendSR,
