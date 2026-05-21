@@ -2,7 +2,6 @@ import uuid
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
 from app.models.user import User
