@@ -8,6 +8,6 @@ environment  = "codex-dev"
 # allowed_http_cidr_blocks = ["203.0.113.10/32"]
 allowed_http_cidr_blocks = ["0.0.0.0/0"]
 
-# Start safely without paid LLM calls. Change to "bedrock" after IAM/Bedrock access is confirmed.
-llm_provider    = "mock"
-embedding_model = "mock"
+llm_provider     = "bedrock"
+embedding_model  = "mock"
+bedrock_model_id = "us.anthropic.claude-sonnet-4-6"
