@@ -17,6 +17,7 @@ from app.schemas.feedback import (
     LinkDocumentBody,
     ApplyDraftBody,
 )
+from app.routers.widget import WIDGET_USER_ID
 from app.services import feedback_service, approval_service, history_service
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
@@ -27,6 +28,9 @@ async def create_feedback(
     data: FeedbackReportCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    if data.user_id == WIDGET_USER_ID:
+        raise HTTPException(status_code=403, detail="anonymous feedback not allowed")
+
     report = await feedback_service.create_feedback(db, data)
 
     if data.document_id:

@@ -130,3 +130,25 @@ async def test_sr_submit_allowed_for_authenticated_user(
     resp = await client.post(f"/api/sr/drafts/{draft.id}/submit")
     # 200 success or 500 if Jira not configured both acceptable; 403 must NOT occur.
     assert resp.status_code != 403
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_feedback_blocked_for_widget_anonymous(client: AsyncClient):
+    resp = await client.post("/api/feedback", json={
+        "user_id": str(WIDGET_USER_ID),
+        "feedback_text": "should be blocked",
+    })
+    assert resp.status_code == 403
+    assert "anonymous" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_feedback_allowed_for_authenticated_user(
+    client: AsyncClient, test_user: dict
+):
+    resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "feedback_text": "real feedback",
+    })
+    # 200/201 or other non-403 acceptable; 403 must NOT occur.
+    assert resp.status_code != 403
