@@ -40,6 +40,7 @@ def test_widget_session_create_rejects_non_uuid_user_id():
 
 from sqlalchemy import select
 from app.models.sr import SRDraft
+from app.routers.widget import WIDGET_USER_ID
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -67,7 +68,6 @@ async def test_widget_ask_stream_anonymous_skips_sr_draft(client: AsyncClient, d
 
     assert "sr_draft" not in body
 
-    from app.routers.widget import WIDGET_USER_ID
     result = await db_session.execute(
         select(SRDraft).where(SRDraft.user_id == WIDGET_USER_ID)
     )
@@ -90,3 +90,43 @@ async def test_widget_ask_stream_authenticated_session_owner(
     )
     session = result.scalar_one()
     assert str(session.user_id) == test_user["id"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sr_submit_blocked_for_widget_anonymous(client: AsyncClient, db_session):
+    draft = SRDraft(
+        id=uuid.uuid4(),
+        user_id=WIDGET_USER_ID,
+        title="anon SR",
+        description="should not submit",
+        priority="low",
+        status="draft",
+        created_by_ai=True,
+    )
+    db_session.add(draft)
+    await db_session.commit()
+
+    resp = await client.post(f"/api/sr/drafts/{draft.id}/submit")
+    assert resp.status_code == 403
+    assert "anonymous" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sr_submit_allowed_for_authenticated_user(
+    client: AsyncClient, db_session, test_user: dict
+):
+    draft = SRDraft(
+        id=uuid.uuid4(),
+        user_id=uuid.UUID(test_user["id"]),
+        title="real SR",
+        description="should submit",
+        priority="low",
+        status="draft",
+        created_by_ai=True,
+    )
+    db_session.add(draft)
+    await db_session.commit()
+
+    resp = await client.post(f"/api/sr/drafts/{draft.id}/submit")
+    # 200 success or 500 if Jira not configured both acceptable; 403 must NOT occur.
+    assert resp.status_code != 403

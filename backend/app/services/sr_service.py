@@ -20,6 +20,11 @@ Priority: [low/medium/high/critical]
 Description: [detailed description of what needs to be done]"""
 
 
+async def get_draft(db: AsyncSession, sr_id: uuid.UUID) -> SRDraft | None:
+    result = await db.execute(select(SRDraft).where(SRDraft.id == sr_id))
+    return result.scalar_one_or_none()
+
+
 async def create_sr_draft(db: AsyncSession, data: SRDraftCreate) -> SRDraft:
     draft = SRDraft(
         id=uuid.uuid4(),
