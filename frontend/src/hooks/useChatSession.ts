@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import type {
   ChatMessage, Citation, DocumentWarning, SRDraftCreated,
 } from "@/lib/api"
@@ -69,6 +69,12 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null)
   const [feedbackNotice, setFeedbackNotice] = useState<Record<string, string>>({})
 
+  // Guards the history-load effect from clobbering an in-flight send.
+  // WidgetDemo creates a session and sends in the same tick, so the load
+  // effect and send() race; without this, getMessages([]) overwrites the
+  // [user, streaming] placeholders and SSE tokens have nothing to update.
+  const inFlightRef = useRef(false)
+
   const canSubmitSR = typeof api.submitSR === "function"
   const canSubmitFeedback = typeof api.submitFeedback === "function"
 
@@ -92,7 +98,9 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
       resetAll()
       return
     }
+    let cancelled = false
     api.getMessages(sessionId).then((loaded) => {
+      if (cancelled || inFlightRef.current) return
       setMessages(loaded)
       const next: Record<string, Citation[]> = {}
       for (const m of loaded) {
@@ -100,10 +108,12 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
       }
       setCitationsByMessage(next)
     }).catch(() => {})
+    return () => { cancelled = true }
   }, [sessionId, api, resetAll])
 
   const send = useCallback(async () => {
     if (!input.trim() || !sessionId) return
+    inFlightRef.current = true
     const question = chatMode === "change_request" ? `[변경 요청] ${input}` : input
     const userInput = input
     setInput("")
@@ -159,6 +169,7 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
       ))
     } finally {
       setLoading(false)
+      inFlightRef.current = false
     }
   }, [input, sessionId, chatMode, api])
 
