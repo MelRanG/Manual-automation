@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, Info, AlertTriangle, X } from "lucide-react"
+import { ArrowLeft, Info, AlertTriangle, X, Camera } from "lucide-react"
 import { CUSTOMER, DEFAULT_MESSAGE, TOAST } from "./DemoWidget.constants"
 
 export interface DemoWidgetProps {
@@ -10,15 +10,36 @@ export interface DemoWidgetProps {
 export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps) {
   const [toastOpen, setToastOpen] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const id = window.setTimeout(() => setToastOpen(true), 2000)
     return () => window.clearTimeout(id)
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (photoUrl) URL.revokeObjectURL(photoUrl)
+    }
+  }, [photoUrl])
+
   // Props are intentionally consumed later (Task 5: allowAllReasons, Task 7: onSaveBehavior)
   void allowAllReasons
   void onSaveBehavior
+
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (photoUrl) URL.revokeObjectURL(photoUrl)
+    setPhotoUrl(URL.createObjectURL(file))
+    // input value 리셋해서 동일 파일 다시 선택해도 onChange 발화
+    e.target.value = ""
+  }
+
+  function handlePhotoRemove() {
+    if (photoUrl) URL.revokeObjectURL(photoUrl)
+    setPhotoUrl(null)
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f9fb] flex flex-col items-center font-['Inter',sans-serif] text-[#191c1e]">
@@ -79,6 +100,42 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
               <dt className="text-[#757684]">예상 배송 시간</dt>
               <dd className="text-[#191c1e]">{CUSTOMER.eta}</dd>
             </dl>
+          </section>
+
+          {/* 사진 카드 */}
+          <section className="bg-white rounded-lg border border-[#c4c5d5] p-4">
+            <h2 className="text-sm font-semibold text-[#191c1e] mb-2 flex items-center gap-1.5">
+              <span aria-hidden>📷</span> 현장 사진
+            </h2>
+            {photoUrl ? (
+              <div className="flex items-center gap-3">
+                <img
+                  src={photoUrl}
+                  alt="현장 사진"
+                  className="w-20 h-20 object-cover rounded border border-[#c4c5d5]"
+                />
+                <button
+                  type="button"
+                  onClick={handlePhotoRemove}
+                  className="text-sm text-[#7a1d1d] underline"
+                >
+                  사진 제거
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#c4c5d5] rounded p-6 cursor-pointer hover:bg-[#f7f9fb] transition-colors">
+                <Camera size={28} className="text-[#757684]" />
+                <span className="text-sm text-[#444653]">사진 첨부</span>
+                <span className="text-xs text-[#757684]">탭하여 카메라/갤러리</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoSelect}
+                  className="hidden"
+                />
+              </label>
+            )}
           </section>
 
           {/* 메시지 카드 */}
