@@ -1,5 +1,6 @@
 // frontend/src/components/chat/ChatMessage.tsx
 import type { ChatMessage as ChatMessageType, Citation, SRDraftCreated } from "@/lib/api"
+import { MarkdownMessage } from "./MarkdownMessage"
 
 interface Props {
   msg: ChatMessageType
@@ -51,12 +52,19 @@ export function ChatMessageView(p: Props) {
           ? "bg-white border border-[#c4c5d5] rounded-2xl rounded-tl-none px-6 py-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
           : "bg-white border border-[#c4c5d5] rounded-lg rounded-tl-none p-3 text-sm text-[#191c1e] shadow-sm"
         }>
-          <div className={variant === "full"
-            ? "text-base leading-relaxed text-[#191c1e] whitespace-pre-wrap"
-            : "text-sm whitespace-pre-wrap"
-          }>
-            {msg.content || <span className="text-[#757684] animate-pulse">응답 생성 중...</span>}
-          </div>
+          {msg.content ? (
+            <MarkdownMessage content={msg.content} variant={variant} />
+          ) : (
+            <span
+              className={
+                variant === "full"
+                  ? "text-base text-[#757684] animate-pulse"
+                  : "text-sm text-[#757684] animate-pulse"
+              }
+            >
+              응답 생성 중...
+            </span>
+          )}
 
           {msg.id !== "streaming" && citations.length > 0 && variant === "full" && (
             <>
