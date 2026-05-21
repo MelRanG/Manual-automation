@@ -88,6 +88,21 @@ async def upsert_config(db: AsyncSession, data: dict) -> JiraConfig:
     return config
 
 
+def _build_description(draft: SRDraft) -> dict:
+    body = draft.description or ""
+    if draft.target_url:
+        body += (
+            "\n\n---\n"
+            f"대상 URL: {draft.target_url}\n"
+            "변경 완료 시 수정 후 URL을 댓글로 남겨주세요. (예: updated: https://...)"
+        )
+    return {
+        "type": "doc",
+        "version": 1,
+        "content": [{"type": "paragraph", "content": [{"type": "text", "text": body}]}],
+    }
+
+
 async def create_jira_issue(config: JiraConfig, draft: SRDraft) -> dict:
     url = f"{config.base_url.rstrip('/')}/rest/api/3/issue"
     headers = {
@@ -98,11 +113,7 @@ async def create_jira_issue(config: JiraConfig, draft: SRDraft) -> dict:
         "fields": {
             "project": {"key": config.project_key},
             "summary": draft.title,
-            "description": {
-                "type": "doc",
-                "version": 1,
-                "content": [{"type": "paragraph", "content": [{"type": "text", "text": draft.description}]}],
-            },
+            "description": _build_description(draft),
             "priority": {"name": {"critical": "Highest", "high": "High", "medium": "Medium", "low": "Low", "lowest": "Lowest"}.get(draft.priority, "Medium")},
             "issuetype": {"name": "Task"},
             "labels": ["docops-ai", "auto-generated"],
