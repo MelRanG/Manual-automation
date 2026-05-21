@@ -404,9 +404,6 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
   const [recommendation, setRecommendation] = useState<AiDocRecommendation | null>(null)
   const [recLoading, setRecLoading] = useState(false)
   const [recError, setRecError] = useState<string | null>(null)
-  const [editedContent, setEditedContent] = useState<string>("")
-  const editTaRef = useRef<HTMLTextAreaElement>(null)
-
   useEffect(() => {
     if (sr.status !== "pending_doc_review") return
     let ignore = false
@@ -448,17 +445,6 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
     })()
     return () => { ignore = true }
   }, [sr.id, sr.status])
-
-  useEffect(() => {
-    if (proposal) setEditedContent(proposal.proposed_content)
-  }, [proposal])
-
-  useEffect(() => {
-    const el = editTaRef.current
-    if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${el.scrollHeight}px`
-  }, [editedContent])
 
   const handleSelectNone = () => {
     setConfirmingNone(true)
@@ -759,96 +745,140 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
               )}
             </div>
           ) : (
-            <div className="space-y-4">
-              {proposal.original_content ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs font-semibold text-[#757684] mb-2">기존 내용</p>
-                    <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-96">{proposal.original_content}</pre>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (편집 가능)</p>
-                    <textarea
-                      ref={editTaRef}
-                      value={editedContent}
-                      onChange={(e) => setEditedContent(e.target.value)}
-                      className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (편집 가능)</p>
-                  <textarea
-                    ref={editTaRef}
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
-                  />
-                </div>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={async () => {
-                    if (!sr.pending_doc_review_approval_id) {
-                      setGenerateError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
-                      return
-                    }
-                    setApplying(true)
-                    try {
-                      await api.reviewDocApproval(sr.pending_doc_review_approval_id, {
-                        reviewer_id: reviewerId,
-                        action: "approve_doc",
-                      })
-                      onRefetch()
-                    } catch (e) {
-                      setGenerateError(e instanceof Error ? e.message : "승인 실패")
-                    } finally {
-                      setApplying(false)
-                    }
-                  }}
-                  disabled={applying}
-                  className="px-4 py-2 bg-[#15803d] text-white rounded-lg text-sm font-medium hover:bg-[#166534] disabled:opacity-50"
-                >
-                  {applying ? "반영 중..." : "승인"}
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!sr.pending_doc_review_approval_id) {
-                      setGenerateError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
-                      return
-                    }
-                    if (editedContent === proposal.proposed_content) {
-                      setGenerateError("수정된 내용이 없습니다. '승인'을 사용하세요.")
-                      return
-                    }
-                    setApplying(true)
-                    try {
-                      await api.reviewDocApproval(sr.pending_doc_review_approval_id, {
-                        reviewer_id: reviewerId,
-                        action: "edit_and_approve",
-                        edited_content: editedContent,
-                      })
-                      onRefetch()
-                    } catch (e) {
-                      setGenerateError(e instanceof Error ? e.message : "수정 후 승인 실패")
-                    } finally {
-                      setApplying(false)
-                    }
-                  }}
-                  disabled={applying || editedContent === proposal.proposed_content}
-                  className="px-4 py-2 bg-[#4a4bdc] text-white rounded-lg text-sm font-medium hover:bg-[#3b3cd0] disabled:opacity-50"
-                >
-                  수정 후 승인
-                </button>
-                <button onClick={() => setProposal(null)} className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm hover:bg-[#f2f4f6]">
-                  다시 생성
-                </button>
-              </div>
-            </div>
+            <DraftEditor
+              key={proposal.id}
+              proposal={proposal}
+              pendingApprovalId={sr.pending_doc_review_approval_id}
+              reviewerId={reviewerId}
+              applying={applying}
+              setApplying={setApplying}
+              setGenerateError={setGenerateError}
+              setProposal={setProposal}
+              onRefetch={onRefetch}
+            />
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function DraftEditor({
+  proposal,
+  pendingApprovalId,
+  reviewerId,
+  applying,
+  setApplying,
+  setGenerateError,
+  setProposal,
+  onRefetch,
+}: {
+  proposal: ChangeProposal
+  pendingApprovalId: string | null | undefined
+  reviewerId: string
+  applying: boolean
+  setApplying: (v: boolean) => void
+  setGenerateError: (v: string | null) => void
+  setProposal: (v: ChangeProposal | null) => void
+  onRefetch: () => void
+}) {
+  const [editedContent, setEditedContent] = useState(proposal.proposed_content)
+  const editTaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    const el = editTaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [editedContent])
+
+  return (
+    <div className="space-y-4">
+      {proposal.original_content ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs font-semibold text-[#757684] mb-2">기존 내용</p>
+            <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-96">{proposal.original_content}</pre>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (편집 가능)</p>
+            <textarea
+              ref={editTaRef}
+              value={editedContent}
+              onChange={(e) => setEditedContent(e.target.value)}
+              className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
+            />
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (편집 가능)</p>
+          <textarea
+            ref={editTaRef}
+            value={editedContent}
+            onChange={(e) => setEditedContent(e.target.value)}
+            className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
+          />
+        </div>
+      )}
+      <div className="flex gap-2">
+        <button
+          onClick={async () => {
+            if (!pendingApprovalId) {
+              setGenerateError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
+              return
+            }
+            setApplying(true)
+            try {
+              await api.reviewDocApproval(pendingApprovalId, {
+                reviewer_id: reviewerId,
+                action: "approve_doc",
+              })
+              onRefetch()
+            } catch (e) {
+              setGenerateError(e instanceof Error ? e.message : "승인 실패")
+            } finally {
+              setApplying(false)
+            }
+          }}
+          disabled={applying}
+          className="px-4 py-2 bg-[#15803d] text-white rounded-lg text-sm font-medium hover:bg-[#166534] disabled:opacity-50"
+        >
+          {applying ? "반영 중..." : "승인"}
+        </button>
+        <button
+          onClick={async () => {
+            if (!pendingApprovalId) {
+              setGenerateError("승인 ID를 찾을 수 없습니다. 페이지를 새로고침하세요.")
+              return
+            }
+            if (editedContent === proposal.proposed_content) {
+              setGenerateError("수정된 내용이 없습니다. '승인'을 사용하세요.")
+              return
+            }
+            setApplying(true)
+            try {
+              await api.reviewDocApproval(pendingApprovalId, {
+                reviewer_id: reviewerId,
+                action: "edit_and_approve",
+                edited_content: editedContent,
+              })
+              onRefetch()
+            } catch (e) {
+              setGenerateError(e instanceof Error ? e.message : "수정 후 승인 실패")
+            } finally {
+              setApplying(false)
+            }
+          }}
+          disabled={applying || editedContent === proposal.proposed_content}
+          className="px-4 py-2 bg-[#4a4bdc] text-white rounded-lg text-sm font-medium hover:bg-[#3b3cd0] disabled:opacity-50"
+        >
+          수정 후 승인
+        </button>
+        <button onClick={() => setProposal(null)} className="px-4 py-2 border border-[#c4c5d5] rounded-lg text-sm hover:bg-[#f2f4f6]">
+          다시 생성
+        </button>
+      </div>
     </div>
   )
 }
