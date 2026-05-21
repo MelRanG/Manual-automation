@@ -436,9 +436,10 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
         if (!rec) rec = await api.postAiDocRecommendation(sr.id)
       } catch (e) {
         if (!ignore) setRecError(e instanceof Error ? e.message : "AI 추천 사용 불가")
+      } finally {
+        if (!ignore) setRecLoading(false)
       }
       if (ignore) return
-      setRecLoading(false)
       setRecommendation(rec)
       if (
         !restoredDocId &&
@@ -770,7 +771,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                   onClick={async () => {
                     setApplying(true)
                     try {
-                      await api.updateSRDraft(sr.id, { status: "done" })
+                      await api.updateSRDraft(sr.id, { status: "done_synced" })
                       onRefetch()
                     } finally {
                       setApplying(false)
