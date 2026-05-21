@@ -43,7 +43,7 @@ export async function createSession(config: WidgetConfig, anonymousId: string) {
 
 export async function getMessages(config: WidgetConfig, sessionId: string) {
   const res = await fetch(`${config.apiUrl}/api/widget/sessions/${sessionId}/messages`)
-  if (!res.ok) throw new Error("widget get messages failed")
+  if (!res.ok) throw new Error(`widget get messages failed: ${res.status}`)
   return res.json() as Promise<WidgetMessage[]>
 }
 

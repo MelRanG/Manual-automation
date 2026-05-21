@@ -116,9 +116,7 @@ class WidgetApp {
     trigger.addEventListener("click", () => this.toggle())
     close.addEventListener("click", () => this.toggle())
 
-    this.inputEl.addEventListener("input", () => {
-      sendBtn.disabled = !this.inputEl!.value.trim() || this.isStreaming
-    })
+    this.inputEl.addEventListener("input", () => this.updateSendBtnState())
     this.inputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !sendBtn.disabled) this.send()
     })
@@ -152,11 +150,15 @@ class WidgetApp {
       if (msgs.length === 0) {
         this.addBotMessage("안녕하세요! 무엇을 도와드릴까요?")
       }
-    } catch {
-      localStorage.removeItem(`docops_widget_${this.config.siteId}`)
-      this.sessionId = null
-      this.messages = []
-      this.startDraft()
+    } catch (e) {
+      const isStale = e instanceof Error && e.message.includes("404")
+      if (isStale) {
+        localStorage.removeItem(`docops_widget_${this.config.siteId}`)
+        this.sessionId = null
+        this.messages = []
+        this.startDraft()
+      }
+      // Other errors: keep session, user can retry on next open.
     }
   }
 
@@ -166,6 +168,7 @@ class WidgetApp {
 
     if (!this.sessionId) {
       this.isCreating = true
+      this.updateSendBtnState()
       try {
         const anonymousId = localStorage.getItem(`docops_anon_${this.config.siteId}`)
           || Math.random().toString(36).slice(2, 10)
@@ -176,13 +179,16 @@ class WidgetApp {
       } catch {
         this.addBotMessage("연결에 실패했습니다. 잠시 후 다시 시도해주세요.")
         this.isCreating = false
+        this.updateSendBtnState()
         return
       }
       this.isCreating = false
+      this.updateSendBtnState()
     }
 
     this.inputEl!.value = ""
     this.isStreaming = true
+    this.updateSendBtnState()
     this.messages.push({ id: "temp-user", role: "user", content: question })
     this.renderMessages()
 
@@ -209,6 +215,7 @@ class WidgetApp {
     }
 
     this.isStreaming = false
+    this.updateSendBtnState()
     this.renderMessages()
   }
 
@@ -231,6 +238,12 @@ class WidgetApp {
       })
       .join("")
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight
+  }
+
+  private updateSendBtnState() {
+    const sendBtn = this.container.querySelector(".docops-input-area button") as HTMLButtonElement | null
+    if (!sendBtn || !this.inputEl) return
+    sendBtn.disabled = !this.inputEl.value.trim() || this.isStreaming || this.isCreating
   }
 
   private escapeHtml(str: string): string {
