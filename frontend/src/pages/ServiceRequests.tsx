@@ -5,6 +5,7 @@ import type { SRReviewHistory, ReviewHistoryAction } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
+import { MarkdownMessage } from "@/components/chat/MarkdownMessage"
 
 const isRealJiraLink = (sr: SRDraft) =>
   Boolean(
@@ -911,14 +912,36 @@ function DraftEditor({
   onRefetch: () => void
 }) {
   const [editedContent, setEditedContent] = useState(proposal.proposed_content)
+  const [isEditing, setIsEditing] = useState(false)
   const editTaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
+    if (!isEditing) return
     const el = editTaRef.current
     if (!el) return
     el.style.height = "auto"
     el.style.height = `${el.scrollHeight}px`
-  }, [editedContent])
+  }, [editedContent, isEditing])
+
+  const proposedView = isEditing ? (
+    <textarea
+      ref={editTaRef}
+      value={editedContent}
+      onChange={(e) => setEditedContent(e.target.value)}
+      onBlur={() => setIsEditing(false)}
+      autoFocus
+      className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
+    />
+  ) : (
+    <div
+      onClick={() => setIsEditing(true)}
+      className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] cursor-text min-h-[12rem] hover:border-[#15803d] transition-colors relative"
+      title="클릭하여 편집"
+    >
+      <span className="material-symbols-outlined absolute top-2 right-2 text-base text-[#15803d] opacity-60">edit</span>
+      <MarkdownMessage content={editedContent || "(빈 본문)"} variant="full" />
+    </div>
+  )
 
   return (
     <div className="space-y-4">
@@ -926,27 +949,19 @@ function DraftEditor({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-xs font-semibold text-[#757684] mb-2">기존 내용</p>
-            <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-96">{proposal.original_content}</pre>
+            <div className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] min-h-[12rem]">
+              <MarkdownMessage content={proposal.original_content} variant="full" />
+            </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (편집 가능)</p>
-            <textarea
-              ref={editTaRef}
-              value={editedContent}
-              onChange={(e) => setEditedContent(e.target.value)}
-              className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
-            />
+            <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (클릭하여 편집)</p>
+            {proposedView}
           </div>
         </div>
       ) : (
         <div>
-          <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (편집 가능)</p>
-          <textarea
-            ref={editTaRef}
-            value={editedContent}
-            onChange={(e) => setEditedContent(e.target.value)}
-            className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
-          />
+          <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (클릭하여 편집)</p>
+          {proposedView}
         </div>
       )}
       <div className="flex gap-2">

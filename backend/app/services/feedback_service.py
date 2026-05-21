@@ -57,7 +57,28 @@ async def generate_correction(
     if not version:
         return None
 
-    original_text = version.content
+    original_text = version.content or ""
+
+    # version.content 가 비어있거나 변환 실패 마커면 chunks 로 복원 시도
+    if not original_text.strip() or original_text.startswith("[변환 실패"):
+        chunks_result = await db.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.document_id == feedback.document_id)
+            .order_by(DocumentChunk.chunk_index)
+        )
+        chunks = list(chunks_result.scalars().all())
+        if chunks:
+            joined = "\n\n".join(c.content for c in chunks if c.content)
+            if joined.strip():
+                original_text = joined
+
+    # 그래도 비면 document description 으로 fallback
+    if not original_text.strip():
+        original_text = doc.description or ""
+
+    if not original_text.strip():
+        # 원본 텍스트 자체가 없으면 의미 있는 AI 수정안 불가 → proposal 생성 skip
+        return None
 
     focus_section: str | None = None
     if feedback.chunk_id:
