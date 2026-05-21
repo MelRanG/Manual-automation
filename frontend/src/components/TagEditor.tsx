@@ -1,9 +1,11 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 interface TagEditorProps {
   tags: string[]
   onChange: (tags: string[]) => void
   onSuggest: () => Promise<string[]>
+  autoSuggestOnMount?: boolean
+  onSuggestError?: (e: unknown) => void
 }
 
 function tagDepthColor(tag: string) {
@@ -13,7 +15,7 @@ function tagDepthColor(tag: string) {
   return "bg-[#e8f0fe] text-[#444653]"
 }
 
-export function TagEditor({ tags, onChange, onSuggest }: TagEditorProps) {
+export function TagEditor({ tags, onChange, onSuggest, autoSuggestOnMount, onSuggestError }: TagEditorProps) {
   const [input, setInput] = useState("")
   const [suggesting, setSuggesting] = useState(false)
   const [suggested, setSuggested] = useState<string[]>([])
@@ -45,12 +47,21 @@ export function TagEditor({ tags, onChange, onSuggest }: TagEditorProps) {
     try {
       const result = await onSuggest()
       setSuggested(result.filter(t => !tags.includes(t)))
-    } catch {
-      // ignore
+    } catch (e) {
+      onSuggestError?.(e)
     } finally {
       setSuggesting(false)
     }
   }
+
+  useEffect(() => {
+    if (autoSuggestOnMount) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void handleSuggest()
+    }
+    // 의도적으로 마운트 시 1회만 실행 — autoSuggestOnMount 토글로 재호출하지 않음
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div className="space-y-3">
