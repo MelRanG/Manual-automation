@@ -38,7 +38,7 @@ export function NotificationBell({ notifications, unreadCount, onMarkRead, onMar
   const handleNotifClick = (n: Notification) => {
     if (!n.is_read) onMarkRead(n.id)
     setOpen(false)
-    if (n.document_id) navigate(`/documents/${n.document_id}`)
+    if (n.link_path) navigate(n.link_path)
   }
 
   return (

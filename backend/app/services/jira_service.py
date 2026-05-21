@@ -374,8 +374,9 @@ SR 설명: {sr.description}
                             user_id=admin.id,
                             type="jira_sr_proposals_ready",
                             title=f"SR '{sr.title}' 완료 — 문서 수정안 {proposals_created}건 생성",
-                            message="Approvals 페이지에서 검토하세요.",
+                            message="SR 페이지에서 검토하세요.",
                             document_id=None,
+                            link_path="/sr",
                         )
                 except Exception as e:
                     logger.warning(f"알림 전송 실패 (sr={sr_id}): {e}")

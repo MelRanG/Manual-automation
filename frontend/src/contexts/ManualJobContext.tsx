@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
-import { useNavigate } from "react-router-dom"
 import { api, type ManualJob } from "@/lib/api"
 
 const STORAGE_KEY = "manual_running_job"
@@ -15,6 +14,7 @@ interface ManualJobContextValue {
   currentStatus: ManualJob["status"] | null
   startJob: (job: ManualJob) => void
   clearJob: () => void
+  completionVersion: number
 }
 
 const ManualJobContext = createContext<ManualJobContextValue>({
@@ -22,10 +22,10 @@ const ManualJobContext = createContext<ManualJobContextValue>({
   currentStatus: null,
   startJob: () => {},
   clearJob: () => {},
+  completionVersion: 0,
 })
 
 export function ManualJobProvider({ children }: { children: ReactNode }) {
-  const navigate = useNavigate()
   const [runningJob, setRunningJob] = useState<RunningJob | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
@@ -35,6 +35,7 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
     }
   })
   const [currentStatus, setCurrentStatus] = useState<ManualJob["status"] | null>(null)
+  const [completionVersion, setCompletionVersion] = useState(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const clearJob = useCallback(() => {
@@ -51,17 +52,15 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
       try {
         const updated = await api.getManualJob(jobId)
         setCurrentStatus(updated.status)
-        if (updated.status === "completed") {
+        if (updated.status === "completed" || updated.status === "failed") {
           clearJob()
-          navigate("/approvals")
-        } else if (updated.status === "failed") {
-          clearJob()
+          setCompletionVersion((v) => v + 1)
         }
       } catch {
         // 일시적 오류 무시
       }
     }, 2000)
-  }, [clearJob, navigate])
+  }, [clearJob])
 
   const startJob = useCallback((job: ManualJob) => {
     const info: RunningJob = { id: job.id, targetUrl: job.target_url, startedAt: new Date().toISOString() }
@@ -84,7 +83,7 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ManualJobContext.Provider value={{ runningJob, currentStatus, startJob, clearJob }}>
+    <ManualJobContext.Provider value={{ runningJob, currentStatus, startJob, clearJob, completionVersion }}>
       {children}
     </ManualJobContext.Provider>
   )

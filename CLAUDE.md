@@ -33,6 +33,7 @@ cd backend && uv run fastapi dev  # dev server (port 8000)
 cd backend && uv run pytest       # tests
 cd backend && uv run ruff check   # lint
 cd backend && uv run mypy .       # type check
+cd backend && uv run playwright install chromium  # 매뉴얼 자동화 1회 셋업
 ```
 
 ## Docker

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
 import type { Document } from "@/lib/api"
+import { useAuth } from "@/contexts/AuthContext"
 
 interface DashboardDoc {
   id: string
@@ -21,23 +22,27 @@ interface DashboardStats {
 }
 
 export function Dashboard() {
-  const [stats, setStats] = useState({ docs: 0, approvals: 0, feedback: 0, sr: 0 })
+  const { user } = useAuth()
+  const [stats, setStats] = useState({ docs: 0, manualReview: 0, feedback: 0, sr: 0 })
   const [recentDocs, setRecentDocs] = useState<Document[]>([])
   const [dashboard, setDashboard] = useState<DashboardStats | null>(null)
 
   useEffect(() => {
     Promise.all([
       api.listDocuments(0, 5),
-      api.listApprovals(),
+      api.listManualJobs(user?.id),
       api.listFeedback(),
       api.listSRDrafts(),
       fetch('/api/documents/stats/dashboard').then(r => r.json()),
-    ]).then(([docs, approvals, feedback, sr, dashData]) => {
-      setStats({ docs: docs.total, approvals: approvals.total, feedback: feedback.length, sr: sr.total })
+    ]).then(([docs, manuals, feedback, sr, dashData]) => {
+      const manualReview = manuals.filter(
+        (j) => j.approval?.status === "pending" || j.approval?.status === "needs_review"
+      ).length
+      setStats({ docs: docs.total, manualReview, feedback: feedback.length, sr: sr.total })
       setRecentDocs(docs.documents.slice(0, 5))
       setDashboard(dashData)
     }).catch(() => {})
-  }, [])
+  }, [user?.id])
 
   const avgTrust = recentDocs.length > 0
     ? Math.round(recentDocs.reduce((sum, d) => sum + d.trust_score, 0) / recentDocs.length * 100)
@@ -76,15 +81,15 @@ export function Dashboard() {
           </div>
         </Link>
 
-        {/* Pending Approvals */}
-        <Link to="/approvals" className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+        {/* Manual Review */}
+        <Link to="/manuals?tab=review" className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-[#444653]">대기 중 승인</span>
+            <span className="text-xs font-semibold text-[#444653]">매뉴얼 검토 대기</span>
             <div className="w-9 h-9 rounded-lg bg-[#ffdbce] flex items-center justify-center">
               <span className="material-symbols-outlined text-lg text-[#611e00]">fact_check</span>
             </div>
           </div>
-          <span className="text-3xl font-bold text-[#191c1e]">{stats.approvals}</span>
+          <span className="text-3xl font-bold text-[#191c1e]">{stats.manualReview}</span>
         </Link>
 
         {/* Errors */}
@@ -103,15 +108,15 @@ export function Dashboard() {
           </div>
         </Link>
 
-        {/* Stale Documents */}
-        <Link to="/documents" className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+        {/* Jira SR */}
+        <Link to="/sr" className="bg-white border border-[#c4c5d5] rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-[#444653]">오래된 문서</span>
+            <span className="text-xs font-semibold text-[#444653]">Jira SR</span>
             <div className="w-9 h-9 rounded-lg bg-[#d5e3fc] flex items-center justify-center">
-              <span className="material-symbols-outlined text-lg text-[#515f74]">schedule</span>
+              <span className="material-symbols-outlined text-lg text-[#1a56db]">task</span>
             </div>
           </div>
-          <span className="text-3xl font-bold text-[#191c1e]">{dashboard?.stale?.length || 0}</span>
+          <span className="text-3xl font-bold text-[#191c1e]">{stats.sr}</span>
         </Link>
       </div>
 
