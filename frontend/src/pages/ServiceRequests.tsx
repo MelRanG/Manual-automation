@@ -469,13 +469,15 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
   }
 
   if (sr.status !== "pending_doc_review") {
-    return (
-      <div className="text-sm text-[#9a9bad] py-4">
-        {sr.status === "done"
-          ? "이 SR은 이미 완료되었습니다."
-          : "Jira 이슈가 완료된 후 검토 단계가 활성화됩니다."}
-      </div>
-    )
+    let message: string
+    if (sr.status === "done_no_proposal") {
+      message = "이 SR은 문서 수정 없이 종료되었습니다."
+    } else if (sr.status === "done_synced" || sr.status === "done") {
+      message = "이 SR은 이미 완료되었습니다."
+    } else {
+      message = "Jira 이슈가 완료된 후 검토 단계가 활성화됩니다."
+    }
+    return <div className="text-sm text-[#9a9bad] py-4">{message}</div>
   }
 
   const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(docQuery.toLowerCase()))
