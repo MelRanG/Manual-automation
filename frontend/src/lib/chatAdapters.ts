@@ -28,7 +28,7 @@ export function buildChatAdapter(userId: string): ChatApiAdapter {
     askStream: (id, q) => api.askQuestionStream(id, q),
     submitSR: (draftId) => api.submitSR(draftId),
     submitFeedback: (payload) =>
-      api.createFeedback({ ...payload, user_id: userId }) as unknown as Promise<FeedbackResult>,
+      api.createFeedback({ ...payload, user_id: userId }) as Promise<FeedbackResult>,
   }
 }
 
@@ -70,6 +70,6 @@ export function buildWidgetAdapter(userId: string | null): ChatApiAdapter {
     ...base,
     submitSR: (draftId) => api.submitSR(draftId),
     submitFeedback: (payload) =>
-      api.createFeedback({ ...payload, user_id: userId }) as unknown as Promise<FeedbackResult>,
+      api.createFeedback({ ...payload, user_id: userId }) as Promise<FeedbackResult>,
   }
 }
