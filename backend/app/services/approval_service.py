@@ -238,15 +238,20 @@ async def review_doc_review_approval(
     reviewer_id: uuid.UUID,
     action: str,
     target_url: str | None = None,
+    edited_content: str | None = None,
+    comment: str | None = None,
 ) -> ApprovalRequest:
     """doc_review 타입 승인 처리.
-    action: "reject" | "approve_doc" | "approve_manual"
+    action: "reject" | "approve_doc" | "approve_manual" | "edit_and_approve"
     """
     from app.models.sr import SRDraft
 
-    valid_actions = ("reject", "approve_doc", "approve_manual")
+    valid_actions = ("reject", "approve_doc", "approve_manual", "edit_and_approve")
     if action not in valid_actions:
         raise ValueError(f"action must be one of {valid_actions}")
+
+    if action == "edit_and_approve" and not edited_content:
+        raise ValueError("edited_content required for edit_and_approve")
 
     result = await db.execute(
         select(ApprovalRequest).where(ApprovalRequest.id == approval_id)
@@ -266,11 +271,28 @@ async def review_doc_review_approval(
 
     approval.reviewer_id = reviewer_id
     approval.reviewed_at = datetime.now(timezone.utc).isoformat()
+    approval.action = action
+    approval.comment = comment
+    approval.edited_content = edited_content if action == "edit_and_approve" else None
 
     if action == "reject":
         approval.status = "rejected"
         if draft:
             draft.status = "done_no_proposal"
+
+    elif action == "edit_and_approve":
+        if approval.proposed_change_id:
+            change_result = await db.execute(
+                select(ProposedDocumentChange).where(
+                    ProposedDocumentChange.id == approval.proposed_change_id
+                )
+            )
+            change = change_result.scalar_one_or_none()
+            if change:
+                change.proposed_text = edited_content
+        approval.status = "approved"
+        if draft:
+            draft.status = "done_synced"
 
     elif action in ("approve_doc", "approve_manual"):
         approval.status = "approved"
@@ -294,6 +316,8 @@ async def review_doc_review_approval(
                     await process_completed_sr(session, event)
 
             asyncio.create_task(_run())
+
+            draft.status = "done_synced"
 
         if action == "approve_manual" and draft:
             from app.services import manual_service
