@@ -9,6 +9,7 @@ _ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://docops:docops_dev@localhost:5600/docops"
     llm_provider: str = "mock"
+    llm_max_tokens: int = 8192
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     embedding_model: str = "mock"
