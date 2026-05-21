@@ -40,8 +40,11 @@ async def create_job(
     )
     db.add(job)
     await db.commit()
-    await db.refresh(job)
-    return job
+    # Re-fetch through get_job so proposed_change/approval relationships are eager-loaded;
+    # Pydantic from_attributes serialization would otherwise trigger a lazy load outside
+    # the async greenlet context.
+    refreshed = await get_job(db, job.id)
+    return refreshed if refreshed is not None else job
 
 
 async def run_generation(db: AsyncSession, job_id: uuid.UUID) -> ManualGenerationJob:

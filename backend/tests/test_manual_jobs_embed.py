@@ -130,3 +130,25 @@ async def test_list_manual_jobs_includes_embed(
     assert target["approval"] is not None
     assert target["approval"]["id"] == str(approval_id)
     assert target["approval"]["status"] == "pending"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_create_manual_job_response_serializes_without_lazy_load(
+    client: AsyncClient, test_user: dict
+):
+    """Regression: POST /api/manuals/jobs must not trigger lazy-load of
+    proposed_change/approval during response serialization (MissingGreenlet).
+    The newly-created job has neither yet, so both must be null in the response."""
+    resp = await client.post(
+        "/api/manuals/jobs",
+        json={
+            "user_id": test_user["id"],
+            "target_url": "https://example.com/post-create-test",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["target_url"] == "https://example.com/post-create-test"
+    assert body["status"] == "pending"
+    assert body["proposed_change"] is None
+    assert body["approval"] is None
