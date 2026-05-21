@@ -62,7 +62,7 @@ const navSections: NavSection[] = [
   },
 ]
 
-interface ToastItem { id: string; title: string; message: string }
+interface ToastItem { id: string; title: string; message: string; onClick?: () => void }
 
 export function Layout() {
   const location = useLocation()
@@ -76,13 +76,18 @@ export function Layout() {
   // 새 알림이 오면 토스트 표시
   useEffect(() => {
     if (!newNotification) return
+    const notif = newNotification
+    const handleClick = () => {
+      void markRead(notif.id)
+      if (notif.link_path) navigate(notif.link_path)
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setToasts((prev) => [
       ...prev,
-      { id: newNotification.id + Date.now(), title: newNotification.title, message: newNotification.message },
+      { id: notif.id + Date.now(), title: notif.title, message: notif.message, onClick: handleClick },
     ])
     clearNew()
-  }, [newNotification, clearNew])
+  }, [newNotification, clearNew, markRead, navigate])
 
   const removeToast = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id))
 

@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react"
-import { useNavigate } from "react-router-dom"
 import { api, type ManualJob } from "@/lib/api"
 
 const STORAGE_KEY = "manual_running_job"
@@ -25,7 +24,6 @@ const ManualJobContext = createContext<ManualJobContextValue>({
 })
 
 export function ManualJobProvider({ children }: { children: ReactNode }) {
-  const navigate = useNavigate()
   const [runningJob, setRunningJob] = useState<RunningJob | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
@@ -53,7 +51,6 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
         setCurrentStatus(updated.status)
         if (updated.status === "completed") {
           clearJob()
-          navigate("/approvals")
         } else if (updated.status === "failed") {
           clearJob()
         }
@@ -61,7 +58,7 @@ export function ManualJobProvider({ children }: { children: ReactNode }) {
         // 일시적 오류 무시
       }
     }, 2000)
-  }, [clearJob, navigate])
+  }, [clearJob])
 
   const startJob = useCallback((job: ManualJob) => {
     const info: RunningJob = { id: job.id, targetUrl: job.target_url, startedAt: new Date().toISOString() }

@@ -5,16 +5,15 @@ interface ToastProps {
   title: string
   message: string
   onClose: () => void
+  onClick?: () => void
   durationMs?: number
 }
 
-export function Toast({ title, message, onClose, durationMs = 4000 }: ToastProps) {
+export function Toast({ title, message, onClose, onClick, durationMs = 4000 }: ToastProps) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    // 마운트 직후 slide-in
     const t1 = setTimeout(() => setVisible(true), 10)
-    // 자동 닫힘
     const t2 = setTimeout(() => {
       setVisible(false)
       setTimeout(onClose, 300)
@@ -25,9 +24,18 @@ export function Toast({ title, message, onClose, durationMs = 4000 }: ToastProps
     }
   }, [durationMs, onClose])
 
+  const interactive = !!onClick
+  const handleBodyClick = () => {
+    if (!interactive) return
+    onClick?.()
+    setVisible(false)
+    setTimeout(onClose, 300)
+  }
+
   return (
     <div
-      className="pointer-events-auto w-80 bg-white border border-[#c4c5d5] rounded-xl shadow-lg p-4 transition-all duration-300"
+      onClick={handleBodyClick}
+      className={`pointer-events-auto w-80 bg-white border border-[#c4c5d5] rounded-xl shadow-lg p-4 transition-all duration-300 ${interactive ? "cursor-pointer hover:shadow-xl" : ""}`}
       style={{
         transform: visible ? "translateX(0)" : "translateX(110%)",
         opacity: visible ? 1 : 0,
@@ -44,7 +52,8 @@ export function Toast({ title, message, onClose, durationMs = 4000 }: ToastProps
           <p className="text-xs text-[#444653] leading-relaxed line-clamp-2">{message}</p>
         </div>
         <button
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation()
             setVisible(false)
             setTimeout(onClose, 300)
           }}
@@ -57,8 +66,15 @@ export function Toast({ title, message, onClose, durationMs = 4000 }: ToastProps
   )
 }
 
+interface ToastItem {
+  id: string
+  title: string
+  message: string
+  onClick?: () => void
+}
+
 interface ToastContainerProps {
-  toasts: { id: string; title: string; message: string }[]
+  toasts: ToastItem[]
   onClose: (id: string) => void
 }
 
@@ -66,7 +82,13 @@ export function ToastContainer({ toasts, onClose }: ToastContainerProps) {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none">
       {toasts.map((t) => (
-        <Toast key={t.id} title={t.title} message={t.message} onClose={() => onClose(t.id)} />
+        <Toast
+          key={t.id}
+          title={t.title}
+          message={t.message}
+          onClick={t.onClick}
+          onClose={() => onClose(t.id)}
+        />
       ))}
     </div>
   )

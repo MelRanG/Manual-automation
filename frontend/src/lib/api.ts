@@ -346,7 +346,7 @@ export interface ManualJob {
   proposed_change: ProposedChangeBrief | null
   approval: ApprovalBrief | null
 }
-export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; is_read: boolean; created_at: string }
+export interface Notification { id: string; type: string; title: string; message: string; document_id: string | null; link_path: string | null; is_read: boolean; created_at: string }
 export interface JiraConfig {
   id: string
   site_url: string | null
