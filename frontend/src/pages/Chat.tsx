@@ -119,10 +119,11 @@ export function Chat() {
           }
         }
       }
-      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m))
+      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId || `assistant-${Date.now()}`, content, citations: responseCitations } : m))
       setSessions(prev => prev.map(s => s.id === activeSession && !s.title ? { ...s, title: input.slice(0, 50) } : s))
-    } catch {
-      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: "오류가 발생했습니다. 다시 시도해주세요." } : m))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "오류가 발생했습니다. 다시 시도해주세요."
+      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: message } : m))
     } finally {
       setLoading(false)
     }
