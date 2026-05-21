@@ -106,6 +106,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
     if (photoUrl) URL.revokeObjectURL(photoUrl)
     setPhotoUrl(null)
     setReason(null)
+    setReasonEtcText("")
   }
 
   function handleSave() {
