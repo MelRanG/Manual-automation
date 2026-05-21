@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import jsPDF from "jspdf"
 import ReactMarkdown from "react-markdown"
@@ -14,20 +14,19 @@ export function DocumentDetail() {
   const { data: versions } = useApi(() => api.getVersions(id!), [id])
 
   const dismissKey = `docops.tagSuggest.dismissed.${id}`
-  const [dismissed, setDismissed] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem(dismissKey) === "1"
-    } catch {
-      return false
-    }
-  })
+  const [dismissBump, setDismissBump] = useState(0)
+  const dismissed = useMemo(() => {
+    try { return sessionStorage.getItem(dismissKey) === "1" } catch { return false }
+    // dismissBump is the explicit invalidation trigger after dismissPanel/reopenPanel
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dismissKey, dismissBump])
   const dismissPanel = () => {
     try { sessionStorage.setItem(dismissKey, "1") } catch { /* noop */ }
-    setDismissed(true)
+    setDismissBump(b => b + 1)
   }
   const reopenPanel = () => {
     try { sessionStorage.removeItem(dismissKey) } catch { /* noop */ }
-    setDismissed(false)
+    setDismissBump(b => b + 1)
   }
 
   const [deleteStep, setDeleteStep] = useState<"idle" | "confirm">("idle")
