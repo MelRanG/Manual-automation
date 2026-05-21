@@ -40,7 +40,7 @@ export function WidgetDemo() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         site_id: "demo_asiana",
-        anonymous_id: "demo_user",
+        anonymous_id: demoUserId ? null : "demo_user",
         user_id: demoUserId,
       }),
     })
@@ -50,17 +50,28 @@ export function WidgetDemo() {
     return id
   }
 
-  // Wrap chat.send so the first message lazily creates a widget session.
-  const baseSend = chat.send
+  // Pending send pattern: when first message is queued before a session exists,
+  // we trigger ensureSession, then flush the send in an effect once sessionId updates.
+  const pendingSendRef = useRef(false)
+
   const sendWithSession = async () => {
     if (!sessionId) {
+      pendingSendRef.current = true
       await ensureSession()
-      // setSessionId schedules a re-render; defer baseSend until after.
-      setTimeout(() => baseSend(), 0)
-      return
+      return  // effect below will fire chat.send with fresh sessionId closure
     }
-    baseSend()
+    chat.send()
   }
+
+  useEffect(() => {
+    if (sessionId && pendingSendRef.current) {
+      pendingSendRef.current = false
+      chat.send()
+    }
+    // chat.send is intentionally in deps so we always have the latest closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, chat.send])
+
   const chatWithLazySend = { ...chat, send: sendWithSession }
 
   const emptyState = (
