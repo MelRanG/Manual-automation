@@ -62,9 +62,9 @@ async def delete_manual_job(
     job_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    job = await db.get(ManualGenerationJob, job_id)
+    job = await manual_service.get_job(db, job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Manual job not found")
+        raise HTTPException(status_code=404, detail="Job not found")
 
     pc_ids_result = await db.execute(
         select(ProposedDocumentChange.id).where(
@@ -84,5 +84,7 @@ async def delete_manual_job(
             )
         )
 
-    await db.execute(sa_delete(ManualGenerationJob).where(ManualGenerationJob.id == job_id))
+    await db.execute(
+        sa_delete(ManualGenerationJob).where(ManualGenerationJob.id == job_id)
+    )
     await db.commit()
