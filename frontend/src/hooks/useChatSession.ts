@@ -190,9 +190,8 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
         m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m
       ))
       if (srDraft && chatMode === "change_request" && api.submitSR) {
-        const autoDraft = srDraft
         // 사용자 클릭 없이 즉시 Jira 전송 — 데모 변경요청 흐름.
-        void sendSRRef.current(autoDraft)
+        void sendSRRef.current(srDraft)
       }
     } catch {
       setMessages(prev => prev.map(m =>
