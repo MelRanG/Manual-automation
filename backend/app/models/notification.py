@@ -16,6 +16,7 @@ class Notification(Base, UUIDMixin, TimestampMixin):
     type: Mapped[str] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(255))
     message: Mapped[str] = mapped_column(Text)
+    link_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id"), nullable=True
     )
