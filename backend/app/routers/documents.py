@@ -86,10 +86,9 @@ async def dashboard_stats(db: AsyncSession = Depends(get_db)):
 @router.post("", response_model=DocumentResponse, status_code=201)
 async def create_document(
     data: DocumentCreate,
-    content: str = "",
     db: AsyncSession = Depends(get_db),
 ):
-    doc = await document_service.create_document(db, data, content)
+    doc = await document_service.create_document(db, data, data.content)
     return doc
 
 
