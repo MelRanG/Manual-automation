@@ -55,8 +55,13 @@ async def test_create_widget_session_unknown_user(client: AsyncClient):
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_widget_ask_stream_anonymous_skips_sr_draft(client: AsyncClient, db_session):
+    from sqlalchemy import func
     create_resp = await client.post("/api/widget/sessions", json={"site_id": "test_site"})
     session_id = create_resp.json()["id"]
+
+    before = (await db_session.execute(
+        select(func.count()).select_from(SRDraft).where(SRDraft.user_id == WIDGET_USER_ID)
+    )).scalar() or 0
 
     async with client.stream(
         "POST", f"/api/widget/sessions/{session_id}/ask-stream",
@@ -68,10 +73,10 @@ async def test_widget_ask_stream_anonymous_skips_sr_draft(client: AsyncClient, d
 
     assert "sr_draft" not in body
 
-    result = await db_session.execute(
-        select(SRDraft).where(SRDraft.user_id == WIDGET_USER_ID)
-    )
-    assert result.scalars().first() is None
+    after = (await db_session.execute(
+        select(func.count()).select_from(SRDraft).where(SRDraft.user_id == WIDGET_USER_ID)
+    )).scalar() or 0
+    assert after == before
 
 
 @pytest.mark.asyncio(loop_scope="session")
