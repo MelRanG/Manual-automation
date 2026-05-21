@@ -31,6 +31,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, logg
     sessionId,
     userId: loggedIn ? DEMO_USER_ID : null,
     api: adapter,
+    changeRequestContext: `[페이지: ${window.location.pathname}]`,
   })
 
   const pendingSendRef = useRef(false)

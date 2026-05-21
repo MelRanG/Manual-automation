@@ -14,6 +14,8 @@ export interface UseChatSessionArgs {
   api: ChatApiAdapter
   /** Called after lazy-create. Parent must reflect this in sidebar + activeSession. */
   onSessionCreated?: (session: ChatSession) => void
+  /** change_request 모드일 때 질문에 invisibly 덧붙일 컨텍스트 (예: "[페이지: /demo-widget-after]"). */
+  changeRequestContext?: string
 }
 
 export interface ChatSessionState {
@@ -52,7 +54,7 @@ export interface ChatSessionState {
   resetAll: () => void
 }
 
-export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSessionArgs): ChatSessionState {
+export function useChatSession({ sessionId, api, onSessionCreated, changeRequestContext }: UseChatSessionArgs): ChatSessionState {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [citations, setCitations] = useState<Citation[]>([])
   const [citationsByMessage, setCitationsByMessage] = useState<Record<string, Citation[]>>({})
@@ -138,7 +140,9 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       }
     }
     inFlightRef.current = true
-    const question = chatMode === "change_request" ? `[변경 요청] ${input}` : input
+    const question = chatMode === "change_request"
+      ? `[변경 요청]${changeRequestContext ? ` ${changeRequestContext}` : ""} ${input}`
+      : input
     const userInput = input
     setInput("")
     setLoading(true)
@@ -202,7 +206,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       setLoading(false)
       inFlightRef.current = false
     }
-  }, [input, sessionId, chatMode, api, onSessionCreated])
+  }, [input, sessionId, chatMode, api, onSessionCreated, changeRequestContext])
 
   const sendSR = useCallback(async (draft: SRDraftCreated) => {
     if (!api.submitSR) return
