@@ -12,6 +12,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [reason, setReason] = useState<ReasonKey | null>(null)
+  const [reasonEtcText, setReasonEtcText] = useState("")
 
   useEffect(() => {
     const id = window.setTimeout(() => setToastOpen(true), 2000)
@@ -149,28 +150,44 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
                 {REASONS.map((r) => {
                   const disabled = !r.alwaysEnabled && !allowAllReasons
                   return (
-                    <label
-                      key={r.key}
-                      className={`flex items-center gap-2 text-sm ${
-                        disabled
-                          ? "opacity-50 line-through text-[#757684] cursor-not-allowed"
-                          : "text-[#191c1e] cursor-pointer"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="reason"
-                        value={r.key}
-                        checked={reason === r.key}
-                        onChange={() => setReason(r.key)}
-                        disabled={disabled}
-                        className="text-[#00288e] focus:ring-[#00288e]"
-                      />
-                      <span>{r.label}</span>
-                    </label>
+                    <div key={r.key} className="flex flex-col gap-2">
+                      <label
+                        className={`flex items-center gap-2 text-sm ${
+                          disabled
+                            ? "opacity-50 line-through text-[#757684] cursor-not-allowed"
+                            : "text-[#191c1e] cursor-pointer"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="reason"
+                          value={r.key}
+                          checked={reason === r.key}
+                          onChange={() => setReason(r.key)}
+                          disabled={disabled}
+                          className="text-[#00288e] focus:ring-[#00288e]"
+                        />
+                        <span>{r.label}</span>
+                      </label>
+                      {r.key === "etc" && reason === "etc" && (
+                        <input
+                          type="text"
+                          value={reasonEtcText}
+                          onChange={(e) => setReasonEtcText(e.target.value)}
+                          placeholder="사유를 입력하세요"
+                          className="ml-6 w-[calc(100%-1.5rem)] border border-[#c4c5d5] rounded px-2 py-1 text-sm focus:outline-none focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e]"
+                        />
+                      )}
+                    </div>
                   )
                 })}
               </div>
+              {reason === "etc" && (
+                <div className="mt-3 bg-[#fff4d0] border-l-4 border-[#f59e0b] text-[#7a4f00] text-xs p-3 rounded flex items-start gap-2">
+                  <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                  <span>사유를 소명하지 않으면 정시 배송률 하락으로 페널티를 받을 수 있습니다</span>
+                </div>
+              )}
             </section>
           )}
 
