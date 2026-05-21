@@ -78,23 +78,27 @@ export function MarkdownMessage({ content, variant }: Props) { ... }
 
 ## 테스트
 
-단위 테스트(Vitest): `frontend/src/components/chat/MarkdownMessage.test.tsx`
+프론트엔드 프로젝트에 현재 단위 테스트 인프라(vitest/@testing-library)가 없다. 시연 일정 고려하여 본 작업에서 단위 테스트 셋업은 도입하지 않고 다음 두 가지로 검증한다.
 
-- 헤딩(`##`)이 `<h2>`로 렌더링되는지
-- 굵게(`**bold**`)가 `<strong>`로 렌더링되는지
-- 번호 리스트와 불릿 리스트가 `<ol>`/`<ul>`로 렌더링되는지
-- 인라인 코드(`` ` ``)와 코드 블록(```` ``` ````)이 `<code>` / `<pre><code>`로 렌더링되는지
-- 원본 HTML(`<script>` 등)이 무시되는지
+타입체크 / 린트:
+- `pnpm typecheck`
+- `pnpm lint`
 
-수동 확인:
-- Chat 페이지에서 시연용 예시 답변(헤딩 + 리스트 + 굵게 혼합)이 의도대로 렌더링되는지
-- WidgetDemo의 compact 버블에서도 동일 콘텐츠가 답답하지 않게 렌더링되는지
+수동 검증 시나리오:
+- Chat 페이지(`/chat`)에서 시연용 예시 답변(헤딩 `##`/`###`, 굵게 `**`, 번호/불릿 리스트, 인라인 코드 ``` ` ```, 코드 블록, GFM 체크박스 혼합)을 받아 의도대로 렌더링되는지 확인
+- WidgetDemo 페이지(`/widget-demo`)의 compact 버블에서 동일 콘텐츠가 답답하지 않게 렌더링되는지 확인
+- 사용자 입력 메시지는 평문 그대로 표시되는지 확인
+- 빈 content 상태(`msg.id === "streaming"` 직후)의 "응답 생성 중..." 스피너가 정상 표시되는지 확인
+- 원본 HTML 문자열(`<script>alert(1)</script>`)이 텍스트 그대로 표시되거나 무시되어 실행되지 않는지 확인
+
+향후 vitest 인프라가 도입되면 다음 항목을 단위 테스트로 추가한다.
+- 헤딩, 굵게, 리스트, 코드 블록, GFM 테이블 렌더링
+- raw HTML 무시 동작
 
 ## 파일 변경 요약
 
 신규:
 - `frontend/src/components/chat/MarkdownMessage.tsx`
-- `frontend/src/components/chat/MarkdownMessage.test.tsx`
 
 수정:
 - `frontend/src/components/chat/ChatMessage.tsx` (assistant 분기 본문 1곳, ~6줄 교체)
@@ -103,7 +107,7 @@ export function MarkdownMessage({ content, variant }: Props) { ... }
 
 1. 본 설계 문서 커밋
 2. 구현 계획 문서 작성(별도 단계)
-3. `MarkdownMessage` 컴포넌트 + 단위 테스트 작성
+3. `MarkdownMessage` 컴포넌트 작성
 4. `ChatMessage.tsx` 교체
-5. 타입체크, 린트, 테스트 통과 확인
-6. 수동 시연(Chat + WidgetDemo) 후 PR
+5. 타입체크, 린트 통과 확인
+6. 수동 시연 검증(Chat + WidgetDemo) 후 PR
