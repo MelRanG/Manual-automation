@@ -50,6 +50,9 @@ async function* widgetAskStream(sessionId: string, question: string): AsyncGener
     } else if (event.event === "done") {
       const data = JSON.parse(event.data)
       yield { type: "done", messageId: data.message_id, sr_draft: data.sr_draft }
+    } else if (event.event === "error") {
+      const data = JSON.parse(event.data)
+      yield { type: "token", token: data.error || "Stream request failed" }
     }
   }
 }

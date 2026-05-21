@@ -54,7 +54,7 @@ class BedrockEmbeddingProvider(EmbeddingProvider):
         def _embed_one(text: str) -> list[float]:
             body = json.dumps({"inputText": text})
             resp = self.client.invoke_model(
-                modelId="amazon.titan-embed-text-v2:0",
+                modelId=settings.bedrock_embedding_model_id,
                 body=body,
                 contentType="application/json",
                 accept="application/json",

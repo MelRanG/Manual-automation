@@ -68,6 +68,9 @@ export async function* askStream(config: WidgetConfig, sessionId: string, questi
     } else if (event.event === "done") {
       const data = JSON.parse(event.data)
       yield { type: "done" as const, messageId: data.message_id as string }
+    } else if (event.event === "error") {
+      const data = JSON.parse(event.data)
+      yield { type: "token" as const, token: (data.error as string) || "Stream request failed" }
     }
   }
 }

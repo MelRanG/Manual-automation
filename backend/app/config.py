@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_profile: str = ""
     bedrock_model_id: str = "us.anthropic.claude-sonnet-4-6"
+    bedrock_embedding_model_id: str = "amazon.titan-embed-text-v1"
     # LiteLLM 게이트웨이 (사내 프록시 환경)
     bedrock_gateway_url: str = ""
     bedrock_api_key: str = ""
