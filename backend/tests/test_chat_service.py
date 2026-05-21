@@ -76,13 +76,8 @@ async def test_ask_question_stream_includes_history():
     mock_session.user_id = user_id
     mock_session.title = "test"
 
-    prev_user = MagicMock()
-    prev_user.role = "user"
-    prev_user.content = "이전 질문"
-
-    prev_assistant = MagicMock()
-    prev_assistant.role = "assistant"
-    prev_assistant.content = "이전 답변"
+    prev_user = {"role": "user", "content": "이전 질문"}
+    prev_assistant = {"role": "assistant", "content": "이전 답변"}
 
     async def mock_stream(system_prompt, messages, context=""):
         assert len(messages) == 3  # 이전 2개 + 현재 1개
@@ -181,3 +176,56 @@ async def test_ask_question_skips_sr_draft_when_disallowed(db_session, test_user
         allow_sr_draft=False,
     )
     assert "sr_draft" not in result or result.get("sr_draft") is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ask_question_stream_second_turn_does_not_error(db_session, test_user):
+    """두 번째 턴: 이전 메시지가 있을 때도 stream이 error 없이 정상 동작해야 한다.
+
+    Regression: get_messages가 dict를 반환하는데 chat_service는 m.role/m.content
+    attribute 접근을 사용해 AttributeError -> SSE ERR_INCOMPLETE_CHUNKED_ENCODING.
+    """
+    from app.models.chat import ChatMessage as ChatMessageModel
+
+    session = ChatSession(id=_uuid.uuid4(), user_id=_uuid.UUID(test_user["id"]))
+    db_session.add(session)
+    prev_user = ChatMessageModel(
+        id=_uuid.uuid4(), session_id=session.id, role="user", content="이전 질문",
+    )
+    prev_assistant = ChatMessageModel(
+        id=_uuid.uuid4(), session_id=session.id, role="assistant", content="이전 답변",
+    )
+    db_session.add_all([prev_user, prev_assistant])
+    await db_session.commit()
+
+    chunks = []
+    async for chunk in chat_service.ask_question_stream(
+        db_session, session.id, "두 번째 질문", allow_sr_draft=False,
+    ):
+        chunks.append(chunk)
+
+    full = "".join(chunks)
+    assert "event: error" not in full, f"stream errored on 2nd turn: {full[:500]}"
+    assert "event: done" in full, f"stream did not complete: {full[:500]}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ask_question_second_turn_does_not_error(db_session, test_user):
+    """비스트리밍 ask_question도 두 번째 턴에서 에러가 나면 안 된다."""
+    from app.models.chat import ChatMessage as ChatMessageModel
+
+    session = ChatSession(id=_uuid.uuid4(), user_id=_uuid.UUID(test_user["id"]))
+    db_session.add(session)
+    prev_user = ChatMessageModel(
+        id=_uuid.uuid4(), session_id=session.id, role="user", content="이전 질문",
+    )
+    prev_assistant = ChatMessageModel(
+        id=_uuid.uuid4(), session_id=session.id, role="assistant", content="이전 답변",
+    )
+    db_session.add_all([prev_user, prev_assistant])
+    await db_session.commit()
+
+    result = await chat_service.ask_question(
+        db_session, session.id, "두 번째 질문", allow_sr_draft=False,
+    )
+    assert "content" in result and result["content"]
