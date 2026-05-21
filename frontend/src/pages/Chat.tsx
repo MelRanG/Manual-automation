@@ -122,8 +122,27 @@ export function Chat() {
       setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, id: messageId || `assistant-${Date.now()}`, content, citations: responseCitations } : m))
       setSessions(prev => prev.map(s => s.id === activeSession && !s.title ? { ...s, title: input.slice(0, 50) } : s))
     } catch (err) {
-      const message = err instanceof Error ? err.message : "오류가 발생했습니다. 다시 시도해주세요."
-      setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: message } : m))
+      try {
+        const fallback = await api.askQuestion(activeSession, question)
+        const fallbackMessageId = fallback.message_id || `assistant-${Date.now()}`
+        responseCitations = fallback.citations || []
+        setCitations(responseCitations)
+        setWarnings(fallback.warnings || [])
+        if (responseCitations.length) {
+          setCitationsByMessage(prev => ({ ...prev, [fallbackMessageId]: responseCitations }))
+        }
+        setMessages(prev => prev.map(m => m.id === "streaming" ? {
+          ...m,
+          id: fallbackMessageId,
+          content: fallback.content,
+          citations: responseCitations,
+        } : m))
+      } catch (fallbackErr) {
+        const primaryError = err instanceof Error ? err.message : "오류가 발생했습니다. 다시 시도해주세요."
+        const secondaryError = fallbackErr instanceof Error ? fallbackErr.message : ""
+        const message = secondaryError ? `${primaryError}\n${secondaryError}` : primaryError
+        setMessages(prev => prev.map(m => m.id === "streaming" ? { ...m, content: message } : m))
+      }
     } finally {
       setLoading(false)
     }
