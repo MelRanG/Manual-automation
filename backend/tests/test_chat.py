@@ -122,6 +122,41 @@ async def test_delete_session_without_messages(client: AsyncClient, test_user: d
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_delete_session_with_feedback(client: AsyncClient, test_user: dict):
+    # 문서 → 세션 → 질문(메시지 2건) → 피드백 부착 후 삭제
+    doc_resp = await client.post("/api/documents", json={
+        "title": "Doc for delete",
+        "description": "x",
+        "owner_id": test_user["id"],
+    }, params={"content": "content for delete"})
+    assert doc_resp.status_code == 201
+
+    sess_resp = await client.post("/api/chat/sessions", json={
+        "user_id": test_user["id"],
+    })
+    session_id = sess_resp.json()["id"]
+
+    ask_resp = await client.post(f"/api/chat/sessions/{session_id}/ask", json={
+        "question": "anything?",
+    })
+    assert ask_resp.status_code == 200
+    message_id = ask_resp.json()["message_id"]
+
+    fb_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "chat_message_id": message_id,
+        "feedback_text": "wrong answer",
+    })
+    assert fb_resp.status_code in (200, 201)
+
+    del_resp = await client.delete(f"/api/chat/sessions/{session_id}")
+    assert del_resp.status_code == 204
+
+    get_resp = await client.get(f"/api/chat/sessions/{session_id}")
+    assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_list_sessions_excludes_empty(client: AsyncClient, test_user: dict):
     # 메시지가 없는 빈 세션 생성
     empty_resp = await client.post("/api/chat/sessions", json={

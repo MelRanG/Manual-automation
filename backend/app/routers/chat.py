@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.chat import ChatSession, ChatMessage, AnswerCitation
+from app.models.feedback import FeedbackReport
 from app.schemas.chat import (
     ChatSessionCreate,
     ChatSessionResponse,
@@ -100,6 +101,7 @@ async def delete_session(
     msg_ids = msg_ids_result.scalars().all()
     if msg_ids:
         await db.execute(delete(AnswerCitation).where(AnswerCitation.chat_message_id.in_(msg_ids)))
+        await db.execute(delete(FeedbackReport).where(FeedbackReport.chat_message_id.in_(msg_ids)))
     await db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))
     await db.execute(delete(ChatSession).where(ChatSession.id == session_id))
     await db.commit()
