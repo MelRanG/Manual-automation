@@ -30,10 +30,12 @@ export function ChatPanel({ chat, variant, emptyState }: Props) {
               msg={msg}
               variant={variant}
               citations={
-                msg.citations?.length
-                  ? msg.citations
-                  : chat.citationsByMessage[msg.id]
-                    || (msg === chat.messages[chat.messages.length - 1] ? chat.citations : [])
+                chat.modesByMessage[msg.id] === "change_request"
+                  ? []
+                  : (msg.citations?.length
+                      ? msg.citations
+                      : chat.citationsByMessage[msg.id]
+                        || (msg === chat.messages[chat.messages.length - 1] ? chat.citations : []))
               }
               srDraft={chat.srDraftsByMessage[msg.id]}
               srSentText={chat.srSentById[chat.srDraftsByMessage[msg.id]?.id]}
