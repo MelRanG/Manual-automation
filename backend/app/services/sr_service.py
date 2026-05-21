@@ -191,7 +191,7 @@ ALLOWED_STATUS_TRANSITIONS = {
     "draft": {"draft", "submitted"},
     "submitted": {"submitted", "jira_created"},
     "jira_created": {"jira_created", "pending_doc_review"},
-    "pending_doc_review": {"pending_doc_review", "done_synced", "done_no_proposal"},
+    "pending_doc_review": {"pending_doc_review"},
     "pending_document_selection": {"pending_document_selection", "pending_doc_review"},
     "done_synced": {"done_synced"},
     "done_no_proposal": {"done_no_proposal"},
