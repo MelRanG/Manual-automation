@@ -157,7 +157,12 @@ async def receive_jira_webhook(
     try:
         admin_result = await db.execute(select(User).where(User.role == "admin"))
         admins = admin_result.scalars().all()
-        for admin in admins:
+    except Exception as e:
+        logger.warning(f"Jira webhook admin 조회 실패 (sr={draft.id}): {e}")
+        admins = []
+
+    for admin in admins:
+        try:
             await create_notification(
                 db,
                 user_id=admin.id,
@@ -167,6 +172,10 @@ async def receive_jira_webhook(
                 document_id=None,
                 link_path="/approvals?tab=jira_sr",
             )
+        except Exception as e:
+            logger.warning(f"Jira webhook admin 알림 실패 (sr={draft.id}, admin={admin.id}): {e}")
+
+    try:
         await create_notification(
             db,
             user_id=draft.user_id,
@@ -177,7 +186,7 @@ async def receive_jira_webhook(
             link_path="/approvals?tab=jira_sr",
         )
     except Exception as e:
-        logger.warning(f"Jira webhook 알림 전송 실패 (sr={draft.id}): {e}")
+        logger.warning(f"Jira webhook owner 알림 실패 (sr={draft.id}): {e}")
 
     return {"status": "pending_doc_review", "sr_id": str(draft.id), "approval_id": str(approval.id)}
 
