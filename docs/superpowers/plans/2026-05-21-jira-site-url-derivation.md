@@ -166,6 +166,7 @@ class JiraConfigResponse(BaseModel):
     project_key: str
     is_active: bool
     trigger_status_names: list[str] | None
+    created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -661,9 +662,9 @@ cd backend && uv run pytest tests/test_jira_config_router.py -v
 
 Expected: failures (router still expects `base_url`, returns 422 / 500).
 
-- [ ] **Step 4: Update the upsert handler in the router**
+- [ ] **Step 4: Update the upsert handler + `get_config` in the router**
 
-In `backend/app/routers/jira.py`, change the upsert handler to derive and store `base_url`:
+In `backend/app/routers/jira.py`, the existing handler is `save_config` (PUT `/config`, lines 40-53) and it manually constructs the response with `JiraConfigResponse(id=..., base_url=..., ..., created_at=..., updated_at=...)`. Replace it with:
 
 ```python
 from fastapi import HTTPException
@@ -676,7 +677,7 @@ from app.services.jira_service import (
 # ...
 
 @router.put("/config", response_model=JiraConfigResponse)
-async def upsert_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)):
+async def save_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)):
     site_url = normalize_site_url(data.site_url)
     try:
         cloud_id = await resolve_cloud_id(site_url)
@@ -684,27 +685,50 @@ async def upsert_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_d
         raise HTTPException(status_code=400, detail=str(e))
     derived_base_url = derive_base_url(cloud_id)
 
-    # If api_token is omitted, reuse the stored one (existing convention).
-    api_token = data.api_token
-    if not api_token:
-        existing = await jira_service.get_active_config(db)
-        if existing:
-            api_token = existing.api_token
+    # Service-layer upsert already skips empty api_token (jira_service.upsert_config:54-55),
+    # so we just hand over the full dict.
+    payload = data.model_dump()
+    payload["site_url"] = site_url
+    payload["base_url"] = derived_base_url
+    config = await jira_service.upsert_config(db, payload)
 
-    config = await jira_service.upsert_config(
-        db,
-        site_url=site_url,
-        base_url=derived_base_url,
-        user_email=data.user_email,
-        api_token=api_token,
-        project_key=data.project_key,
-        is_active=data.is_active,
-        trigger_status_names=data.trigger_status_names,
+    return JiraConfigResponse(
+        id=config.id,
+        site_url=config.site_url,
+        base_url=config.base_url,
+        user_email=config.user_email,
+        api_token_masked=jira_service.mask_token(config.api_token),
+        project_key=config.project_key,
+        is_active=config.is_active,
+        trigger_status_names=config.trigger_status_names,
+        created_at=config.created_at,
+        updated_at=config.updated_at,
     )
-    return config
 ```
 
-Adapt the call to `jira_service.upsert_config` to the existing signature. If the current `upsert_config` takes a single dict / `JiraConfigUpsert`, instead pass it as a kwargs-style update or extend the service signature. Concretely: open `backend/app/services/jira_service.py`, find the existing upsert/save function, and add `site_url: str | None = None` and `base_url: str | None = None` to its signature (or extend the dict it persists) so both fields are written.
+Then also update the sibling `get_config` handler (lines 22-37) so its manual response build includes `site_url`:
+
+```python
+@router.get("/config", response_model=JiraConfigResponse | None)
+async def get_config(db: AsyncSession = Depends(get_db)):
+    config = await jira_service.get_active_config(db)
+    if not config:
+        return None
+    return JiraConfigResponse(
+        id=config.id,
+        site_url=config.site_url,
+        base_url=config.base_url,
+        user_email=config.user_email,
+        api_token_masked=jira_service.mask_token(config.api_token),
+        project_key=config.project_key,
+        is_active=config.is_active,
+        trigger_status_names=config.trigger_status_names,
+        created_at=config.created_at,
+        updated_at=config.updated_at,
+    )
+```
+
+`jira_service.upsert_config(db, data: dict)` already iterates the dict and `setattr`s each key onto the ORM row, so once `site_url` is in the dict, it lands in the DB column added by Task 1 — no service-layer change required for this step.
 
 - [ ] **Step 5: Re-run router tests**
 
