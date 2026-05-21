@@ -29,6 +29,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/app/ app/
 COPY backend/alembic/ alembic/
 COPY backend/alembic.ini ./
+COPY backend/scripts/ scripts/
 RUN mkdir -p uploads
 
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
@@ -41,7 +42,7 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 80
 
 ENV LLM_PROVIDER=bedrock \
-    EMBEDDING_MODEL=mock \
+    EMBEDDING_MODEL=bedrock \
     AWS_REGION=us-east-1
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -1,0 +1,143 @@
+name: Reembed Production Chunks
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: "Embedding batch size"
+        required: false
+        default: "32"
+      dry_run:
+        description: "Dry run only (no DB writes)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+  CLUSTER: manual-auto-codex-dev-cluster
+  SERVICE: manual-auto-codex-dev-service
+
+jobs:
+  reembed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve task definition and network config
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TASKDEF=$(aws ecs describe-services \
+            --cluster "$CLUSTER" --services "$SERVICE" \
+            --region "$AWS_REGION" \
+            --query 'services[0].taskDefinition' --output text)
+
+          NETWORK_CFG=$(aws ecs describe-services \
+            --cluster "$CLUSTER" --services "$SERVICE" \
+            --region "$AWS_REGION" \
+            --query 'services[0].networkConfiguration' --output json)
+
+          echo "taskdef=$TASKDEF" >> "$GITHUB_OUTPUT"
+          {
+            echo "network_cfg<<EOF"
+            echo "$NETWORK_CFG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Task definition: $TASKDEF"
+
+      - name: Build command override
+        id: build_cmd
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BATCH="${{ github.event.inputs.batch_size }}"
+          DRY_RUN="${{ github.event.inputs.dry_run }}"
+
+          CMD_ARRAY='["reembed","--batch-size","'"$BATCH"'"]'
+          if [ "$DRY_RUN" = "true" ]; then
+            CMD_ARRAY='["reembed","--batch-size","'"$BATCH"'","--dry-run"]'
+          fi
+
+          OVERRIDES=$(jq -n --argjson cmd "$CMD_ARRAY" \
+            '{containerOverrides:[{name:"app",command:$cmd}]}')
+
+          {
+            echo "overrides<<EOF"
+            echo "$OVERRIDES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run reembed task
+        id: run_task
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster "$CLUSTER" \
+            --task-definition "${{ steps.resolve.outputs.taskdef }}" \
+            --launch-type FARGATE \
+            --network-configuration '${{ steps.resolve.outputs.network_cfg }}' \
+            --overrides '${{ steps.build_cmd.outputs.overrides }}' \
+            --region "$AWS_REGION" \
+            --query 'tasks[0].taskArn' --output text)
+
+          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
+          echo "Task ARN: $TASK_ARN"
+
+      - name: Wait for task completion
+        shell: bash
+        run: |
+          set -euo pipefail
+          TASK_ARN="${{ steps.run_task.outputs.task_arn }}"
+          echo "Waiting for task to stop..."
+          aws ecs wait tasks-stopped \
+            --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --region "$AWS_REGION"
+
+      - name: Show task result
+        shell: bash
+        run: |
+          set -euo pipefail
+          TASK_ARN="${{ steps.run_task.outputs.task_arn }}"
+
+          aws ecs describe-tasks \
+            --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --region "$AWS_REGION" \
+            --query 'tasks[0].{stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[*].{name:name,exitCode:exitCode,reason:reason}}' \
+            --output json
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster "$CLUSTER" --tasks "$TASK_ARN" \
+            --region "$AWS_REGION" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+
+          TASK_ID="${TASK_ARN##*/}"
+          echo ""
+          echo "CloudWatch logs:"
+          echo "  log group: /ecs/manual-auto-codex-dev"
+          echo "  log stream: app/app/$TASK_ID"
+          echo ""
+          echo "Container exit code: $EXIT_CODE"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Reembed task failed with exit code $EXIT_CODE"
+            exit 1
+          fi
