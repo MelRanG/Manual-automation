@@ -10,8 +10,9 @@ from app.schemas.feedback import FeedbackReportCreate, FeedbackReportResponse
 from app.services.llm_service import get_llm_provider
 
 CORRECTION_SYSTEM_PROMPT = """You are a documentation correction assistant.
-Given a user's error report and the original text, propose a corrected version.
-Return ONLY the corrected text, nothing else. Keep the same structure and style."""
+Given a user's error report and the original document, return a corrected version of the ENTIRE document.
+If a focus area is specified, only modify content within that area and leave the rest of the document unchanged.
+Return ONLY the corrected document text, no commentary. Preserve original structure, formatting, and style."""
 
 
 async def create_feedback(
@@ -58,20 +59,33 @@ async def generate_correction(
 
     original_text = version.content
 
+    focus_section: str | None = None
     if feedback.chunk_id:
         chunk_result = await db.execute(
             select(DocumentChunk).where(DocumentChunk.id == feedback.chunk_id)
         )
         chunk = chunk_result.scalar_one_or_none()
         if chunk:
-            original_text = chunk.content
+            focus_section = chunk.content
 
     report_text = feedback.reviewed_text or feedback.feedback_text
+
+    if focus_section:
+        user_prompt = (
+            f"Error report: {report_text}\n\n"
+            f"Original document:\n{original_text}\n\n"
+            f"Focus area (only modify content within this section; return the FULL document with edits applied):\n{focus_section}"
+        )
+    else:
+        user_prompt = (
+            f"Error report: {report_text}\n\n"
+            f"Original document:\n{original_text}"
+        )
 
     llm = get_llm_provider()
     proposed_text = await llm.generate(
         CORRECTION_SYSTEM_PROMPT,
-        f"Error report: {report_text}\n\nOriginal text:\n{original_text}",
+        user_prompt,
     )
 
     diff = "\n".join(
