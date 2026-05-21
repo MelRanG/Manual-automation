@@ -50,6 +50,29 @@ export function getWidgetStyles(primaryColor: string): string {
       to { opacity: 1; transform: translateY(0); }
     }
 
+    @media (max-width: 768px) {
+      .docops-panel {
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100dvh;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      .docops-header {
+        padding-top: calc(16px + env(safe-area-inset-top));
+      }
+      .docops-input-area {
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      }
+      .docops-trigger:has(~ .docops-panel:not(.hidden)) {
+        display: none;
+      }
+    }
+
     .docops-header {
       padding: 16px 20px;
       background: linear-gradient(135deg, ${primaryColor}, ${primaryColor}dd);
