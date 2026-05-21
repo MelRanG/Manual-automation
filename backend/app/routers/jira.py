@@ -117,6 +117,13 @@ async def receive_jira_webhook(
     )
     db.add(log)
 
+    # comment_created 분기 — payload 에 comment 키 있으면 comment webhook 처리
+    if "comment" in payload:
+        result = await jira_service.handle_comment_webhook(payload, db)
+        log.status = "processed" if result.get("status") == "started" else "skipped"
+        await db.commit()
+        return result
+
     config = await jira_service.get_active_config(db)
 
     if not config or not jira_service.is_done_transition(config, payload):

@@ -1,4 +1,7 @@
+import asyncio
+import json
 import logging
+import re
 import uuid
 from base64 import b64encode
 from contextlib import asynccontextmanager
@@ -14,6 +17,7 @@ from app.services.search_service import search_similar_chunks
 logger = logging.getLogger(__name__)
 
 DISTANCE_THRESHOLD = 0.6
+URL_RE = re.compile(r"https?://[^\s<>\"')]+")
 
 
 def mask_token(token: str) -> str:
@@ -86,6 +90,86 @@ async def upsert_config(db: AsyncSession, data: dict) -> JiraConfig:
     await db.commit()
     await db.refresh(config)
     return config
+
+
+def extract_after_url(comment_body: object, before_url: str | None) -> str | None:
+    """댓글 body(plain str 또는 ADF dict)에서 변경 후 URL 추출.
+    ADF는 json.dumps 직렬화 결과에서 regex 매칭 (text node 별도 추출 불필요)."""
+    if comment_body is None:
+        return None
+    text = (
+        comment_body
+        if isinstance(comment_body, str)
+        else json.dumps(comment_body, ensure_ascii=False)
+    )
+    urls = URL_RE.findall(text)
+    if not urls:
+        return None
+    if before_url:
+        normalized_before = before_url.rstrip("/")
+        for u in urls:
+            if u.rstrip("/") != normalized_before:
+                return u
+    return urls[0]
+
+
+async def handle_comment_webhook(payload: dict, db: AsyncSession) -> dict:
+    """JIRA comment_created webhook → after_url 추출 → manual job 자동 트리거."""
+    issue_key = (payload.get("issue") or {}).get("key")
+    if not issue_key:
+        return {"status": "skipped", "reason": "no issue key"}
+
+    comment_obj = (payload.get("comment") or {}).get("body")
+    if comment_obj is None:
+        return {"status": "skipped", "reason": "no comment body"}
+
+    sr_result = await db.execute(
+        select(SRDraft).where(SRDraft.jira_issue_key == issue_key)
+    )
+    sr = sr_result.scalar_one_or_none()
+    if not sr:
+        return {"status": "skipped", "reason": "no SR for issue key"}
+
+    after_url = extract_after_url(comment_obj, sr.target_url)
+    if not after_url:
+        logger.info(f"comment_webhook sr={sr.id} URL 없음, skip")
+        return {"status": "skipped", "reason": "no URL in comment"}
+
+    from app.services import manual_service as _manual_service
+
+    scenario_steps = await _manual_service.generate_scenario_steps(
+        sr, [str(comment_obj)], after_url
+    )
+
+    job = await _manual_service.create_job(
+        db,
+        user_id=sr.user_id,
+        target_url=after_url,
+        scenario_steps=scenario_steps,
+        source_sr_id=sr.id,
+    )
+
+    _schedule_run_generation(job.id)
+
+    return {
+        "status": "started",
+        "job_id": str(job.id) if job else None,
+        "after_url": after_url,
+    }
+
+
+def _schedule_run_generation(job_id: uuid.UUID) -> None:
+    """별도 SessionLocal 로 run_generation 백그라운드 실행.
+    테스트에서 patch 가능하도록 분리."""
+    from app.services import manual_service as _manual_service
+
+    async def _run_in_new_session():
+        from app.db import SessionLocal
+
+        async with SessionLocal() as session:
+            await _manual_service.run_generation(session, job_id)
+
+    asyncio.create_task(_run_in_new_session())
 
 
 def _build_description(draft: SRDraft) -> dict:
