@@ -604,16 +604,45 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
             onChange={e => setDocQuery(e.target.value)}
           />
           <div className="max-h-60 overflow-y-auto border border-[#e0e3e5] rounded-lg divide-y divide-[#f2f4f6]">
-            {filteredDocs.map(doc => (
-              <button
-                key={doc.id}
-                onClick={() => setSelectedDocId(doc.id)}
-                className={`w-full text-left px-4 py-3 text-sm hover:bg-[#f7f9fb] transition-colors ${selectedDocId === doc.id ? "bg-[#eef2ff]" : ""}`}
-              >
-                <p className="font-medium text-[#191c1e]">{doc.title}</p>
-                {doc.description && <p className="text-xs text-[#757684] mt-0.5 truncate">{doc.description}</p>}
-              </button>
-            ))}
+            {filteredDocs.length === 0 ? (
+              <div className="px-4 py-6 text-center text-xs text-[#9a9bad]">
+                문서가 없습니다. 신규 문서 작성을 선택해주세요.
+              </div>
+            ) : (
+              filteredDocs.map(doc => (
+                <button
+                  key={doc.id}
+                  onClick={() => setSelectedDocId(doc.id)}
+                  className={`flex items-center gap-3 w-full text-left px-4 py-3 transition-colors ${
+                    selectedDocId === doc.id
+                      ? "bg-[#eef2ff] border-l-4 border-l-[#00288e]"
+                      : "hover:bg-[#f7f9fb] border-l-4 border-l-transparent"
+                  }`}
+                >
+                  <span
+                    className={`material-symbols-outlined text-base ${
+                      selectedDocId === doc.id ? "text-[#00288e]" : "text-[#9a9bad]"
+                    }`}
+                  >
+                    {selectedDocId === doc.id ? "radio_button_checked" : "radio_button_unchecked"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-[#191c1e] truncate">{doc.title}</p>
+                    {doc.description && (
+                      <p className="text-xs text-[#757684] truncate">{doc.description}</p>
+                    )}
+                  </div>
+                  {recommendation?.suggested_document_id === doc.id && (
+                    <span className="text-[10px] text-[#4a4bdc] shrink-0">✨ 추천</span>
+                  )}
+                  {selectedDocId === doc.id && (
+                    <span className="text-[10px] font-semibold text-[#00288e] bg-[#e8f0fe] px-2 py-0.5 rounded-full shrink-0">
+                      선택됨
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
           </div>
           <button
             onClick={() => setStep(3)}
