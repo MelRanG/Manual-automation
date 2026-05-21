@@ -16,7 +16,7 @@ const isRealJiraLink = (sr: SRDraft) =>
 type Tab = "all" | "draft" | "active" | "pending_doc_review" | "done"
 type SourceFilter = "all" | "direct" | "chatbot"
 type ReviewStep = 1 | 2 | 3
-type DocMode = "new" | "existing" | "none" | null
+type DocMode = "new" | "existing" | null
 
 const TAB_LABELS: Record<Tab, string> = {
   all: "전체",
