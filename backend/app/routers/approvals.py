@@ -84,7 +84,13 @@ async def review_doc_approval(
 ):
     try:
         result = await approval_service.review_doc_review_approval(
-            db, approval_id, data.reviewer_id, data.action, data.target_url
+            db,
+            approval_id,
+            data.reviewer_id,
+            data.action,
+            target_url=data.target_url,
+            edited_content=data.edited_content,
+            comment=data.comment,
         )
     except ValueError as e:
         detail = str(e)

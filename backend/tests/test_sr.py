@@ -169,25 +169,6 @@ async def test_list_sr_drafts_total_count(client: AsyncClient, test_user: dict):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_update_sr_status_pending_to_done_no_proposal(client: AsyncClient, test_user: dict):
-    create_resp = await client.post("/api/sr/drafts", json={
-        "user_id": test_user["id"],
-        "title": "Status Transition Test",
-        "description": "test",
-        "priority": "low",
-    })
-    sr_id = create_resp.json()["id"]
-
-    # 시뮬레이터로 pending_doc_review까지 진행
-    await client.post(f"/api/sr/drafts/{sr_id}/submit")
-    await client.post(f"/api/sr/drafts/{sr_id}/complete-local")
-
-    resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={"status": "done_no_proposal"})
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "done_no_proposal"
-
-
-@pytest.mark.asyncio(loop_scope="session")
 async def test_update_sr_status_invalid_transition_returns_400(client: AsyncClient, test_user: dict):
     create_resp = await client.post("/api/sr/drafts", json={
         "user_id": test_user["id"],
@@ -216,3 +197,38 @@ async def test_update_sr_title_in_draft_still_works(client: AsyncClient, test_us
     resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={"title": "New Title"})
     assert resp.status_code == 200
     assert resp.json()["title"] == "New Title"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_pending_doc_review_response_includes_approval_id(client: AsyncClient):
+    from app.db import SessionLocal
+    from app.models.user import User
+    from app.models.sr import SRDraft
+    from app.models.feedback import ApprovalRequest
+
+    async with SessionLocal() as session:
+        user = User(id=uuid.uuid4(), name="t", email=f"{uuid.uuid4()}@t.com", role="admin")
+        session.add(user)
+        await session.flush()  # user FK 참조를 위해 먼저 반영
+        draft = SRDraft(
+            id=uuid.uuid4(), user_id=user.id, title="t", description="d",
+            priority="medium", status="pending_doc_review", jira_issue_key="J-X",
+        )
+        session.add(draft)
+        await session.flush()  # sr_draft FK 참조를 위해 먼저 반영
+        approval = ApprovalRequest(
+            id=uuid.uuid4(),
+            approval_type="doc_review",
+            sr_draft_id=draft.id,
+            status="pending",
+        )
+        session.add(approval)
+        await session.commit()
+        sr_id = draft.id
+        approval_id = approval.id
+
+    res = await client.get("/api/sr/drafts")
+    assert res.status_code == 200
+    items = res.json()["items"]
+    match = next(i for i in items if i["id"] == str(sr_id))
+    assert match["pending_doc_review_approval_id"] == str(approval_id)

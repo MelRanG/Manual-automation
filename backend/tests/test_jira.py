@@ -607,3 +607,52 @@ async def test_process_jira_done_notifies_all_admins(client, db_session):
             )
         )).scalars().all()
         assert len(notifs) == 1, f"admin {admin_id} 알림 누락"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_done_schedules_prefetch_recommendation(client, monkeypatch):
+    import uuid as _uuid
+    from app.db import SessionLocal
+    from app.models.user import User as _User
+    from app.models.sr import SRDraft as _SRDraft
+    from app.models.jira import JiraConfig as _JiraConfig
+
+    calls: list[_uuid.UUID] = []
+
+    async def fake_prefetch(sr_id):
+        calls.append(sr_id)
+
+    monkeypatch.setattr("app.routers.jira.prefetch_recommendation", fake_prefetch)
+
+    async with SessionLocal() as session:
+        user = _User(id=_uuid.uuid4(), name="t", email=f"{_uuid.uuid4()}@t.com", role="admin")
+        session.add(user)
+        await session.flush()
+        cfg = _JiraConfig(
+            id=_uuid.uuid4(), site_url="https://x.atlassian.net",
+            base_url="https://api.atlassian.com/ex/jira/x",
+            user_email="t@t.com", api_token="x", project_key="P",
+            is_active=True, trigger_status_names=["Done"],
+        )
+        session.add(cfg)
+        sr = _SRDraft(
+            id=_uuid.uuid4(), user_id=user.id, title="t", description="d",
+            priority="medium", status="jira_created", jira_issue_key="P-1",
+        )
+        session.add(sr)
+        await session.commit()
+        sr_id = sr.id
+
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": "P-1",
+            "fields": {"status": {"name": "Done", "statusCategory": {"key": "done"}}},
+        },
+    }
+    res = await client.post("/api/jira/webhook", json=payload)
+    assert res.status_code == 200, res.text
+
+    import asyncio
+    await asyncio.sleep(0.05)
+    assert sr_id in calls
