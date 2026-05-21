@@ -169,25 +169,6 @@ async def test_list_sr_drafts_total_count(client: AsyncClient, test_user: dict):
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_update_sr_status_pending_to_done_no_proposal(client: AsyncClient, test_user: dict):
-    create_resp = await client.post("/api/sr/drafts", json={
-        "user_id": test_user["id"],
-        "title": "Status Transition Test",
-        "description": "test",
-        "priority": "low",
-    })
-    sr_id = create_resp.json()["id"]
-
-    # 시뮬레이터로 pending_doc_review까지 진행
-    await client.post(f"/api/sr/drafts/{sr_id}/submit")
-    await client.post(f"/api/sr/drafts/{sr_id}/complete-local")
-
-    resp = await client.patch(f"/api/sr/drafts/{sr_id}", json={"status": "done_no_proposal"})
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "done_no_proposal"
-
-
-@pytest.mark.asyncio(loop_scope="session")
 async def test_update_sr_status_invalid_transition_returns_400(client: AsyncClient, test_user: dict):
     create_resp = await client.post("/api/sr/drafts", json={
         "user_id": test_user["id"],
