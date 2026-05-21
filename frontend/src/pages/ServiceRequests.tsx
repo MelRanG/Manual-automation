@@ -6,6 +6,7 @@ import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
 import { MarkdownMessage } from "@/components/chat/MarkdownMessage"
+import { useNotifications } from "@/hooks/useNotifications"
 
 const isRealJiraLink = (sr: SRDraft) =>
   Boolean(
@@ -71,7 +72,6 @@ export function ServiceRequests() {
   }
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedSR, setSelectedSR] = useState<SRDraft | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
   const [title, setTitle] = useState("")
@@ -87,6 +87,16 @@ export function ServiceRequests() {
     []
   )
   const allSRs = srResult?.items ?? []
+  const selectedSR = allSRs.find(s => s.id === selectedId) ?? null
+
+  const { newNotification } = useNotifications(user?.id)
+  useEffect(() => {
+    if (!newNotification) return
+    const isSrRelated =
+      newNotification.type.startsWith("jira_sr_") ||
+      (newNotification.link_path?.startsWith("/sr") ?? false)
+    if (isSrRelated) refetch()
+  }, [newNotification, refetch])
 
   const displayItems = allSRs.filter(sr => {
     const tabMatch = tab === "all" || TAB_STATUSES[tab as Exclude<Tab, "all">]?.includes(sr.status)
@@ -201,7 +211,7 @@ export function ServiceRequests() {
                 className={`group relative w-full hover:bg-[#f7f9fb] transition-colors ${selectedId === sr.id ? "bg-[#eef2ff]" : ""}`}
               >
                 <button
-                  onClick={() => { setSelectedId(sr.id); setSelectedSR(sr) }}
+                  onClick={() => setSelectedId(sr.id)}
                   className="w-full text-left px-5 py-4 pr-12"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -229,7 +239,6 @@ export function ServiceRequests() {
                       await api.deleteSRDraft(sr.id)
                       if (selectedId === sr.id) {
                         setSelectedId(null)
-                        setSelectedSR(null)
                       }
                       refetch()
                     } catch (err) {
