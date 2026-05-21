@@ -44,3 +44,28 @@ async def test_upsert_config_rejects_invalid_site(client):
 
     assert resp.status_code == 400
     assert "cloudId" in resp.json()["detail"] or "tenant_info" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_test_endpoint_returns_cloud_id(client):
+    payload = {
+        "site_url": "https://manual-automation.atlassian.net",
+        "user_email": "svc@example.com",
+        "api_token": "tok",
+        "project_key": "SCRUM",
+        "is_active": True,
+        "trigger_status_names": None,
+    }
+    with patch.object(
+        jira_service, "resolve_cloud_id", AsyncMock(return_value="7b4ffc68-CID")
+    ), patch.object(
+        jira_service,
+        "test_connection",
+        AsyncMock(return_value={"success": True, "message": "연결됨: svc"}),
+    ):
+        resp = await client.post("/api/jira/config/test", json=payload)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "7b4ffc68-CID" in body["message"]

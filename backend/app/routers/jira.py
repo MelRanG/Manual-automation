@@ -68,18 +68,28 @@ async def save_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)
 
 @router.post("/config/test", response_model=JiraConnectionTestResult)
 async def test_config(data: JiraConfigUpsert, db: AsyncSession = Depends(get_db)):
+    site_url = jira_service.normalize_site_url(data.site_url)
+    try:
+        cloud_id = await jira_service.resolve_cloud_id(site_url)
+    except ValueError as e:
+        return JiraConnectionTestResult(success=False, message=str(e))
+
     api_token = data.api_token
     if not api_token:
         existing = await jira_service.get_active_config(db)
         if existing:
             api_token = existing.api_token
+
     temp = JiraConfig(
-        base_url=data.base_url,
+        site_url=site_url,
+        base_url=jira_service.derive_base_url(cloud_id),
         user_email=data.user_email,
         api_token=api_token,
         project_key=data.project_key,
     )
     result = await jira_service.test_connection(temp)
+    if result.get("success"):
+        result["message"] = f"{result['message']} (cloudId: {cloud_id})"
     return JiraConnectionTestResult(**result)
 
 
