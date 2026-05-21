@@ -279,16 +279,18 @@ async def ask_question_stream(
     messages = [{"role": m.role, "content": m.content} for m in history[-19:]]
     messages.append({"role": "user", "content": question})
 
-    llm = get_llm_provider()
     full_content = ""
 
     try:
+        llm = get_llm_provider()
         async for token in llm.generate_stream_with_history(RAG_SYSTEM_PROMPT, messages, context):
             full_content += token
             yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
     except Exception as e:
-        logger.error(f"LLM 스트리밍 에러: {e}")
-        yield f"event: error\ndata: {json.dumps({'error': 'LLM 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.'})}\n\n"
+        await db.rollback()
+        logger.exception("Chat stream failed")
+        error = f"LLM 호출 실패: {type(e).__name__}: {e}"
+        yield f"event: error\ndata: {json.dumps({'error': error})}\n\n"
         return
 
     # SR 제안 감지 — 변경 요청 탭에서 보낸 메시지일 때만 처리
