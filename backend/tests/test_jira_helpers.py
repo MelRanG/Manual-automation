@@ -40,3 +40,43 @@ def test_normalize_site_url_uppercase_https_scheme():
 
 def test_normalize_site_url_uppercase_http_scheme_forces_https():
     assert normalize_site_url("HTTP://x.atlassian.net") == "https://x.atlassian.net"
+
+
+from types import SimpleNamespace
+
+
+def _config(site_url):
+    return SimpleNamespace(site_url=site_url)
+
+
+def test_build_jira_issue_url_normal():
+    assert (
+        build_jira_issue_url("SCRUM-178", _config("https://x.atlassian.net"))
+        == "https://x.atlassian.net/browse/SCRUM-178"
+    )
+
+
+def test_build_jira_issue_url_strips_trailing_slash():
+    assert (
+        build_jira_issue_url("SCRUM-1", _config("https://x.atlassian.net/"))
+        == "https://x.atlassian.net/browse/SCRUM-1"
+    )
+
+
+def test_build_jira_issue_url_none_when_key_missing():
+    assert build_jira_issue_url(None, _config("https://x.atlassian.net")) is None
+
+
+def test_build_jira_issue_url_none_when_config_missing():
+    assert build_jira_issue_url("SCRUM-1", None) is None
+
+
+def test_build_jira_issue_url_none_when_site_url_missing():
+    assert build_jira_issue_url("SCRUM-1", _config(None)) is None
+
+
+def test_build_jira_issue_url_none_for_local_key():
+    assert (
+        build_jira_issue_url("LOCAL-ABCD1234", _config("https://x.atlassian.net"))
+        is None
+    )

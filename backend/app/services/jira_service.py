@@ -48,9 +48,17 @@ def derive_base_url(cloud_id: str) -> str:
     return f"https://api.atlassian.com/ex/jira/{cloud_id}"
 
 
-# TODO(Task 4): real implementation
 def build_jira_issue_url(jira_issue_key, config) -> str | None:
-    raise NotImplementedError("build_jira_issue_url is implemented in Task 4")
+    """Compose the site-URL browse link, returning None when prerequisites are missing
+    or the key is a local-simulation key."""
+    if not jira_issue_key or config is None:
+        return None
+    site_url = getattr(config, "site_url", None)
+    if not site_url:
+        return None
+    if jira_issue_key.startswith("LOCAL-"):
+        return None
+    return f"{site_url.rstrip('/')}/browse/{jira_issue_key}"
 
 
 def _auth_header(config: JiraConfig) -> str:
