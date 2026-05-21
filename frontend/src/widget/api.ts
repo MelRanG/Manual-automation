@@ -38,6 +38,7 @@ export async function createSession(config: WidgetConfig, anonymousId: string) {
       user_id: config.userId ?? null,
     }),
   })
+  if (!res.ok) throw new Error(`widget create session failed: ${res.status}`)
   return res.json() as Promise<{ id: string; site_id: string; anonymous_id: string }>
 }
 

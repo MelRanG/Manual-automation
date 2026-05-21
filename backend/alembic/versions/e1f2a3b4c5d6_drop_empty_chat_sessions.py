@@ -17,6 +17,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Clean up empty sessions accumulated by the pre-lazy-create behavior.
+    # Scope covers BOTH chat-page sessions and widget sessions (widget rows
+    # live in chat_sessions with title prefix "widget:"); both surfaces are
+    # switching to lazy create in this release.
     op.execute(
         """
         DELETE FROM chat_sessions

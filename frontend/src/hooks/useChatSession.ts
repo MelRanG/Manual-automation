@@ -127,10 +127,10 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
         activeSessionId = created.id
         onSessionCreated?.(created)
       } catch {
-        isCreatingRef.current = false
         return
+      } finally {
+        isCreatingRef.current = false
       }
-      isCreatingRef.current = false
     }
     inFlightRef.current = true
     const question = chatMode === "change_request" ? `[변경 요청] ${input}` : input
