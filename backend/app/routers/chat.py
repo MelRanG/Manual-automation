@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.chat import ChatSession, ChatMessage, AnswerCitation
+from app.models.feedback import FeedbackReport, ProposedDocumentChange, ApprovalRequest
 from app.schemas.chat import (
     ChatSessionCreate,
     ChatSessionResponse,
@@ -99,7 +100,20 @@ async def delete_session(
     msg_ids_result = await db.execute(sa_select(ChatMessage.id).where(ChatMessage.session_id == session_id))
     msg_ids = msg_ids_result.scalars().all()
     if msg_ids:
+        fb_ids_result = await db.execute(
+            sa_select(FeedbackReport.id).where(FeedbackReport.chat_message_id.in_(msg_ids))
+        )
+        fb_ids = fb_ids_result.scalars().all()
+        if fb_ids:
+            pc_ids_result = await db.execute(
+                sa_select(ProposedDocumentChange.id).where(ProposedDocumentChange.feedback_report_id.in_(fb_ids))
+            )
+            pc_ids = pc_ids_result.scalars().all()
+            if pc_ids:
+                await db.execute(delete(ApprovalRequest).where(ApprovalRequest.proposed_change_id.in_(pc_ids)))
+                await db.execute(delete(ProposedDocumentChange).where(ProposedDocumentChange.id.in_(pc_ids)))
         await db.execute(delete(AnswerCitation).where(AnswerCitation.chat_message_id.in_(msg_ids)))
+        await db.execute(delete(FeedbackReport).where(FeedbackReport.chat_message_id.in_(msg_ids)))
     await db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))
     await db.execute(delete(ChatSession).where(ChatSession.id == session_id))
     await db.commit()

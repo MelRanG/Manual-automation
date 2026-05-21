@@ -51,6 +51,9 @@ export function Chat() {
         setIsDrafting(false)
         chat.resetAll()
       }
+    } catch (err) {
+      console.error(err)
+      window.alert("삭제에 실패했습니다.")
     } finally {
       setDeletingSession(null)
     }

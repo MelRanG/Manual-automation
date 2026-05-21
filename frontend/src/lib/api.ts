@@ -99,8 +99,10 @@ export const api = {
     request<ChatSession>('/chat/sessions', { method: 'POST', body: JSON.stringify({ user_id: userId, title }) }),
   listSessions: (userId: string) => request<ChatSession[]>(`/chat/sessions?user_id=${userId}`),
   getMessages: (sessionId: string) => request<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`),
-  deleteSession: (sessionId: string) =>
-    fetch(`${BASE}/chat/sessions/${sessionId}`, { method: 'DELETE', headers: getAuthHeaders() }),
+  deleteSession: async (sessionId: string): Promise<void> => {
+    const res = await fetch(`${BASE}/chat/sessions/${sessionId}`, { method: 'DELETE', headers: getAuthHeaders() })
+    if (!res.ok) throw new Error(`Failed to delete session: ${res.status}`)
+  },
   askQuestion: (sessionId: string, question: string) =>
     request<AskResponse>(`/chat/sessions/${sessionId}/ask`, {
       method: 'POST', body: JSON.stringify({ question }),
@@ -164,6 +166,10 @@ export const api = {
     request<{ document_id: string; trust_score: number }>(`/trust/${documentId}/recalculate`, { method: 'POST' }),
 
   // SR
+  deleteSRDraft: async (srId: string) => {
+    const res = await fetch(`${BASE}/sr/drafts/${srId}`, { method: 'DELETE', headers: getAuthHeaders() })
+    if (!res.ok) throw new Error(`Failed to delete SR: ${res.status}`)
+  },
   listSRDrafts: (params?: { status?: string; skip?: number; limit?: number; userId?: string }) => {
     const query = new URLSearchParams()
     if (params?.userId) query.set('user_id', params.userId)
@@ -250,6 +256,10 @@ export const api = {
   listManualJobs: (userId?: string) =>
     request<ManualJob[]>(`/manuals/jobs${userId ? `?user_id=${userId}` : ''}`),
   getManualJob: (id: string) => request<ManualJob>(`/manuals/jobs/${id}`),
+  deleteManualJob: async (jobId: string) => {
+    const res = await fetch(`${BASE}/manuals/jobs/${jobId}`, { method: 'DELETE', headers: getAuthHeaders() })
+    if (!res.ok) throw new Error(`Failed to delete manual job: ${res.status}`)
+  },
 
   // Jira
   getJiraConfig: () => request<JiraConfig | null>('/jira/config'),

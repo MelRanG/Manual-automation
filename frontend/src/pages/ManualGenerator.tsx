@@ -188,24 +188,46 @@ export function ManualGenerator() {
             <div className="px-5 py-10 text-center text-sm text-[#9a9bad]">항목이 없습니다</div>
           ) : (
             filtered.map(job => (
-              <button
+              <div
                 key={job.id}
-                onClick={() => setSelectedId(job.id)}
-                className={`w-full text-left px-5 py-4 hover:bg-[#f7f9fb] transition-colors ${selectedId === job.id ? "bg-[#eef2ff]" : ""}`}
+                className={`group relative w-full hover:bg-[#f7f9fb] transition-colors ${selectedId === job.id ? "bg-[#eef2ff]" : ""}`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{job.target_url}</p>
-                  {(() => {
-                    const b = jobBadgeLabel(job)
-                    return (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${b.cls}`}>
-                        {b.label}
-                      </span>
-                    )
-                  })()}
-                </div>
-                <p className="text-xs text-[#9a9bad] mt-1">{new Date(job.created_at).toLocaleDateString("ko-KR")}</p>
-              </button>
+                <button
+                  onClick={() => setSelectedId(job.id)}
+                  className="w-full text-left px-5 py-4 pr-12"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{job.target_url}</p>
+                    {(() => {
+                      const b = jobBadgeLabel(job)
+                      return (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${b.cls}`}>
+                          {b.label}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                  <p className="text-xs text-[#9a9bad] mt-1">{new Date(job.created_at).toLocaleDateString("ko-KR")}</p>
+                </button>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    if (!window.confirm("이 메뉴얼 요청을 삭제하시겠습니까?")) return
+                    try {
+                      await api.deleteManualJob(job.id)
+                      if (selectedId === job.id) setSelectedId(null)
+                      refetch()
+                    } catch (err) {
+                      window.alert("삭제에 실패했습니다.")
+                      console.error(err)
+                    }
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-[#757684] hover:text-[#ba1a1a] transition-all rounded"
+                  title="삭제"
+                >
+                  <span className="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
             ))
           )}
         </div>

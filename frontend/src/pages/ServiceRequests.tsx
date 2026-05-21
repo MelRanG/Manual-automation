@@ -195,28 +195,53 @@ export function ServiceRequests() {
             <div className="px-5 py-10 text-center text-sm text-[#9a9bad]">항목이 없습니다</div>
           ) : (
             displayItems.map(sr => (
-              <button
+              <div
                 key={sr.id}
-                onClick={() => { setSelectedId(sr.id); setSelectedSR(sr) }}
-                className={`w-full text-left px-5 py-4 hover:bg-[#f7f9fb] transition-colors ${selectedId === sr.id ? "bg-[#eef2ff]" : ""}`}
+                className={`group relative w-full hover:bg-[#f7f9fb] transition-colors ${selectedId === sr.id ? "bg-[#eef2ff]" : ""}`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{sr.title}</p>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[statusToTab(sr.status)] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
-                    {TAB_LABELS[statusToTab(sr.status)]}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${sr.created_by_ai ? "bg-[#f0f0ff] text-[#4a4bdc]" : "bg-[#f2f4f6] text-[#757684]"}`}>
-                    {sr.created_by_ai ? "챗봇" : "직접생성"}
-                  </span>
-                  <span className="text-[10px] text-[#757684]">요청자: {sr.user_id.slice(0, 8)}</span>
-                  {sr.jira_issue_key && (
-                    <span className="text-[10px] text-[#757684] font-mono">{sr.jira_issue_key}</span>
-                  )}
-                  <span className="text-[10px] text-[#9a9bad] ml-auto">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
-                </div>
-              </button>
+                <button
+                  onClick={() => { setSelectedId(sr.id); setSelectedSR(sr) }}
+                  className="w-full text-left px-5 py-4 pr-12"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-[#191c1e] truncate flex-1">{sr.title}</p>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[statusToTab(sr.status)] ?? "bg-[#f2f4f6] text-[#757684]"}`}>
+                      {TAB_LABELS[statusToTab(sr.status)]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${sr.created_by_ai ? "bg-[#f0f0ff] text-[#4a4bdc]" : "bg-[#f2f4f6] text-[#757684]"}`}>
+                      {sr.created_by_ai ? "챗봇" : "직접생성"}
+                    </span>
+                    <span className="text-[10px] text-[#757684]">요청자: {sr.user_id.slice(0, 8)}</span>
+                    {sr.jira_issue_key && (
+                      <span className="text-[10px] text-[#757684] font-mono">{sr.jira_issue_key}</span>
+                    )}
+                    <span className="text-[10px] text-[#9a9bad] ml-auto">{new Date(sr.created_at).toLocaleDateString("ko-KR")}</span>
+                  </div>
+                </button>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    if (!window.confirm("이 SR을 삭제하시겠습니까?")) return
+                    try {
+                      await api.deleteSRDraft(sr.id)
+                      if (selectedId === sr.id) {
+                        setSelectedId(null)
+                        setSelectedSR(null)
+                      }
+                      refetch()
+                    } catch (err) {
+                      window.alert("삭제에 실패했습니다.")
+                      console.error(err)
+                    }
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-[#757684] hover:text-[#ba1a1a] transition-all rounded"
+                  title="삭제"
+                >
+                  <span className="material-symbols-outlined text-base">delete</span>
+                </button>
+              </div>
             ))
           )}
         </div>

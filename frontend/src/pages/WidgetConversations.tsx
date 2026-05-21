@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Users, MessageSquare, RefreshCw, ChevronRight } from "lucide-react"
+import { Users, MessageSquare, RefreshCw, ChevronRight, Trash2 } from "lucide-react"
 
 interface WidgetSession {
   id: string
@@ -51,6 +51,23 @@ export function WidgetConversations() {
     }
   }
 
+  const deleteSession = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!window.confirm("이 대화를 삭제하시겠습니까?")) return
+    try {
+      const res = await fetch(`/api/widget/admin/sessions/${id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      setSessions(prev => prev.filter(s => s.id !== id))
+      if (selectedId === id) {
+        setSelectedId(null)
+        setMessages([])
+      }
+    } catch (err) {
+      window.alert("삭제에 실패했습니다.")
+      console.error(err)
+    }
+  }
+
   return (
     <div className="p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
@@ -82,28 +99,40 @@ export function WidgetConversations() {
               </div>
             ) : (
               sessions.map(s => (
-                <button
+                <div
                   key={s.id}
-                  onClick={() => selectSession(s.id)}
-                  className={`w-full text-left p-3 border-b border-border hover:bg-accent/50 transition-colors ${
+                  className={`group relative border-b border-border hover:bg-accent/50 transition-colors ${
                     selectedId === s.id ? "bg-accent" : ""
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <Badge variant="secondary" className="text-xs">{s.site_id}</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(s.created_at).toLocaleDateString("ko-KR")}
-                    </span>
-                  </div>
-                  <p className="text-sm text-foreground truncate">
-                    {s.last_message || "대화 없음"}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <MessageSquare className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">{s.message_count}개 메시지</span>
-                    <span className="text-xs text-muted-foreground">· {s.anonymous_id}</span>
-                  </div>
-                </button>
+                  <button
+                    onClick={() => selectSession(s.id)}
+                    className="w-full text-left p-3 pr-12"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <Badge variant="secondary" className="text-xs">{s.site_id}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(s.created_at).toLocaleDateString("ko-KR")}
+                      </span>
+                    </div>
+                    <p className="text-sm text-foreground truncate">
+                      {s.last_message || "대화 없음"}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <MessageSquare className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">{s.message_count}개 메시지</span>
+                      <span className="text-xs text-muted-foreground">· {s.anonymous_id}</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => deleteSession(s.id, e)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-destructive transition-opacity rounded"
+                    title="삭제"
+                    aria-label="삭제"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               ))
             )}
           </div>

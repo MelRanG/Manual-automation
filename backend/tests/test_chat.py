@@ -122,6 +122,34 @@ async def test_delete_session_without_messages(client: AsyncClient, test_user: d
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_delete_session_with_feedback(client: AsyncClient, test_user: dict):
+    # 세션 → 질문 → 피드백 부착 후 삭제 시 FK 체인이 정리되어야 한다
+    sess_resp = await client.post("/api/chat/sessions", json={
+        "user_id": test_user["id"],
+    })
+    session_id = sess_resp.json()["id"]
+
+    ask_resp = await client.post(f"/api/chat/sessions/{session_id}/ask", json={
+        "question": "anything?",
+    })
+    assert ask_resp.status_code == 200
+    message_id = ask_resp.json()["message_id"]
+
+    fb_resp = await client.post("/api/feedback", json={
+        "user_id": test_user["id"],
+        "chat_message_id": message_id,
+        "feedback_text": "wrong answer",
+    })
+    assert fb_resp.status_code == 201
+
+    del_resp = await client.delete(f"/api/chat/sessions/{session_id}")
+    assert del_resp.status_code == 204
+
+    get_resp = await client.get(f"/api/chat/sessions/{session_id}")
+    assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_list_sessions_excludes_empty(client: AsyncClient, test_user: dict):
     # 메시지가 없는 빈 세션 생성
     empty_resp = await client.post("/api/chat/sessions", json={
