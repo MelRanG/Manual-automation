@@ -41,6 +41,7 @@ export function ApprovalReviewPanel({
   const hasOriginal = !!(change && "original_text" in change && change.original_text)
 
   const handleSubmit = async () => {
+    if (!reviewMode) return
     if (reviewMode === "request_review" && !comment.trim()) return
     if (reviewMode === "edit_and_approve" && !editedContent.trim()) return
     setSubmitting(true)
@@ -176,7 +177,7 @@ export function ApprovalReviewPanel({
             >
               {submitting ? "처리 중..." : "제출"}
             </button>
-            <button onClick={() => { setReviewMode(null); setComment(""); setErrorMsg(null) }} className="px-4 py-2 text-sm text-[#444653] hover:bg-[#f2f4f6] rounded-lg transition-colors">취소</button>
+            <button onClick={() => { setReviewMode(null); setComment(""); setErrorMsg(null); setEditedContent(change?.proposed_text ?? "") }} className="px-4 py-2 text-sm text-[#444653] hover:bg-[#f2f4f6] rounded-lg transition-colors">취소</button>
           </div>
         </div>
       )}
