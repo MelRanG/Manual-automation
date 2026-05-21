@@ -287,6 +287,57 @@ def _extract_click_target(step: str) -> str:
     return s
 
 
+async def _find_click_locator(page, target: str):
+    """target text에 대해 다양한 locator 전략을 cascade로 시도한다.
+
+    Returns:
+        (locator, reason) — 매칭된 locator와 사유 문자열
+        (None, reason)    — 모두 실패. reason은 사용자 친화 메시지.
+    """
+    if not target:
+        return None, "extract 결과 빈 문자열"
+
+    escaped = re.escape(target)
+    name_re = re.compile(escaped, re.IGNORECASE)
+
+    strategies = [
+        ("role=link",       page.get_by_role("link",   name=name_re)),
+        ("role=button",     page.get_by_role("button", name=name_re)),
+        ("a:has-text",      page.locator(f'a:has-text("{target}")')),
+        ("button:has-text", page.locator(f'button:has-text("{target}")')),
+        ("text",            page.get_by_text(target, exact=False)),
+        ("aria-label",      page.locator(f'[aria-label*="{target}" i]')),
+        ("title",           page.locator(f'[title*="{target}" i]')),
+    ]
+
+    for name, loc in strategies:
+        try:
+            first = loc.first
+            if await first.is_visible(timeout=1000):
+                return first, f"matched: {name}"
+        except Exception:
+            continue
+
+    tokens = [t for t in target.split() if len(t) > 1]
+    if len(tokens) >= 2:
+        for tok in tokens:
+            tok_re = re.compile(re.escape(tok), re.IGNORECASE)
+            partial_strategies = [
+                ("role=link",   page.get_by_role("link",   name=tok_re)),
+                ("role=button", page.get_by_role("button", name=tok_re)),
+                ("text",        page.get_by_text(tok, exact=False)),
+            ]
+            for name, loc in partial_strategies:
+                try:
+                    first = loc.first
+                    if await first.is_visible(timeout=800):
+                        return first, f"matched: partial '{tok}' via {name}"
+                except Exception:
+                    continue
+
+    return None, f"'{target}' 일치 요소 없음"
+
+
 def _resize_screenshot(filepath: "Path", max_width: int = 1280, quality: int = 75) -> None:
     """PNG 스크린샷을 JPEG로 변환해 용량을 줄입니다. 원본 PNG는 삭제합니다."""
     try:
