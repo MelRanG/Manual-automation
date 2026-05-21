@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Link } from "react-router-dom"
 import { api, type FeedbackReport, type ProposedChange, type ChangeHistory } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
@@ -430,6 +431,18 @@ function FeedbackDetail({ item, onRefetch, onDelete }: {
 
       {activeSection === "history" && (
         <div className="space-y-4">
+          {item.document_id && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-[#757684]">연결된 문서</span>
+              <Link
+                to={`/documents/${item.document_id}`}
+                className="text-[#00288e] font-medium hover:underline truncate"
+              >
+                {item.document_title ?? "문서 보기"}
+              </Link>
+              <span className="text-[#9a9bad]">↗</span>
+            </div>
+          )}
           {item.reviewed_text && item.reviewed_text !== item.feedback_text && (
             <div className="mb-4">
               <p className="text-xs font-semibold text-[#757684] mb-2">원본 제보 내용</p>

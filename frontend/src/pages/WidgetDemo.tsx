@@ -4,7 +4,7 @@ import { useChatSession } from "@/hooks/useChatSession"
 import { buildWidgetAdapter } from "@/lib/chatAdapters"
 import { ChatPanel } from "@/components/chat/ChatPanel"
 
-const DEMO_USER_ID = "00000000-0000-0000-0000-000000000010"
+const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 export function WidgetDemo() {
   const [chatOpen, setChatOpen] = useState(false)
