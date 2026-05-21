@@ -95,7 +95,7 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
         try:
             issue = await jira_service.create_jira_issue(config, draft)
             draft.jira_issue_key = issue["key"]
-            draft.jira_issue_url = issue["url"]
+            # jira_issue_url is no longer persisted; SR responses derive it from config.site_url
             draft.status = "jira_created"
             log = WebhookDeliveryLog(
                 id=uuid.uuid4(),
@@ -114,14 +114,12 @@ async def submit_sr(db: AsyncSession, sr_id: uuid.UUID) -> dict:
             # fallback: webhook 시도
             webhook_result = await deliver_webhook(db, draft)
             draft.jira_issue_key = f"LOCAL-{str(uuid.uuid4())[:8].upper()}"
-            draft.jira_issue_url = None
             draft.status = "jira_created"
             await db.commit()
             return {"sr_id": str(sr_id), "status": "jira_created", "webhook": webhook_result, "jira_issue_key": draft.jira_issue_key}
     else:
         webhook_result = await deliver_webhook(db, draft)
         draft.jira_issue_key = f"LOCAL-{str(uuid.uuid4())[:8].upper()}"
-        draft.jira_issue_url = None
         draft.status = "jira_created"
         await db.commit()
         return {"sr_id": str(sr_id), "status": "jira_created", "webhook": webhook_result, "jira_issue_key": draft.jira_issue_key}
