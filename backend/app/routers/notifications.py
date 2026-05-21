@@ -30,6 +30,7 @@ async def create_notification(
     title: str,
     message: str,
     document_id: uuid.UUID | None = None,
+    link_path: str | None = None,
 ) -> Notification:
     notif = Notification(
         user_id=user_id,
@@ -37,6 +38,7 @@ async def create_notification(
         title=title,
         message=message,
         document_id=document_id,
+        link_path=link_path,
     )
     db.add(notif)
     await db.commit()
@@ -48,6 +50,7 @@ async def create_notification(
         "title": notif.title,
         "message": notif.message,
         "document_id": str(notif.document_id) if notif.document_id else None,
+        "link_path": notif.link_path,
         "is_read": notif.is_read,
         "created_at": notif.created_at.isoformat(),
     }
@@ -61,6 +64,7 @@ class NotificationResponse(BaseModel):
     title: str
     message: str
     document_id: str | None
+    link_path: str | None
     is_read: bool
     created_at: str
 
@@ -74,6 +78,7 @@ def _serialize(n: Notification) -> NotificationResponse:
         title=n.title,
         message=n.message,
         document_id=str(n.document_id) if n.document_id else None,
+        link_path=n.link_path,
         is_read=n.is_read,
         created_at=n.created_at.isoformat(),
     )
