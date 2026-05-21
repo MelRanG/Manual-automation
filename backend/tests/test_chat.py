@@ -76,3 +76,34 @@ async def test_ask_in_nonexistent_session(client: AsyncClient):
         json={"question": "test"},
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_delete_session_with_citations(client: AsyncClient, test_user: dict):
+    """세션 삭제 시 AnswerCitation도 함께 정리되어야 한다."""
+    session_resp = await client.post("/api/chat/sessions", json={"user_id": test_user["id"]})
+    session_id = session_resp.json()["id"]
+
+    # 메시지 + citation 생성
+    await client.post(
+        f"/api/chat/sessions/{session_id}/ask",
+        json={"question": "테스트 질문"},
+    )
+
+    # 삭제 — 현재 코드는 AnswerCitation.message_id 오타로 500
+    resp = await client.delete(f"/api/chat/sessions/{session_id}")
+    assert resp.status_code == 204
+
+    # 세션 사라졌는지 확인
+    get_resp = await client.get(f"/api/chat/sessions/{session_id}")
+    assert get_resp.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_delete_session_without_messages(client: AsyncClient, test_user: dict):
+    """메시지 없는 세션도 삭제 가능해야 한다."""
+    session_resp = await client.post("/api/chat/sessions", json={"user_id": test_user["id"]})
+    session_id = session_resp.json()["id"]
+
+    resp = await client.delete(f"/api/chat/sessions/{session_id}")
+    assert resp.status_code == 204

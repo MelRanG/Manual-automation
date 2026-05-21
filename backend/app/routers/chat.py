@@ -99,7 +99,7 @@ async def delete_session(
     msg_ids_result = await db.execute(sa_select(ChatMessage.id).where(ChatMessage.session_id == session_id))
     msg_ids = msg_ids_result.scalars().all()
     if msg_ids:
-        await db.execute(delete(AnswerCitation).where(AnswerCitation.message_id.in_(msg_ids)))
+        await db.execute(delete(AnswerCitation).where(AnswerCitation.chat_message_id.in_(msg_ids)))
     await db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))
     await db.execute(delete(ChatSession).where(ChatSession.id == session_id))
     await db.commit()
