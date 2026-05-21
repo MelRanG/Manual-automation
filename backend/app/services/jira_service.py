@@ -35,11 +35,12 @@ def is_done_transition(config: JiraConfig, payload: dict) -> bool:
 def normalize_site_url(raw: str) -> str:
     """Strip whitespace + trailing slash, force https scheme."""
     s = raw.strip().rstrip("/")
-    if s.startswith("http://"):
-        s = "https://" + s[len("http://"):]
-    elif not s.startswith("https://"):
-        s = "https://" + s
-    return s
+    lower = s.lower()
+    if lower.startswith("http://"):
+        return "https://" + s[len("http://"):]
+    if lower.startswith("https://"):
+        return s
+    return "https://" + s
 
 
 def derive_base_url(cloud_id: str) -> str:
@@ -47,8 +48,8 @@ def derive_base_url(cloud_id: str) -> str:
     return f"https://api.atlassian.com/ex/jira/{cloud_id}"
 
 
-# TODO(Task 4): implement build_jira_issue_url
-def build_jira_issue_url(site_url: str, issue_key: str) -> str:
+# TODO(Task 4): real implementation
+def build_jira_issue_url(jira_issue_key, config) -> str | None:
     raise NotImplementedError("build_jira_issue_url is implemented in Task 4")
 
 

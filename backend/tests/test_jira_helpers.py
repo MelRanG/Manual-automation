@@ -32,3 +32,11 @@ def test_derive_base_url():
         derive_base_url("7b4ffc68-2983-46cb-b50f-5f2ef43a6a57")
         == "https://api.atlassian.com/ex/jira/7b4ffc68-2983-46cb-b50f-5f2ef43a6a57"
     )
+
+
+def test_normalize_site_url_uppercase_https_scheme():
+    assert normalize_site_url("HTTPS://x.atlassian.net") == "HTTPS://x.atlassian.net"
+
+
+def test_normalize_site_url_uppercase_http_scheme_forces_https():
+    assert normalize_site_url("HTTP://x.atlassian.net") == "https://x.atlassian.net"
