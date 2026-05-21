@@ -4,7 +4,9 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.models.feedback import ProposedDocumentChange
 from app.models.manual import ManualGenerationJob
 from app.services.document_service import UPLOAD_DIR
 from app.services.llm_service import get_llm_provider
@@ -332,12 +334,8 @@ Write a clear step-by-step guide. Format as clean markdown with numbered steps."
 
 
 async def list_jobs(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[ManualGenerationJob]:
-    from sqlalchemy import select as sa_select
-    from sqlalchemy.orm import selectinload
-    from app.models.feedback import ProposedDocumentChange
-
     stmt = (
-        sa_select(ManualGenerationJob)
+        select(ManualGenerationJob)
         .options(
             selectinload(ManualGenerationJob.proposed_change)
             .selectinload(ProposedDocumentChange.approval_request)
@@ -351,9 +349,6 @@ async def list_jobs(db: AsyncSession, user_id: uuid.UUID | None = None) -> list[
 
 
 async def get_job(db: AsyncSession, job_id: uuid.UUID) -> ManualGenerationJob | None:
-    from sqlalchemy.orm import selectinload
-    from app.models.feedback import ProposedDocumentChange
-
     stmt = (
         select(ManualGenerationJob)
         .options(
