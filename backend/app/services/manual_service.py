@@ -84,8 +84,6 @@ async def run_generation(db: AsyncSession, job_id: uuid.UUID) -> ManualGeneratio
 
         # ProposedDocumentChange 생성 → ApprovalRequest 생성 (승인 후 문서화)
         from app.models.feedback import ProposedDocumentChange, ApprovalRequest
-        from urllib.parse import urlparse
-        domain = urlparse(job.target_url).netloc or job.target_url
 
         change = ProposedDocumentChange(
             id=uuid.uuid4(),
@@ -484,3 +482,45 @@ async def get_job(db: AsyncSession, job_id: uuid.UUID) -> ManualGenerationJob | 
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+async def generate_scenario_steps(
+    sr,
+    comments: list[str],
+    after_url: str,
+) -> list[str]:
+    """Bedrock LLM 으로 SR + 댓글 → Playwright 시나리오 단계 list.
+    실패 시 빈 리스트 (manual job 은 메인 페이지만 캡쳐)."""
+    import json
+
+    system_prompt = (
+        "당신은 사용자 매뉴얼 자동 캡쳐용 Playwright 시나리오를 작성하는 어시스턴트다. "
+        "JSON array of strings 형식으로만 응답. 각 단계는 한 줄, 클릭 대상이 명확한 자연어. "
+        '예: "로그인 버튼 클릭"'
+    )
+    user_message = (
+        f"[SR 정보]\n제목: {sr.title}\n설명: {sr.description}\n\n"
+        f"[개발자 댓글]\n{chr(10).join(comments)}\n\n"
+        f"[대상 페이지] {after_url}\n\n"
+        "위 정보 기반으로 Playwright 가 수행할 단계 3~5개를 한국어로 작성. "
+        "JSON array of strings 형식으로만 응답."
+    )
+
+    provider = get_llm_provider()
+    try:
+        raw = await provider.generate(system_prompt, user_message)
+    except Exception as e:
+        logger.warning(f"scenario_steps LLM 호출 실패: {e}")
+        return []
+
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`").lstrip("json").strip()
+    try:
+        steps = json.loads(text)
+    except Exception:
+        logger.warning(f"scenario_steps JSON 파싱 실패: raw={text!r}")
+        return []
+    if isinstance(steps, list) and all(isinstance(s, str) for s in steps):
+        return steps[:5]
+    return []
