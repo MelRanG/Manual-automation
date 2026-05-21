@@ -17,7 +17,8 @@ async def create_sr_draft(
     data: SRDraftCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    return await sr_service.create_sr_draft(db, data)
+    draft = await sr_service.create_sr_draft(db, data)
+    return await sr_service.build_sr_response(db, draft)
 
 
 @router.post("/generate", response_model=SRDraftResponse, status_code=201)
@@ -25,9 +26,10 @@ async def generate_sr_draft(
     data: SRGenerateRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    return await sr_service.generate_sr_draft(
+    draft = await sr_service.generate_sr_draft(
         db, data.user_id, data.document_id, data.issue_description
     )
+    return await sr_service.build_sr_response(db, draft)
 
 
 @router.post("/drafts/{sr_id}/submit")
@@ -48,12 +50,13 @@ async def update_sr_draft(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        return await sr_service.update_sr_draft(db, sr_id, data.model_dump(exclude_none=True))
+        draft = await sr_service.update_sr_draft(db, sr_id, data.model_dump(exclude_none=True))
     except ValueError as e:
         msg = str(e)
         if "not found" in msg:
             raise HTTPException(status_code=404, detail=msg)
         raise HTTPException(status_code=400, detail=msg)
+    return await sr_service.build_sr_response(db, draft)
 
 
 @router.get("/drafts", response_model=SRDraftListResponse)
@@ -68,7 +71,7 @@ async def list_sr_drafts(
         items, total = await sr_service.list_sr_drafts(db, user_id, status, skip, limit)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"items": items, "total": total}
+    return {"items": await sr_service.build_sr_responses(db, items), "total": total}
 
 
 @router.get("/webhook-logs")
