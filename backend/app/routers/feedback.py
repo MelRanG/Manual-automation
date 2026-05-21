@@ -108,7 +108,10 @@ async def request_draft(
 
     proposal = await feedback_service.generate_correction(db, feedback_id)
     if not proposal:
-        raise HTTPException(status_code=500, detail="Failed to generate draft")
+        raise HTTPException(
+            status_code=400,
+            detail="문서 원본 텍스트가 없어 AI 수정안을 만들 수 없습니다. 문서 본문이 비어 있는지 확인하세요.",
+        )
 
     approval = await approval_service.create_approval_request(db, proposal.id)
 
