@@ -17,7 +17,7 @@ export function WebhookLogs() {
 
   // 설정
   const [config, setConfig] = useState<JiraConfig | null>(null)
-  const [form, setForm] = useState({ base_url: "", user_email: "", api_token: "", project_key: "", trigger_status_names: "", is_active: true })
+  const [form, setForm] = useState({ site_url: "", user_email: "", api_token: "", project_key: "", trigger_status_names: "", is_active: true })
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -37,7 +37,7 @@ export function WebhookLogs() {
       if (cfg) {
         setConfig(cfg)
         setForm({
-          base_url: cfg.base_url,
+          site_url: cfg.site_url ?? "",
           user_email: cfg.user_email,
           api_token: "",
           project_key: cfg.project_key,
@@ -60,7 +60,7 @@ export function WebhookLogs() {
     setTestResult(null)
     try {
       const cfg = await api.saveJiraConfig({
-        base_url: form.base_url,
+        site_url: form.site_url,
         user_email: form.user_email,
         api_token: form.api_token,
         project_key: form.project_key,
@@ -79,7 +79,7 @@ export function WebhookLogs() {
     setTestResult(null)
     try {
       const result = await api.testJiraConfig({
-        base_url: form.base_url,
+        site_url: form.site_url,
         user_email: form.user_email,
         api_token: form.api_token,
         project_key: form.project_key,
@@ -153,14 +153,25 @@ export function WebhookLogs() {
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <label className="text-xs font-medium text-[#444653] mb-1 block">Base URL</label>
+            <label className="text-xs font-medium text-[#444653] mb-1 block">Atlassian Site URL</label>
             <input
               className="w-full px-3 py-2 border border-[#c4c5d5] rounded-lg text-sm focus:border-[#00288e] focus:ring-1 focus:ring-[#00288e] outline-none"
-              placeholder="https://yourcompany.atlassian.net"
-              value={form.base_url}
-              onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))}
+              placeholder="https://your-site.atlassian.net"
+              value={form.site_url}
+              onChange={e => setForm(f => ({ ...f, site_url: e.target.value }))}
             />
+            <p className="text-[11px] text-[#757684] mt-1">예: https://manual-automation.atlassian.net — service account 사용 시 cloudId 자동 추출</p>
           </div>
+          {config?.base_url && (
+            <div className="col-span-2">
+              <label className="text-xs font-medium text-[#444653] mb-1 block">내부 API URL <span className="text-[#757684] font-normal">(자동)</span></label>
+              <input
+                className="w-full px-3 py-2 border border-[#e6e8ea] bg-[#f7f9fb] rounded-lg text-sm text-[#444653] font-mono outline-none"
+                value={config.base_url}
+                readOnly
+              />
+            </div>
+          )}
           <div>
             <label className="text-xs font-medium text-[#444653] mb-1 block">이메일</label>
             <input
