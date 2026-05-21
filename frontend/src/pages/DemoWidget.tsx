@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, Info, AlertTriangle, X, Camera } from "lucide-react"
+import { ArrowLeft, Info, AlertTriangle, X, Camera, CloudRain } from "lucide-react"
 import { CUSTOMER, DEFAULT_MESSAGE, REASONS, TOAST, type ReasonKey } from "./DemoWidget.constants"
 
 export interface DemoWidgetProps {
@@ -13,6 +13,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [reason, setReason] = useState<ReasonKey | null>(null)
   const [reasonEtcText, setReasonEtcText] = useState("")
+  const [modalOpen, setModalOpen] = useState(false)
 
   useEffect(() => {
     const id = window.setTimeout(() => setToastOpen(true), 2000)
@@ -24,9 +25,6 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
       if (photoUrl) URL.revokeObjectURL(photoUrl)
     }
   }, [photoUrl])
-
-  // Props are intentionally consumed later (Task 7: onSaveBehavior)
-  void onSaveBehavior
 
   function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -41,6 +39,13 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
     if (photoUrl) URL.revokeObjectURL(photoUrl)
     setPhotoUrl(null)
     setReason(null)
+  }
+
+  function handleSave() {
+    if (onSaveBehavior === "weather-modal") {
+      setModalOpen(true)
+    }
+    // "none": 의도적으로 아무 동작 없음
   }
 
   return (
@@ -204,7 +209,48 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
             />
           </section>
         </main>
+
+        {/* 하단 sticky 저장 버튼 */}
+        <div className="sticky bottom-0 z-40 bg-white border-t border-[#c4c5d5] p-4 pr-20">
+          <button
+            type="button"
+            onClick={handleSave}
+            className="w-full bg-[#00288e] hover:bg-[#1e40af] text-white font-semibold py-3 rounded-lg transition-colors"
+          >
+            저장
+          </button>
+        </div>
       </div>
+
+      {/* Weather Modal (after only) */}
+      {modalOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4">
+              <CloudRain size={60} className="text-[#00288e]" />
+            </div>
+            <p className="text-lg font-semibold text-[#191c1e] text-center leading-snug">
+              현재 기상악화 상태입니다.<br />
+              조심히 운행하세요
+            </p>
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="mt-6 w-full bg-[#00288e] hover:bg-[#1e40af] text-white font-semibold py-3 rounded-lg transition-colors"
+            >
+              확인
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
