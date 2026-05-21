@@ -4,10 +4,9 @@ Status transition guard tests:
 """
 import uuid
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
 from app.models.sr import SRDraft
 from app.models.user import User
 
