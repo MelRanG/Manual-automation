@@ -738,10 +738,15 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
                       related_document_ids: selectedDocId ? [selectedDocId] : undefined,
                     })
                     if (selectedDocId) {
-                      const cp = await api.generateProposalForDocument(
+                      const cps = await api.generateProposalForDocument(
                         analysis.id, selectedDocId, analysis.recommended_strategy || "update"
                       )
-                      setProposal(cp)
+                      const cp = Array.isArray(cps) ? cps[0] : cps
+                      if (!cp) {
+                        setGenerateError("초안 응답이 비어있습니다.")
+                      } else {
+                        setProposal(cp)
+                      }
                     } else {
                       setProposal({
                         id: analysis.id,
@@ -933,21 +938,33 @@ function DraftEditor({
   }, [editedContent, isEditing])
 
   const proposedView = isEditing ? (
-    <textarea
-      ref={editTaRef}
-      value={editedContent}
-      onChange={(e) => setEditedContent(e.target.value)}
-      onBlur={() => setIsEditing(false)}
-      autoFocus
-      className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
-    />
+    <div className="relative">
+      <textarea
+        ref={editTaRef}
+        value={editedContent}
+        onChange={(e) => setEditedContent(e.target.value)}
+        autoFocus
+        className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 pt-10 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap w-full font-mono resize-none overflow-hidden min-h-[12rem]"
+      />
+      <button
+        type="button"
+        onClick={() => setIsEditing(false)}
+        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 bg-white border border-[#15803d] text-[#15803d] rounded text-[11px] font-medium hover:bg-[#f0fdf4]"
+      >
+        <span className="material-symbols-outlined text-sm">visibility</span>
+        미리보기
+      </button>
+    </div>
   ) : (
-    <div
-      onClick={() => setIsEditing(true)}
-      className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] cursor-text min-h-[12rem] hover:border-[#15803d] transition-colors relative"
-      title="클릭하여 편집"
-    >
-      <span className="material-symbols-outlined absolute top-2 right-2 text-base text-[#15803d] opacity-60">edit</span>
+    <div className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 pt-10 rounded-lg border border-[#bbf7d0] min-h-[12rem] relative">
+      <button
+        type="button"
+        onClick={() => setIsEditing(true)}
+        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 bg-white border border-[#15803d] text-[#15803d] rounded text-[11px] font-medium hover:bg-[#f0fdf4]"
+      >
+        <span className="material-symbols-outlined text-sm">edit</span>
+        수정
+      </button>
       <MarkdownMessage content={editedContent || "(빈 본문)"} variant="full" />
     </div>
   )
@@ -963,13 +980,13 @@ function DraftEditor({
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (클릭하여 편집)</p>
+            <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정안 (수정 버튼으로 편집)</p>
             {proposedView}
           </div>
         </div>
       ) : (
         <div>
-          <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (클릭하여 편집)</p>
+          <p className="text-xs font-semibold text-[#757684] mb-2">AI 수정 제안 (수정 버튼으로 편집)</p>
           {proposedView}
         </div>
       )}

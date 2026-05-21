@@ -115,7 +115,12 @@ export function ChangeImpact() {
     if (!selectedAnalysis || !selectedDoc || !strategyRec) return
     setGenerating(true)
     try {
-      const p = await api.generateProposalForDocument(selectedAnalysis, selectedDoc, strategyRec.recommended_strategy)
+      const ps = await api.generateProposalForDocument(selectedAnalysis, selectedDoc, strategyRec.recommended_strategy)
+      const p = Array.isArray(ps) ? ps[0] : ps
+      if (!p) {
+        alert("수정안 응답이 비어있습니다.")
+        return
+      }
       setProposal(p)
       await refetch()
       // 수정안 생성 완료 → pending_review 탭으로 이동, 해당 항목 열기

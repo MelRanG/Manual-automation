@@ -242,7 +242,7 @@ export const api = {
       method: 'POST', body: JSON.stringify({ document_id: documentId })
     }),
   generateProposalForDocument: (analysisId: string, documentId: string, strategy: string) =>
-    request<ChangeProposal>(`/change-impact/${analysisId}/proposals`, {
+    request<ChangeProposal[]>(`/change-impact/${analysisId}/proposals`, {
       method: 'POST', body: JSON.stringify({ document_id: documentId, strategy })
     }),
   listProposals: (analysisId: string) =>
