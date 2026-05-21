@@ -21,6 +21,58 @@ interface DashboardStats {
   no_owner: DashboardDoc[]
 }
 
+const TREND_DATA = [
+  67, 71, 68, 72, 70, 73, 71, 75, 73, 76,
+  74, 77, 75, 78, 76, 79, 77, 80, 78, 82,
+  80, 83, 81, 84, 82, 85, 84, 86, 85, 88,
+]
+
+function TrustTrendChart() {
+  const width = 600
+  const height = 180
+  const pad = { top: 16, right: 16, bottom: 28, left: 36 }
+  const innerW = width - pad.left - pad.right
+  const innerH = height - pad.top - pad.bottom
+  const yMin = 60
+  const yMax = 95
+  const x = (i: number) => pad.left + (i / (TREND_DATA.length - 1)) * innerW
+  const y = (v: number) => pad.top + (1 - (v - yMin) / (yMax - yMin)) * innerH
+  const linePath = TREND_DATA.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ")
+  const areaPath = `${linePath} L${x(TREND_DATA.length - 1).toFixed(1)},${(pad.top + innerH).toFixed(1)} L${x(0).toFixed(1)},${(pad.top + innerH).toFixed(1)} Z`
+  const today = new Date()
+  const xLabels = [29, 22, 15, 8, 1, 0].map((d) => {
+    const dt = new Date(today)
+    dt.setDate(today.getDate() - d)
+    return { i: 29 - d, label: `${dt.getMonth() + 1}/${dt.getDate()}` }
+  })
+  const yTicks = [60, 70, 80, 90]
+  const last = TREND_DATA[TREND_DATA.length - 1]
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-44" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="trustTrendGrad" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#7c8ff7" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#7c8ff7" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      {yTicks.map((t) => (
+        <g key={t}>
+          <line x1={pad.left} x2={width - pad.right} y1={y(t)} y2={y(t)} stroke="#e0e3e5" strokeDasharray="2 3" />
+          <text x={pad.left - 8} y={y(t)} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="#757684">{t}%</text>
+        </g>
+      ))}
+      <path d={areaPath} fill="url(#trustTrendGrad)" />
+      <path d={linePath} fill="none" stroke="#00288e" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(TREND_DATA.length - 1)} cy={y(last)} r="8" fill="#00288e" fillOpacity="0.15" />
+      <circle cx={x(TREND_DATA.length - 1)} cy={y(last)} r="4" fill="#00288e" />
+      <text x={x(TREND_DATA.length - 1) - 8} y={y(last) - 10} textAnchor="end" fontSize="11" fontWeight="600" fill="#00288e">{last}%</text>
+      {xLabels.map(({ i, label }) => (
+        <text key={i} x={x(i)} y={height - 8} textAnchor="middle" fontSize="10" fill="#757684">{label}</text>
+      ))}
+    </svg>
+  )
+}
+
 export function Dashboard() {
   const { user } = useAuth()
   const [stats, setStats] = useState({ docs: 0, manualReview: 0, feedback: 0, sr: 0 })
@@ -126,19 +178,9 @@ export function Dashboard() {
         <div className="lg:col-span-2 bg-white border border-[#c4c5d5] rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-base font-semibold text-[#191c1e]">신뢰도 추이</h3>
-            <select className="text-xs border border-[#c4c5d5] rounded-lg px-3 py-1.5 text-[#444653] bg-white">
-              <option>최근 7일</option>
-              <option>최근 30일</option>
-            </select>
+            <span className="text-xs text-[#444653] px-3 py-1.5 border border-[#c4c5d5] rounded-lg bg-white">최근 30일</span>
           </div>
-          <div className="flex items-end gap-3 h-40">
-            {[72, 78, 74, 82, 85, 80, avgTrust].map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2">
-                <div className="w-full bg-[#dde1ff] rounded-t-md transition-all hover:bg-[#b8c4ff]" style={{ height: `${val}%` }} />
-                <span className="text-[10px] text-[#757684]">{["월", "화", "수", "목", "금", "토", "일"][i]}</span>
-              </div>
-            ))}
-          </div>
+          <TrustTrendChart />
         </div>
 
         {/* Recent Errors */}
