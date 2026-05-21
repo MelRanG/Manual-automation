@@ -1,99 +1,90 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Link } from "react-router-dom"
-import { parseSSE } from "@/lib/sse"
+import { useChatSession } from "@/hooks/useChatSession"
+import { buildWidgetAdapter } from "@/lib/chatAdapters"
+import { ChatPanel } from "@/components/chat/ChatPanel"
 
-interface Message {
-  role: "user" | "assistant"
-  content: string
-  citations?: { title: string; id: string }[]
-}
-
-type WidgetMode = "question" | "change_request"
+const DEMO_USER_ID = "00000000-0000-0000-0000-000000000010"
 
 export function WidgetDemo() {
   const [chatOpen, setChatOpen] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [streaming, setStreaming] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
-  const [widgetMode, setWidgetMode] = useState<WidgetMode>("question")
-  const [srCreated, setSrCreated] = useState<string | null>(null)
-  const chatEndRef = useRef<HTMLDivElement>(null)
+  const [loginDropdownOpen, setLoginDropdownOpen] = useState(false)
+  const [demoUserId, setDemoUserId] = useState<string | null>(null)
 
+  const adapter = useMemo(() => buildWidgetAdapter(demoUserId), [demoUserId])
+
+  const chat = useChatSession({
+    sessionId,
+    userId: demoUserId,
+    api: adapter,
+  })
+
+  // When toggle changes, reset session (different owner — can't mix users).
+  // Use a ref to skip the very first render so we don't reset on mount.
+  const isFirstRender = useRef(true)
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, streaming])
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    setSessionId(null)
+    chat.resetAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoUserId])
 
-  async function ensureSession() {
+  async function ensureSession(): Promise<string> {
     if (sessionId) return sessionId
     const res = await fetch("/api/widget/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ site_id: "demo_asiana", anonymous_id: "demo_user" }),
+      body: JSON.stringify({
+        site_id: "demo_asiana",
+        anonymous_id: demoUserId ? null : "demo_user",
+        user_id: demoUserId,
+      }),
     })
     const data = await res.json()
-    const id = data.id || data.session_id
+    const id = data.id as string
     setSessionId(id)
     return id
   }
 
-  async function sendMessage() {
-    if (!input.trim() || streaming) return
-    const userInput = input.trim()
-    const question = widgetMode === "change_request" ? `[변경 요청] ${userInput}` : userInput
-    setInput("")
-    setSrCreated(null)
-    setMessages(prev => [...prev, { role: "user", content: userInput }])
-    setStreaming(true)
+  // Pending send pattern: when first message is queued before a session exists,
+  // we trigger ensureSession, then flush the send in an effect once sessionId updates.
+  const pendingSendRef = useRef(false)
 
-    try {
-      const sid = await ensureSession()
-      const res = await fetch(`/api/widget/sessions/${sid}/ask-stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
-      })
-
-      let assistantContent = ""
-      let citations: { title: string; id: string }[] = []
-
-      setMessages(prev => [...prev, { role: "assistant", content: "" }])
-
-      for await (const event of parseSSE(res)) {
-        if (event.event === "token") {
-          const parsed = JSON.parse(event.data)
-          assistantContent += parsed.token || ""
-          setMessages(prev => {
-            const updated = [...prev]
-            updated[updated.length - 1] = { role: "assistant", content: assistantContent, citations }
-            return updated
-          })
-        } else if (event.event === "citations") {
-          citations = JSON.parse(event.data).citations || []
-          setMessages(prev => {
-            const updated = [...prev]
-            updated[updated.length - 1] = { role: "assistant", content: assistantContent, citations }
-            return updated
-          })
-        } else if (event.event === "done") {
-          const doneData = JSON.parse(event.data)
-          if (doneData.sr_draft) {
-            setSrCreated(doneData.sr_draft.title)
-          }
-        }
-      }
-    } catch {
-      setMessages(prev => {
-        const updated = [...prev]
-        if (updated[updated.length - 1]?.role === "assistant" && !updated[updated.length - 1].content) {
-          updated[updated.length - 1] = { role: "assistant", content: "죄송합니다. 응답을 생성하는 중 오류가 발생했습니다." }
-        }
-        return updated
-      })
-    } finally {
-      setStreaming(false)
+  const sendWithSession = async () => {
+    if (!sessionId) {
+      pendingSendRef.current = true
+      await ensureSession()
+      return  // effect below will fire chat.send with fresh sessionId closure
     }
+    chat.send()
   }
+
+  useEffect(() => {
+    if (sessionId && pendingSendRef.current) {
+      pendingSendRef.current = false
+      chat.send()
+    }
+    // chat.send is intentionally in deps so we always have the latest closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, chat.send])
+
+  const chatWithLazySend = { ...chat, send: sendWithSession }
+
+  const emptyState = (
+    <div className="text-center text-sm text-[#444653] mt-8">
+      <span
+        className="material-symbols-outlined text-4xl text-[#00288e] mb-2 block"
+        style={{ fontVariationSettings: "'FILL' 1" }}
+      >
+        smart_toy
+      </span>
+      안녕하세요! DocOps AI 어시스턴트입니다.<br />무엇을 도와드릴까요?
+    </div>
+  )
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f7f9fb] text-[#191c1e] font-['Inter',sans-serif] relative">
@@ -113,7 +104,35 @@ export function WidgetDemo() {
             <span className="material-symbols-outlined text-[#757684] text-lg mr-1">search</span>
             <input className="bg-transparent border-none outline-none text-sm w-32 placeholder-[#444653]" placeholder="검색..." type="text" />
           </div>
-          <button className="text-sm text-[#00288e] hover:text-[#1e40af] px-4 py-1">로그인</button>
+          <div className="relative">
+            <button
+              onClick={() => setLoginDropdownOpen(o => !o)}
+              className="text-sm text-[#00288e] hover:text-[#1e40af] px-4 py-1 flex items-center gap-1"
+            >
+              {demoUserId ? "로그인됨" : "로그인"}
+              <span className="material-symbols-outlined text-base">expand_more</span>
+            </button>
+            {loginDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-[#c4c5d5] rounded-lg shadow-lg p-2 w-64 z-50">
+                <p className="text-[10px] text-[#757684] px-2 pb-2 border-b border-[#c4c5d5] mb-2">
+                  SSO 연동 시뮬레이션 (해커톤 데모)
+                </p>
+                <button
+                  onClick={() => { setDemoUserId(null); setLoginDropdownOpen(false) }}
+                  className={`w-full text-left px-3 py-2 text-sm rounded ${demoUserId === null ? "bg-[#f2f4f6] font-semibold" : "hover:bg-[#f2f4f6]"}`}
+                >
+                  ○ 익명 (게스트)
+                </button>
+                <button
+                  onClick={() => { setDemoUserId(DEMO_USER_ID); setLoginDropdownOpen(false) }}
+                  className={`w-full text-left px-3 py-2 text-sm rounded ${demoUserId === DEMO_USER_ID ? "bg-[#f2f4f6] font-semibold" : "hover:bg-[#f2f4f6]"}`}
+                >
+                  ● 로그인 사용자<br />
+                  <span className="text-xs text-[#757684]">demo-user-001</span>
+                </button>
+              </div>
+            )}
+          </div>
           <Link
             to="/"
             className="text-xs font-semibold bg-[#00288e] text-white rounded-lg px-4 py-2 hover:bg-[#1e40af] transition-colors shadow-sm"
@@ -249,140 +268,21 @@ export function WidgetDemo() {
       {chatOpen ? (
         <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end">
           <div className="w-[400px] h-[550px] bg-white rounded-xl shadow-[0_10px_25px_rgba(0,0,0,0.15)] border border-[#c4c5d5] flex flex-col overflow-hidden">
-            {/* Header */}
             <div className="bg-[#00288e] text-white p-4 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
                 <span className="text-xl font-semibold">DocOps AI 어시스턴트</span>
               </div>
               <div className="flex gap-1">
-                <button
-                  onClick={() => setChatOpen(false)}
-                  className="text-white/80 hover:text-white transition-colors p-1"
-                >
+                <button onClick={() => setChatOpen(false)} className="text-white/80 hover:text-white transition-colors p-1">
                   <span className="material-symbols-outlined text-lg">minimize</span>
                 </button>
-                <button
-                  onClick={() => setChatOpen(false)}
-                  className="text-white/80 hover:text-white transition-colors p-1"
-                >
+                <button onClick={() => setChatOpen(false)} className="text-white/80 hover:text-white transition-colors p-1">
                   <span className="material-symbols-outlined text-lg">close</span>
                 </button>
               </div>
             </div>
-
-            {/* Mode Tabs */}
-            <div className="flex items-center gap-1 px-3 py-2 bg-[#f2f4f6] border-b border-[#c4c5d5]">
-              <button
-                onClick={() => setWidgetMode("question")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  widgetMode === "question"
-                    ? "bg-[#00288e] text-white shadow-sm"
-                    : "text-[#444653] hover:bg-white"
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm">help</span>
-                질문하기
-              </button>
-              <button
-                onClick={() => setWidgetMode("change_request")}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                  widgetMode === "change_request"
-                    ? "bg-[#b45309] text-white shadow-sm"
-                    : "text-[#444653] hover:bg-white"
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm">edit_note</span>
-                변경 요청
-              </button>
-              {srCreated && (
-                <div className="ml-auto text-[10px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                  SR 생성됨
-                </div>
-              )}
-            </div>
-
-            {/* Chat Area */}
-            <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 bg-[#f7f9fb]">
-              {messages.length === 0 && (
-                <div className="text-center text-sm text-[#444653] mt-8">
-                  <span className="material-symbols-outlined text-4xl text-[#00288e] mb-2 block" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
-                  안녕하세요! DocOps AI 어시스턴트입니다.<br />
-                  무엇을 도와드릴까요?
-                </div>
-              )}
-              {messages.map((msg, i) => (
-                <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
-                  {msg.role === "assistant" && (
-                    <div className="w-8 h-8 rounded-full bg-[#1e40af] text-white flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
-                    </div>
-                  )}
-                  <div className={`flex flex-col gap-2 max-w-[85%] ${msg.role === "user" ? "items-end" : ""}`}>
-                    <div
-                      className={
-                        msg.role === "user"
-                          ? "bg-[#00288e] text-white rounded-lg rounded-tr-none p-3 text-sm shadow-sm"
-                          : "bg-white border border-[#c4c5d5] rounded-lg rounded-tl-none p-3 text-sm text-[#191c1e] shadow-sm"
-                      }
-                    >
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                      {msg.citations && msg.citations.length > 0 && (
-                        <p className="text-xs text-[#444653] mt-2 pt-2 border-t border-dashed border-[#c4c5d5] flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[14px]">menu_book</span>
-                          출처: {msg.citations.map(c => c.title).join(", ")}
-                        </p>
-                      )}
-                    </div>
-                    {msg.role === "assistant" && msg.content && (
-                      <button className="bg-[#ffdad6] text-[#93000a] border border-[#ffdad6]/50 hover:bg-[#ffdad6]/80 py-1 px-3 rounded text-xs font-semibold flex items-center gap-1 transition-colors w-fit">
-                        <span className="material-symbols-outlined text-[14px]">report</span>
-                        오류 신고
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {streaming && messages[messages.length - 1]?.role === "assistant" && !messages[messages.length - 1]?.content && (
-                <div className="flex gap-3">
-                  <div className="w-8 h-8 rounded-full bg-[#1e40af] text-white flex items-center justify-center shrink-0">
-                    <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
-                  </div>
-                  <div className="bg-white border border-[#c4c5d5] rounded-lg p-3 text-sm text-[#444653]">
-                    <span className="animate-pulse">응답 생성 중...</span>
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input Area */}
-            <div className="p-3 bg-white border-t border-[#c4c5d5] flex flex-col gap-2">
-              <div className="flex items-center gap-3">
-                <input
-                  className="flex-1 bg-[#f2f4f6] border-none rounded-full px-4 py-2 text-sm focus:ring-1 focus:ring-[#00288e] outline-none text-[#191c1e]"
-                  placeholder={widgetMode === "change_request" ? "변경 요청 내용을 입력하세요..." : "질문을 입력하세요..."}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && sendMessage()}
-                  disabled={streaming}
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={streaming || !input.trim()}
-                  className="w-10 h-10 rounded-full bg-[#00288e] text-white flex items-center justify-center hover:bg-[#1e40af] transition-colors shrink-0 disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
-                </button>
-              </div>
-              <Link
-                to="/"
-                className="w-full bg-transparent text-[#00288e] hover:bg-[#f2f4f6] py-1 rounded text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
-              >
-                <span className="material-symbols-outlined text-sm">open_in_new</span>
-                DocOps AI 대시보드로 이동
-              </Link>
-            </div>
+            <ChatPanel chat={chatWithLazySend} variant="compact" emptyState={emptyState} />
           </div>
         </div>
       ) : (

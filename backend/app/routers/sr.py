@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.sr import ChangeImpactAnalysis, DocumentChangeProposal, SRDraft, WebhookDeliveryLog
+from app.routers.widget import WIDGET_USER_ID
 from app.schemas.sr import AiDocRecommendationResponse, ImpactAnalysisSummary, LatestProposalResponse, ProposalSummary, SRDraftCreate, SRDraftListResponse, SRDraftResponse, SRDraftUpdate, SRGenerateRequest
 from app.services import ai_recommendation_service, sr_service
 
@@ -37,6 +38,11 @@ async def submit_sr(
     sr_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
+    draft = await sr_service.get_draft(db, sr_id)
+    if draft is None:
+        raise HTTPException(status_code=404, detail="SR draft not found")
+    if draft.user_id == WIDGET_USER_ID:
+        raise HTTPException(status_code=403, detail="anonymous SR submit not allowed")
     try:
         return await sr_service.submit_sr(db, sr_id)
     except ValueError as e:

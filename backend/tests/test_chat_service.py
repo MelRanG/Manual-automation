@@ -139,3 +139,45 @@ def test_prepend_context_no_context():
     result = _prepend_context(messages, "")
     assert result == messages
     assert result is not messages  # 복사본이어야 함
+
+
+import uuid as _uuid
+from sqlalchemy import select
+from app.services import chat_service
+from app.models.chat import ChatSession
+from app.models.sr import SRDraft
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ask_question_stream_skips_sr_draft_when_disallowed(db_session, test_user):
+    """allow_sr_draft=False일 때 스트리밍 응답에서 SR draft를 생성하지 않는다."""
+    session = ChatSession(id=_uuid.uuid4(), user_id=_uuid.UUID(test_user["id"]))
+    db_session.add(session)
+    await db_session.commit()
+
+    chunks = []
+    async for chunk in chat_service.ask_question_stream(
+        db_session, session.id, "[변경 요청] 근무 시간을 변경해주세요",
+        allow_sr_draft=False,
+    ):
+        chunks.append(chunk)
+
+    full = "".join(chunks)
+    assert "sr_draft" not in full
+
+    result = await db_session.execute(select(SRDraft).where(SRDraft.user_id == session.user_id))
+    assert result.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_ask_question_skips_sr_draft_when_disallowed(db_session, test_user):
+    """allow_sr_draft=False일 때 ask_question 응답에 sr_draft 필드를 포함하지 않는다."""
+    session = ChatSession(id=_uuid.uuid4(), user_id=_uuid.UUID(test_user["id"]))
+    db_session.add(session)
+    await db_session.commit()
+
+    result = await chat_service.ask_question(
+        db_session, session.id, "[변경 요청] 정책을 바꿔주세요",
+        allow_sr_draft=False,
+    )
+    assert "sr_draft" not in result or result.get("sr_draft") is None

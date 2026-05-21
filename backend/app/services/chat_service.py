@@ -135,7 +135,11 @@ async def get_messages(db: AsyncSession, session_id: uuid.UUID) -> list[dict]:
 
 
 async def ask_question(
-    db: AsyncSession, session_id: uuid.UUID, question: str
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    question: str,
+    *,
+    allow_sr_draft: bool = True,
 ) -> dict:
     session = await get_session(db, session_id)
     if not session:
@@ -165,7 +169,11 @@ async def ask_question(
     answer = await llm.generate_with_history(RAG_SYSTEM_PROMPT, messages, context)
 
     # SR 제안 감지 — 변경 요청 탭에서 보낸 메시지일 때만 처리
-    sr_proposal = _extract_sr_proposal(answer) if question.startswith("[변경 요청]") else None
+    sr_proposal = (
+        _extract_sr_proposal(answer)
+        if allow_sr_draft and question.startswith("[변경 요청]")
+        else None
+    )
     sr_draft_data = None
     if sr_proposal:
         try:
@@ -253,7 +261,11 @@ async def ask_question(
 
 
 async def ask_question_stream(
-    db: AsyncSession, session_id: uuid.UUID, question: str
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    question: str,
+    *,
+    allow_sr_draft: bool = True,
 ) -> AsyncGenerator[str, None]:
     session = await get_session(db, session_id)
     if not session:
@@ -292,7 +304,11 @@ async def ask_question_stream(
         return
 
     # SR 제안 감지 — 변경 요청 탭에서 보낸 메시지일 때만 처리
-    sr_proposal = _extract_sr_proposal(full_content) if question.startswith("[변경 요청]") else None
+    sr_proposal = (
+        _extract_sr_proposal(full_content)
+        if allow_sr_draft and question.startswith("[변경 요청]")
+        else None
+    )
     sr_draft_data = None
     if sr_proposal:
         try:

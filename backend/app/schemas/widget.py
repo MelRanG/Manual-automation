@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class WidgetSessionCreate(BaseModel):
     site_id: str
     anonymous_id: str | None = None
+    user_id: uuid.UUID | None = None
 
 
 class WidgetSessionResponse(BaseModel):

@@ -1,6 +1,14 @@
 import { getWidgetStyles } from "./styles"
 import { createSession, askStream, getMessages, type WidgetConfig, type WidgetMessage } from "./api"
 
+/**
+ * SECURITY: `data-user-id` is set by the host site and cannot be verified
+ * by this widget. SR submission and feedback creation are intentionally NOT
+ * exposed here until SSO/JWT verification is implemented end-to-end.
+ * The React WidgetDemo (`/widget-demo`) is the safe surface for showcasing
+ * authenticated features in the meantime.
+ */
+
 interface DocOpsWidgetGlobal {
   siteId?: string
   apiUrl?: string
@@ -21,6 +29,7 @@ function init() {
   const config: WidgetConfig = {
     siteId: script?.dataset.siteId || globalConfig.siteId || "default",
     apiUrl: script?.dataset.apiUrl || globalConfig.apiUrl || window.location.origin,
+    userId: script?.dataset.userId || null,
     primaryColor: script?.dataset.primaryColor || globalConfig.primaryColor || "#e94560",
     position: (script?.dataset.position || globalConfig.position || "bottom-right") as WidgetConfig["position"],
   }
@@ -166,14 +175,18 @@ class WidgetApp {
       for await (const event of askStream(this.config, this.sessionId, question)) {
         if (event.type === "token") {
           streamMsg.content += event.token
-          this.updateLastMessage(streamMsg.content)
+          this.renderMessages()
+        } else if (event.type === "citations") {
+          streamMsg.citations = event.citations
+          streamMsg.warnings = event.warnings
+          this.renderMessages()
         } else if (event.type === "done") {
           streamMsg.id = event.messageId
         }
       }
     } catch {
       streamMsg.content = "죄송합니다, 응답 중 오류가 발생했습니다."
-      this.updateLastMessage(streamMsg.content)
+      this.renderMessages()
     }
 
     this.isStreaming = false
@@ -188,15 +201,16 @@ class WidgetApp {
   private renderMessages() {
     if (!this.messagesEl) return
     this.messagesEl.innerHTML = this.messages
-      .map(m => `<div class="docops-msg ${m.role}">${this.escapeHtml(m.content)}</div>`)
+      .map(m => {
+        const citations = m.citations?.length
+          ? `<div class="docops-citations">출처: ${m.citations.map(c => this.escapeHtml(c.document_title || "참고 문서")).join(", ")}</div>`
+          : ""
+        const warning = m.warnings?.length
+          ? `<div class="docops-warning">${this.escapeHtml(m.warnings.map(w => w.title).join(", "))}</div>`
+          : ""
+        return `<div class="docops-msg ${m.role}">${this.escapeHtml(m.content)}${citations}</div>${warning}`
+      })
       .join("")
-    this.messagesEl.scrollTop = this.messagesEl.scrollHeight
-  }
-
-  private updateLastMessage(content: string) {
-    if (!this.messagesEl) return
-    const last = this.messagesEl.lastElementChild as HTMLElement
-    if (last) last.textContent = content
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight
   }
 
