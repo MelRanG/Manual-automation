@@ -8,7 +8,9 @@ export type ChatMode = "question" | "change_request"
 
 export interface UseChatSessionArgs {
   sessionId: string | null
+  /** Reserved for future use (audit logging, per-user notice keys). Currently unused inside the hook. */
   userId: string | null
+  /** Must be a stable reference (wrap in useMemo). The hook reloads messages when `api` identity changes. */
   api: ChatApiAdapter
 }
 
@@ -143,7 +145,8 @@ export function useChatSession({ sessionId, api }: UseChatSessionArgs): ChatSess
             setCitationsByMessage(prev => ({ ...prev, [messageId]: responseCitations }))
           }
           if (srDraft && messageId) {
-            setSrDraftsByMessage(prev => ({ ...prev, [messageId]: srDraft! }))
+            const draftToStore = srDraft
+            setSrDraftsByMessage(prev => ({ ...prev, [messageId]: draftToStore }))
           }
         }
       }
