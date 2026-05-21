@@ -523,3 +523,90 @@ async def test_webhook_notification_failure_does_not_break_response(client, db_s
         select(ApprovalRequest).where(ApprovalRequest.sr_draft_id == sr.id)
     )).scalars().all()
     assert len(approvals) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_process_jira_done_notifies_all_admins(client, db_session):
+    """process_jira_done은 admin 전원에게 jira_sr_proposals_ready 알림 발송"""
+    import uuid
+    import json
+    from unittest.mock import patch, MagicMock, AsyncMock
+    from sqlalchemy import select
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraCallbackLog
+    from app.models.document import Document, DocumentVersion
+    from app.models.notification import Notification
+    from app.services import jira_service
+
+    # admin 2명
+    admin_ids = []
+    for i in range(2):
+        resp = await client.post("/api/users", json={
+            "name": f"Proc Admin {i}",
+            "email": f"proc_admin_{i}_{uuid.uuid4().hex[:8]}@example.com",
+            "role": "admin",
+        })
+        assert resp.status_code == 201
+        admin_ids.append(uuid.UUID(resp.json()["id"]))
+
+    # 작성자
+    resp = await client.post("/api/users", json={
+        "name": "Proc Owner",
+        "email": f"proc_owner_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    user_id = uuid.UUID(resp.json()["id"])
+
+    doc = Document(
+        id=uuid.uuid4(), title="문서A", description="설명",
+        owner_id=user_id,
+        status="active", priority="medium", trust_score=1.0,
+    )
+    db_session.add(doc)
+    await db_session.flush()
+    version = DocumentVersion(
+        id=uuid.uuid4(), document_id=doc.id, version_number=1,
+        content="내용", created_by=user_id,
+        change_summary="초기",
+    )
+    db_session.add(version)
+    await db_session.flush()
+    doc.current_version_id = version.id
+
+    sr = SRDraft(
+        id=uuid.uuid4(), user_id=user_id,
+        title="모든 관리자 알림 SR", description="설명",
+        priority="medium", status="submitted",
+        created_by_ai=False, target_url=None,
+    )
+    db_session.add(sr)
+    await db_session.flush()
+    log = JiraCallbackLog(
+        id=uuid.uuid4(), jira_issue_key=f"TEST-ALL-{uuid.uuid4().hex[:6]}",
+        event_type="jira:issue_updated", payload={},
+        status="pending", sr_draft_id=sr.id,
+    )
+    db_session.add(log)
+    await db_session.commit()
+
+    mock_chunk = {
+        "document_id": doc.id, "document_title": doc.title,
+        "content": "내용", "distance": 0.1,
+    }
+
+    with patch("app.services.jira_service._find_related_documents", return_value=[mock_chunk]), \
+         patch("app.services.llm_service.get_llm_provider") as mock_llm_factory:
+        mock_llm = MagicMock()
+        mock_llm.generate = AsyncMock(return_value="수정 내용")
+        mock_llm_factory.return_value = mock_llm
+        await jira_service.process_jira_done(sr.id, log.id, db=db_session)
+
+    for admin_id in admin_ids:
+        notifs = (await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_id,
+                Notification.type == "jira_sr_proposals_ready",
+            )
+        )).scalars().all()
+        assert len(notifs) == 1, f"admin {admin_id} 알림 누락"

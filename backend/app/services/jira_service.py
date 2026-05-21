@@ -365,10 +365,10 @@ SR 설명: {sr.description}
                     from app.routers.notifications import create_notification
                     from app.models.user import User
                     admin_result = await session.execute(
-                        select(User).where(User.role == "admin").limit(1)
+                        select(User).where(User.role == "admin")
                     )
-                    admin = admin_result.scalar_one_or_none()
-                    if admin:
+                    admins = admin_result.scalars().all()
+                    for admin in admins:
                         await create_notification(
                             session,
                             user_id=admin.id,
