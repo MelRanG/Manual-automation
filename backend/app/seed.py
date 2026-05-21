@@ -2,15 +2,16 @@
 import asyncio
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import SessionLocal
 from app.models.chat import ChatSession, ChatMessage
-from app.models.document import Document, DocumentVersion
+from app.models.document import Document, DocumentChunk, DocumentVersion
 from app.models.feedback import FeedbackReport
 from app.models.user import User
+from app.services.chunking_service import chunk_and_embed_version
 
 DEMO_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
@@ -1145,6 +1146,36 @@ async def seed_documents(db: AsyncSession) -> None:
             await db.rollback()
 
 
+async def backfill_chunks(db: AsyncSession) -> None:
+    """current_version_id가 있고 chunks가 없는 active 문서를 임베딩한다.
+
+    document_service.create_document는 백그라운드 태스크로 자동 임베딩하지만
+    seed_documents는 ORM 직접 사용이라 누락된다. 그리고 alembic 재생성 등으로
+    chunks가 사라진 기존 문서에 대해서도 복구한다.
+    """
+    versions_result = await db.execute(
+        select(DocumentVersion)
+        .join(Document, Document.current_version_id == DocumentVersion.id)
+        .where(Document.status == "active")
+    )
+    versions = list(versions_result.scalars().all())
+
+    for version in versions:
+        count_result = await db.execute(
+            select(func.count(DocumentChunk.id)).where(
+                DocumentChunk.document_version_id == version.id
+            )
+        )
+        if count_result.scalar_one() > 0:
+            continue
+        try:
+            chunks = await chunk_and_embed_version(db, version)
+            print(f"  Embedded {len(chunks)} chunks for version {version.id}")
+        except Exception as e:
+            print(f"  Failed to embed version {version.id}: {e}")
+            await db.rollback()
+
+
 SEED_CHAT_SESSION_ID = uuid.UUID("20000000-0000-0000-0000-000000000001")
 SEED_FEEDBACK_IDS = [
     uuid.UUID("30000000-0000-0000-0000-000000000001"),
@@ -1267,6 +1298,10 @@ async def seed():
     async with SessionLocal() as db:
         print("Seeding documents...")
         await seed_documents(db)
+
+    async with SessionLocal() as db:
+        print("Embedding documents without chunks...")
+        await backfill_chunks(db)
 
     async with SessionLocal() as db:
         print("Seeding chat history...")
