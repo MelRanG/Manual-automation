@@ -103,7 +103,7 @@ class BedrockLLMProvider(LLMProvider):
 
         response = await self.client.messages.create(
             model=self.model,
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": full_message}],
         )
@@ -116,7 +116,7 @@ class BedrockLLMProvider(LLMProvider):
 
         async with self.client.messages.stream(
             model=self.model,
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": full_message}],
         ) as stream:
@@ -127,7 +127,7 @@ class BedrockLLMProvider(LLMProvider):
         prepared = _prepend_context(messages, context)
         response = await self.client.messages.create(
             model=self.model,
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=prepared,
         )
@@ -137,7 +137,7 @@ class BedrockLLMProvider(LLMProvider):
         prepared = _prepend_context(messages, context)
         async with self.client.messages.stream(
             model=self.model,
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=prepared,
         ) as stream:
@@ -157,7 +157,7 @@ class AnthropicLLMProvider(LLMProvider):
 
         response = await self.client.messages.create(
             model="claude-sonnet-4-6-20251101",
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": full_message}],
         )
@@ -170,7 +170,7 @@ class AnthropicLLMProvider(LLMProvider):
 
         async with self.client.messages.stream(
             model="claude-sonnet-4-6-20251101",
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": full_message}],
         ) as stream:
@@ -181,7 +181,7 @@ class AnthropicLLMProvider(LLMProvider):
         prepared = _prepend_context(messages, context)
         response = await self.client.messages.create(
             model="claude-sonnet-4-6-20251101",
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=prepared,
         )
@@ -191,7 +191,7 @@ class AnthropicLLMProvider(LLMProvider):
         prepared = _prepend_context(messages, context)
         async with self.client.messages.stream(
             model="claude-sonnet-4-6-20251101",
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             system=system_prompt,
             messages=prepared,
         ) as stream:
@@ -215,7 +215,7 @@ class OpenAILLMProvider(LLMProvider):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": full_message},
             ],
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
         )
         return response.choices[0].message.content
 
@@ -230,7 +230,7 @@ class OpenAILLMProvider(LLMProvider):
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": full_message},
             ],
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             stream=True,
         )
         async for chunk in stream:
@@ -242,7 +242,7 @@ class OpenAILLMProvider(LLMProvider):
         response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "system", "content": system_prompt}] + prepared,
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
         )
         return response.choices[0].message.content or ""
 
@@ -251,7 +251,7 @@ class OpenAILLMProvider(LLMProvider):
         stream = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "system", "content": system_prompt}] + prepared,
-            max_tokens=2048,
+            max_tokens=settings.llm_max_tokens,
             stream=True,
         )
         async for chunk in stream:
