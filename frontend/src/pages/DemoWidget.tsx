@@ -8,9 +8,11 @@ import { CUSTOMER, DEFAULT_MESSAGE, REASONS, TOAST, type ReasonKey } from "./Dem
 export interface DemoWidgetProps {
   allowAllReasons: boolean
   onSaveBehavior: "none" | "weather-modal"
+  showEtcInput: boolean
+  reserveSpaceForChat: boolean
 }
 
-export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps) {
+export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, reserveSpaceForChat }: DemoWidgetProps) {
   const [toastOpen, setToastOpen] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -242,7 +244,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
                         />
                         <span>{r.label}</span>
                       </label>
-                      {r.key === "etc" && reason === "etc" && (
+                      {showEtcInput && r.key === "etc" && reason === "etc" && (
                         <input
                           type="text"
                           value={reasonEtcText}
@@ -279,7 +281,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
         </main>
 
         {/* 하단 sticky 저장 버튼 */}
-        <div className="sticky bottom-0 z-40 bg-white border-t border-[#c4c5d5] p-4 pr-20">
+        <div className={`sticky bottom-0 z-40 bg-white border-t border-[#c4c5d5] p-4 ${reserveSpaceForChat ? "pr-20" : ""}`}>
           <button
             type="button"
             onClick={handleSave}
