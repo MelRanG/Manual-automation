@@ -201,24 +201,23 @@ async def test_update_sr_title_in_draft_still_works(client: AsyncClient, test_us
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_pending_doc_review_response_includes_approval_id(client: AsyncClient):
-    import uuid as _uuid
     from app.db import SessionLocal
-    from app.models.user import User as _User
-    from app.models.sr import SRDraft as _SRDraft
-    from app.models.feedback import ApprovalRequest as _ApprovalRequest
+    from app.models.user import User
+    from app.models.sr import SRDraft
+    from app.models.feedback import ApprovalRequest
 
     async with SessionLocal() as session:
-        user = _User(id=_uuid.uuid4(), name="t", email=f"{_uuid.uuid4()}@t.com", role="admin")
+        user = User(id=uuid.uuid4(), name="t", email=f"{uuid.uuid4()}@t.com", role="admin")
         session.add(user)
         await session.flush()  # user FK 참조를 위해 먼저 반영
-        draft = _SRDraft(
-            id=_uuid.uuid4(), user_id=user.id, title="t", description="d",
+        draft = SRDraft(
+            id=uuid.uuid4(), user_id=user.id, title="t", description="d",
             priority="medium", status="pending_doc_review", jira_issue_key="J-X",
         )
         session.add(draft)
         await session.flush()  # sr_draft FK 참조를 위해 먼저 반영
-        approval = _ApprovalRequest(
-            id=_uuid.uuid4(),
+        approval = ApprovalRequest(
+            id=uuid.uuid4(),
             approval_type="doc_review",
             sr_draft_id=draft.id,
             status="pending",
