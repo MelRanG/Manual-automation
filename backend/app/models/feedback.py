@@ -84,6 +84,8 @@ class ApprovalRequest(Base, UUIDMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), default="pending")
     comment: Mapped[str | None] = mapped_column(Text)
     reviewed_at: Mapped[str | None] = mapped_column(String(50))
+    action: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    edited_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     proposed_change: Mapped["ProposedDocumentChange | None"] = relationship(
         back_populates="approval_request"
