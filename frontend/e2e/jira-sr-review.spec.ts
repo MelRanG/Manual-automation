@@ -16,9 +16,8 @@ import { test, expect, type Page } from "@playwright/test"
 import { loginAsDemo } from "./helpers/auth"
 
 // ------------------------------------------------------------
-// 상수: admin 계정 user_id (auth.ts에서 loginAsDemo가 사용하는 계정)
+// 상수: backend base URL (loginAsDemo는 admin@docops.ai 계정 사용)
 // ------------------------------------------------------------
-const DEMO_USER_EMAIL = "admin@docops.ai"
 const BACKEND_URL = "http://localhost:8000"
 
 // ------------------------------------------------------------
@@ -229,7 +228,7 @@ test.describe("Jira SR 검토 흐름", () => {
      *
      * 재시작 후 이 테스트의 test.skip 제거.
      */
-    const srId = await createPendingDocReviewSR(page, testRunId)
+    await createPendingDocReviewSR(page, testRunId)
 
     await page.reload()
     await loginAsDemo(page)
