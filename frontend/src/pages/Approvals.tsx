@@ -65,6 +65,7 @@ export function Approvals() {
   const handleTabChange = (t: Tab) => {
     setTab(t)
     setPage(1)
+    setReviewingId(null)
     if (t !== "jira_sr") setJiraSrFilter("all")
   }
 
@@ -301,7 +302,8 @@ function ApprovalCard({
 
         {isReviewing && (
           <div className="mt-6 pt-6 border-t border-[#e0e3e5]">
-            {approval.approval_type === "doc_review" && approval.status === "pending" ? (
+            {approval.approval_type === "doc_review" ? (
+              approval.status === "pending" ? (
               <div className="space-y-3">
                 <p className="text-sm text-[#444653]">이 SR 완료 건에 대해 문서 작성이 필요한가요?</p>
                 <div className="flex flex-col gap-2">
@@ -368,6 +370,9 @@ function ApprovalCard({
                   </div>
                 </div>
               </div>
+              ) : (
+                <p className="text-sm text-[#757684]">이미 처리된 항목입니다.</p>
+              )
             ) : (
               <ApprovalReviewPanel
                 key={approval.id}
