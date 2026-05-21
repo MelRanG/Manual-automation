@@ -18,9 +18,10 @@ interface Props {
   unreadCount: number
   onMarkRead: (id: string) => void
   onMarkAllRead: () => void
+  onOpen?: () => void
 }
 
-export function NotificationBell({ notifications, unreadCount, onMarkRead, onMarkAllRead }: Props) {
+export function NotificationBell({ notifications, unreadCount, onMarkRead, onMarkAllRead, onOpen }: Props) {
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
@@ -44,7 +45,13 @@ export function NotificationBell({ notifications, unreadCount, onMarkRead, onMar
   return (
     <div className="relative" ref={panelRef}>
       <button
-        onClick={() => setOpen((p) => !p)}
+        onClick={() =>
+          setOpen((p) => {
+            const next = !p
+            if (next) onOpen?.()
+            return next
+          })
+        }
         className="relative p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
         aria-label="알림"
       >

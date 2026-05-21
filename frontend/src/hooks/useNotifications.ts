@@ -9,6 +9,7 @@ export interface UseNotificationsResult {
   markRead: (id: string) => Promise<void>
   markAllRead: () => Promise<void>
   clearNew: () => void
+  reload: () => Promise<void>
 }
 
 export function useNotifications(userId: string | undefined): UseNotificationsResult {
@@ -76,8 +77,9 @@ export function useNotifications(userId: string | undefined): UseNotificationsRe
           }
         }
       } catch {
-        // SSE 연결 끊김 — 재연결
+        // SSE 연결 끊김 — 재연결 + 누락 알림 복구를 위해 DB 재로드
         if (active) {
+          void loadNotifications()
           setTimeout(connectSSE, 3000)
         }
       }
@@ -85,9 +87,16 @@ export function useNotifications(userId: string | undefined): UseNotificationsRe
 
     connectSSE()
 
+    // 창 포커스 시 재로드 — SSE가 누락한 알림이 있을 수 있음
+    const onFocus = () => {
+      if (active) void loadNotifications()
+    }
+    window.addEventListener("focus", onFocus)
+
     return () => {
       active = false
       controller.abort()
+      window.removeEventListener("focus", onFocus)
     }
   }, [userId, loadNotifications])
 
@@ -107,5 +116,13 @@ export function useNotifications(userId: string | undefined): UseNotificationsRe
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
-  return { notifications, unreadCount, newNotification, markRead, markAllRead, clearNew }
+  return {
+    notifications,
+    unreadCount,
+    newNotification,
+    markRead,
+    markAllRead,
+    clearNew,
+    reload: loadNotifications,
+  }
 }
