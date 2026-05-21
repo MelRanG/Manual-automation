@@ -400,6 +400,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
   const [docQuery, setDocQuery] = useState("")
   const [generating, setGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState<string | null>(null)
   const [proposal, setProposal] = useState<ChangeProposal | null>(null)
   const [applying, setApplying] = useState(false)
   const [confirmingNone, setConfirmingNone] = useState(false)
@@ -698,6 +699,7 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
               <button
                 onClick={async () => {
                   setGenerating(true)
+                  setGenerateError(null)
                   try {
                     const analysis = await api.analyzeImpact({
                       source_type: "jira_sr",
@@ -705,10 +707,11 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                       related_document_ids: selectedDocId ? [selectedDocId] : undefined,
                     })
                     if (selectedDocId) {
-                      const cp = await api.generateProposalForDocument(analysis.id, selectedDocId, analysis.recommended_strategy || "update")
+                      const cp = await api.generateProposalForDocument(
+                        analysis.id, selectedDocId, analysis.recommended_strategy || "update"
+                      )
                       setProposal(cp)
                     } else {
-                      // 신규 문서: proposal 없이 reasoning만 표시
                       setProposal({
                         id: analysis.id,
                         impact_analysis_id: analysis.id,
@@ -720,8 +723,8 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
                         created_at: analysis.created_at,
                       })
                     }
-                  } catch {
-                    // 에러 시 UI에서 재시도 가능
+                  } catch (e) {
+                    setGenerateError(e instanceof Error ? e.message : "초안 생성 실패")
                   } finally {
                     setGenerating(false)
                   }
@@ -731,6 +734,17 @@ function SRReview({ sr, docs, onRefetch }: { sr: SRDraft; docs: Document[]; onRe
               >
                 {generating ? "생성 중..." : "AI 초안 생성"}
               </button>
+              {generateError && (
+                <div className="mt-3 p-3 bg-[#fff7f7] border border-[#fecaca] rounded-lg text-xs text-[#b91c1c] flex items-center justify-between">
+                  <span>{generateError}</span>
+                  <button
+                    onClick={() => setGenerateError(null)}
+                    className="text-[#00288e] underline"
+                  >
+                    닫기
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
