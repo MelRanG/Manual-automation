@@ -795,6 +795,11 @@ function ReviewHistoryView({ srId }: { srId: string }) {
   if (!history) return <div className="text-sm text-[#9a9bad] py-4">검토 내역이 없습니다.</div>
   if (history.status === "in_review") return <div className="text-sm text-[#9a9bad] py-4">검토 진행 중입니다.</div>
 
+  const NOT_YET_STATUSES = ["draft", "submitted", "jira_created", "pending_document_selection"]
+  if (NOT_YET_STATUSES.includes(history.status)) {
+    return <div className="text-sm text-[#9a9bad] py-4">Jira 이슈가 완료된 후 검토 단계가 활성화됩니다.</div>
+  }
+
   const action = history.action
 
   return (
