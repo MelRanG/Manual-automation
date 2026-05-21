@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.jira import JiraCallbackLog, JiraConfig
 from app.models.sr import SRDraft
+from app.models.user import User
 from app.schemas.jira import (
     JiraCallbackLogResponse,
     JiraConfigResponse,
@@ -14,7 +16,10 @@ from app.schemas.jira import (
     JiraConnectionTestResult,
 )
 from app.models.feedback import ApprovalRequest as ApprovalRequestModel
+from app.routers.notifications import create_notification
 from app.services import jira_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/jira", tags=["jira"])
 
@@ -148,6 +153,32 @@ async def receive_jira_webhook(
     db.add(approval)
     draft.status = "pending_doc_review"
     await db.commit()
+
+    try:
+        admin_result = await db.execute(select(User).where(User.role == "admin"))
+        admins = admin_result.scalars().all()
+        for admin in admins:
+            await create_notification(
+                db,
+                user_id=admin.id,
+                type="jira_sr_doc_review_needed",
+                title=f"Jira SR '{draft.title}' 완료",
+                message="문서화 검토가 필요합니다",
+                document_id=None,
+                link_path="/approvals?tab=jira_sr",
+            )
+        await create_notification(
+            db,
+            user_id=draft.user_id,
+            type="jira_sr_done_owner",
+            title="내 SR Jira 완료 처리됨",
+            message=f"'{draft.title}' SR이 Jira에서 완료되었습니다",
+            document_id=None,
+            link_path="/approvals?tab=jira_sr",
+        )
+    except Exception as e:
+        logger.warning(f"Jira webhook 알림 전송 실패 (sr={draft.id}): {e}")
+
     return {"status": "pending_doc_review", "sr_id": str(draft.id), "approval_id": str(approval.id)}
 
 

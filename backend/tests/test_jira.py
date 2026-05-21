@@ -349,3 +349,101 @@ async def test_webhook_skips_already_done_sr(client, db_session):
     data = resp.json()
     assert data["status"] == "skipped"
     assert data["reason"] == "SR already processed"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_webhook_creates_notifications_for_admins_and_owner(client, db_session):
+    """webhook 완료 처리 시 admin 전원 + 작성자에게 알림 생성"""
+    import uuid
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.models.sr import SRDraft
+    from app.models.jira import JiraConfig
+    from app.models.notification import Notification
+
+    # admin 2명 생성
+    admin_ids = []
+    for i in range(2):
+        resp = await client.post("/api/users", json={
+            "name": f"Admin {i}",
+            "email": f"admin_{i}_{uuid.uuid4().hex[:8]}@example.com",
+            "role": "admin",
+        })
+        assert resp.status_code == 201
+        admin_ids.append(uuid.UUID(resp.json()["id"]))
+
+    # 작성자 생성
+    resp = await client.post("/api/users", json={
+        "name": "Owner",
+        "email": f"owner_{uuid.uuid4().hex[:8]}@example.com",
+        "role": "editor",
+    })
+    assert resp.status_code == 201
+    owner_id = uuid.UUID(resp.json()["id"])
+
+    # Jira config 활성화
+    config = JiraConfig(
+        id=uuid.uuid4(),
+        base_url="https://test.atlassian.net",
+        user_email="t@example.com",
+        api_token="token",
+        project_key="TEST",
+        is_active=True,
+        trigger_status_names=None,
+    )
+    db_session.add(config)
+
+    # 미처리 SR
+    unique_key = f"TEST-NOTIF-{uuid.uuid4().hex[:6]}"
+    sr = SRDraft(
+        id=uuid.uuid4(),
+        user_id=owner_id,
+        title="알림 테스트 SR",
+        description="설명",
+        priority="medium",
+        status="submitted",
+        created_by_ai=False,
+        jira_issue_key=unique_key,
+    )
+    db_session.add(sr)
+    await db_session.commit()
+
+    payload = {
+        "webhookEvent": "jira:issue_updated",
+        "issue": {
+            "key": unique_key,
+            "fields": {
+                "status": {
+                    "name": "Done",
+                    "statusCategory": {"key": "done"},
+                }
+            },
+        },
+    }
+    resp = await client.post("/api/jira/webhook", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending_doc_review"
+
+    # admin 알림 조회 — 각 admin 1건씩
+    for admin_id in admin_ids:
+        admin_notifs = (await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_id,
+                Notification.type == "jira_sr_doc_review_needed",
+            )
+        )).scalars().all()
+        assert len(admin_notifs) == 1
+        n = admin_notifs[0]
+        assert "알림 테스트 SR" in n.title
+        assert n.link_path == "/approvals?tab=jira_sr"
+
+    # 작성자 알림 조회
+    owner_notifs = (await db_session.execute(
+        select(Notification).where(
+            Notification.user_id == owner_id,
+            Notification.type == "jira_sr_done_owner",
+        )
+    )).scalars().all()
+    assert len(owner_notifs) == 1
+    assert "알림 테스트 SR" in owner_notifs[0].message
+    assert owner_notifs[0].link_path == "/approvals?tab=jira_sr"
