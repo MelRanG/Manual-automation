@@ -189,3 +189,27 @@ async def test_widget_admin_list_excludes_empty(client: AsyncClient):
     ids = [s["id"] for s in admin_resp.json()]
     assert full_id in ids
     assert empty_id not in ids
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_admin_delete_widget_session(client: AsyncClient):
+    create_resp = await client.post("/api/widget/sessions", json={
+        "site_id": "delete_test_site",
+    })
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["id"]
+
+    del_resp = await client.delete(f"/api/widget/admin/sessions/{session_id}")
+    assert del_resp.status_code == 204
+
+    list_resp = await client.get("/api/widget/admin/sessions")
+    assert list_resp.status_code == 200
+    ids = [s["id"] for s in list_resp.json()]
+    assert session_id not in ids
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_admin_delete_unknown_widget_session(client: AsyncClient):
+    fake_id = uuid.uuid4()
+    resp = await client.delete(f"/api/widget/admin/sessions/{fake_id}")
+    assert resp.status_code == 404

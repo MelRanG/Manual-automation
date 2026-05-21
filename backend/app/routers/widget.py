@@ -1,14 +1,14 @@
-import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.models.chat import ChatSession, ChatMessage
+from app.models.chat import ChatSession, ChatMessage, AnswerCitation
+from app.models.feedback import FeedbackReport, ProposedDocumentChange, ApprovalRequest
 from app.models.user import User
 from app.schemas.widget import WidgetSessionCreate, WidgetSessionResponse, WidgetAskRequest, WidgetSessionAdmin
 from app.services import chat_service
@@ -145,3 +145,36 @@ async def admin_list_widget_sessions(
         ))
 
     return admin_sessions
+
+
+@router.delete("/admin/sessions/{session_id}", status_code=204)
+async def admin_delete_widget_session(
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    session = await db.get(ChatSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    msg_ids_result = await db.execute(
+        select(ChatMessage.id).where(ChatMessage.session_id == session_id)
+    )
+    msg_ids = msg_ids_result.scalars().all()
+    if msg_ids:
+        fb_ids_result = await db.execute(
+            select(FeedbackReport.id).where(FeedbackReport.chat_message_id.in_(msg_ids))
+        )
+        fb_ids = fb_ids_result.scalars().all()
+        if fb_ids:
+            pc_ids_result = await db.execute(
+                select(ProposedDocumentChange.id).where(ProposedDocumentChange.feedback_report_id.in_(fb_ids))
+            )
+            pc_ids = pc_ids_result.scalars().all()
+            if pc_ids:
+                await db.execute(sa_delete(ApprovalRequest).where(ApprovalRequest.proposed_change_id.in_(pc_ids)))
+                await db.execute(sa_delete(ProposedDocumentChange).where(ProposedDocumentChange.id.in_(pc_ids)))
+        await db.execute(sa_delete(AnswerCitation).where(AnswerCitation.chat_message_id.in_(msg_ids)))
+        await db.execute(sa_delete(FeedbackReport).where(FeedbackReport.chat_message_id.in_(msg_ids)))
+    await db.execute(sa_delete(ChatMessage).where(ChatMessage.session_id == session_id))
+    await db.execute(sa_delete(ChatSession).where(ChatSession.id == session_id))
+    await db.commit()
