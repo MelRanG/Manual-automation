@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy import ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -27,3 +27,18 @@ class ManualGenerationJob(Base, UUIDMixin, TimestampMixin):
     )
     screenshots: Mapped[dict | None] = mapped_column(JSONB)
     error_message: Mapped[str | None] = mapped_column(Text)
+
+    proposed_change: Mapped["ProposedDocumentChange | None"] = relationship(  # noqa: F821
+        "ProposedDocumentChange",
+        back_populates="manual_job",
+        uselist=False,
+        order_by="ProposedDocumentChange.created_at.desc()",
+    )
+
+    @property
+    def approval(self):
+        """`proposed_change.approval_request` 편의 노출 (Pydantic from_attributes에서 사용)."""
+        pc = self.proposed_change
+        if pc is None:
+            return None
+        return pc.approval_request
