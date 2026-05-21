@@ -15,6 +15,8 @@ import { WebhookLogs } from "@/pages/WebhookLogs"
 import { ManualGenerator } from "@/pages/ManualGenerator"
 import { Notifications } from "@/pages/Notifications"
 import { WidgetDemo } from "@/pages/WidgetDemo"
+import { DemoWidgetBefore } from "@/pages/DemoWidgetBefore"
+import { DemoWidgetAfter } from "@/pages/DemoWidgetAfter"
 import { WidgetConversations } from "@/pages/WidgetConversations"
 
 function ProtectedRoutes() {
@@ -38,6 +40,8 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/widget-demo" element={<WidgetDemo />} />
+          <Route path="/demo-widget-before" element={<DemoWidgetBefore />} />
+          <Route path="/demo-widget-after" element={<DemoWidgetAfter />} />
           <Route element={<ProtectedRoutes />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/documents" element={<Documents />} />

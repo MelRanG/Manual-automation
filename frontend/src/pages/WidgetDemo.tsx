@@ -33,6 +33,15 @@ export function WidgetDemo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoUserId])
 
+  useEffect(() => {
+    if (!chatOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [chatOpen])
+
   async function ensureSession(): Promise<string> {
     if (sessionId) return sessionId
     const res = await fetch("/api/widget/sessions", {
@@ -267,8 +276,8 @@ export function WidgetDemo() {
       {/* Floating Chatbot */}
       {chatOpen ? (
         <div className="fixed z-50 inset-0 md:inset-auto md:bottom-8 md:right-8 md:flex md:flex-col md:items-end">
-          <div className="w-full h-full md:w-[400px] md:h-[550px] bg-white md:rounded-xl md:shadow-[0_10px_25px_rgba(0,0,0,0.15)] md:border md:border-[#c4c5d5] flex flex-col overflow-hidden">
-            <div className="bg-[#00288e] text-white p-4 pt-[calc(env(safe-area-inset-top)+1rem)] flex justify-between items-center">
+          <div className="w-full bg-white flex flex-col overflow-hidden h-[100dvh] md:w-[400px] md:h-[550px] md:rounded-xl md:shadow-[0_10px_25px_rgba(0,0,0,0.15)] md:border md:border-[#c4c5d5]">
+            <div className="bg-[#00288e] text-white p-4 pt-[calc(env(safe-area-inset-top)+1rem)] flex-shrink-0 flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
                 <span className="text-xl font-semibold">DocOps AI 어시스턴트</span>
@@ -282,7 +291,9 @@ export function WidgetDemo() {
                 </button>
               </div>
             </div>
-            <ChatPanel chat={chatWithLazySend} variant="compact" emptyState={emptyState} />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ChatPanel chat={chatWithLazySend} variant="compact" emptyState={emptyState} />
+            </div>
           </div>
         </div>
       ) : (

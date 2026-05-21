@@ -35,6 +35,14 @@ htmlcov/
 .claude/settings.local.json
 .claude/
 
+# Claude Agents / Superpowers (local metadata)
+.agents/
+.superpowers/
+skills-lock.json
+
+# Local-only docs
+HACKATHON_PRESENTATION.md
+
 # Test results
 backend/test-results/
 frontend/test-results/
