@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { ArrowLeft, Info, AlertTriangle, X, Camera } from "lucide-react"
-import { CUSTOMER, DEFAULT_MESSAGE, TOAST } from "./DemoWidget.constants"
+import { CUSTOMER, DEFAULT_MESSAGE, REASONS, TOAST, type ReasonKey } from "./DemoWidget.constants"
 
 export interface DemoWidgetProps {
   allowAllReasons: boolean
@@ -11,6 +11,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
   const [toastOpen, setToastOpen] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [reason, setReason] = useState<ReasonKey | null>(null)
 
   useEffect(() => {
     const id = window.setTimeout(() => setToastOpen(true), 2000)
@@ -23,8 +24,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
     }
   }, [photoUrl])
 
-  // Props are intentionally consumed later (Task 5: allowAllReasons, Task 7: onSaveBehavior)
-  void allowAllReasons
+  // Props are intentionally consumed later (Task 7: onSaveBehavior)
   void onSaveBehavior
 
   function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -39,6 +39,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
   function handlePhotoRemove() {
     if (photoUrl) URL.revokeObjectURL(photoUrl)
     setPhotoUrl(null)
+    setReason(null)
   }
 
   return (
@@ -137,6 +138,41 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior }: DemoWidgetProps)
               </label>
             )}
           </section>
+
+          {/* 지연사유 카드 (사진 있을 때만) */}
+          {photoUrl && (
+            <section className="bg-white rounded-lg border border-[#c4c5d5] p-4">
+              <h2 className="text-sm font-semibold text-[#191c1e] mb-3 flex items-center gap-1.5">
+                <span aria-hidden>📋</span> 지연 사유
+              </h2>
+              <div className="flex flex-col gap-2">
+                {REASONS.map((r) => {
+                  const disabled = !r.alwaysEnabled && !allowAllReasons
+                  return (
+                    <label
+                      key={r.key}
+                      className={`flex items-center gap-2 text-sm ${
+                        disabled
+                          ? "opacity-50 line-through text-[#757684] cursor-not-allowed"
+                          : "text-[#191c1e] cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="reason"
+                        value={r.key}
+                        checked={reason === r.key}
+                        onChange={() => setReason(r.key)}
+                        disabled={disabled}
+                        className="text-[#00288e] focus:ring-[#00288e]"
+                      />
+                      <span>{r.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </section>
+          )}
 
           {/* 메시지 카드 */}
           <section className="bg-white rounded-lg border border-[#c4c5d5] p-4">
