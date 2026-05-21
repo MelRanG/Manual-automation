@@ -170,7 +170,7 @@ async def receive_jira_webhook(
                 title=f"Jira SR '{draft.title}' 완료",
                 message="문서화 검토가 필요합니다",
                 document_id=None,
-                link_path="/approvals?tab=jira_sr",
+                link_path="/sr?tab=pending_doc_review",
             )
         except Exception as e:
             logger.warning(f"Jira webhook admin 알림 실패 (sr={draft.id}, admin={admin.id}): {e}")
@@ -183,7 +183,7 @@ async def receive_jira_webhook(
             title="내 SR Jira 완료 처리됨",
             message=f"'{draft.title}' SR이 Jira에서 완료되었습니다",
             document_id=None,
-            link_path="/approvals?tab=jira_sr",
+            link_path="/sr?tab=pending_doc_review",
         )
     except Exception as e:
         logger.warning(f"Jira webhook owner 알림 실패 (sr={draft.id}): {e}")

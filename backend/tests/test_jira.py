@@ -434,7 +434,7 @@ async def test_webhook_creates_notifications_for_admins_and_owner(client, db_ses
         assert len(admin_notifs) == 1
         n = admin_notifs[0]
         assert "알림 테스트 SR" in n.title
-        assert n.link_path == "/approvals?tab=jira_sr"
+        assert n.link_path == "/sr?tab=pending_doc_review"
 
     # 작성자 알림 조회
     owner_notifs = (await db_session.execute(
@@ -445,7 +445,7 @@ async def test_webhook_creates_notifications_for_admins_and_owner(client, db_ses
     )).scalars().all()
     assert len(owner_notifs) == 1
     assert "알림 테스트 SR" in owner_notifs[0].message
-    assert owner_notifs[0].link_path == "/approvals?tab=jira_sr"
+    assert owner_notifs[0].link_path == "/sr?tab=pending_doc_review"
 
 
 @pytest.mark.asyncio(loop_scope="session")
