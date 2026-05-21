@@ -50,7 +50,11 @@ def _extract_sr_proposal(text: str) -> dict | None:
         return None
     try:
         data = json.loads(match.group(1))
-        if data.get("is_change_request"):
+        if (
+            data.get("is_change_request")
+            and (data.get("title") or "").strip()
+            and (data.get("description") or "").strip()
+        ):
             return data
     except (json.JSONDecodeError, KeyError):
         pass

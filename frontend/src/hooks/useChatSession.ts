@@ -82,6 +82,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   // both passing the guard and calling ensureSession() twice.
   const isCreatingRef = useRef(false)
   const sendSRRef = useRef<(draft: SRDraftCreated) => Promise<void>>(async () => {})
+  const srInFlightRef = useRef<Set<string>>(new Set())
 
   const canSubmitSR = typeof api.submitSR === "function"
   const canSubmitFeedback = typeof api.submitFeedback === "function"
@@ -205,6 +206,9 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
 
   const sendSR = useCallback(async (draft: SRDraftCreated) => {
     if (!api.submitSR) return
+    // 자동 전송 + 사용자 클릭 동시 진입 방지 — state 는 비동기라 같은 tick race 를 못 막음.
+    if (srInFlightRef.current.has(draft.id)) return
+    srInFlightRef.current.add(draft.id)
     setSrSendingId(draft.id)
     setSrSendErrorById(prev => ({ ...prev, [draft.id]: "" }))
     try {
@@ -222,6 +226,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       }))
     } finally {
       setSrSendingId(null)
+      srInFlightRef.current.delete(draft.id)
     }
   }, [api])
 
