@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { api, type SRDraft, type Document, type ChangeProposal, type AiDocRecommendation } from "@/lib/api"
+import type { SRReviewHistory, ReviewHistoryAction } from "@/lib/api"
 import { useApi } from "@/hooks/useApi"
 import { useAuth } from "@/contexts/AuthContext"
 import { ChangeHistoryTimeline } from "@/components/ChangeHistoryTimeline"
@@ -473,15 +474,7 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
   }
 
   if (sr.status !== "pending_doc_review") {
-    let message: string
-    if (sr.status === "done_no_proposal") {
-      message = "이 SR은 문서 수정 없이 종료되었습니다."
-    } else if (sr.status === "done_synced" || sr.status === "done") {
-      message = "이 SR은 이미 완료되었습니다."
-    } else {
-      message = "Jira 이슈가 완료된 후 검토 단계가 활성화됩니다."
-    }
-    return <div className="text-sm text-[#9a9bad] py-4">{message}</div>
+    return <ReviewHistoryView srId={sr.id} />
   }
 
   const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(docQuery.toLowerCase()))
@@ -758,6 +751,111 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
             />
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+const ACTION_LABEL: Record<ReviewHistoryAction, string> = {
+  approve_doc: "승인",
+  approve_manual: "매뉴얼 생성 승인",
+  edit_and_approve: "수정 후 승인",
+  reject: "문서 변경 없음",
+}
+
+const ACTION_BADGE: Record<ReviewHistoryAction, string> = {
+  approve_doc: "bg-[#dcfce7] text-[#15803d]",
+  approve_manual: "bg-[#dcfce7] text-[#15803d]",
+  edit_and_approve: "bg-[#e8f0fe] text-[#1a56db]",
+  reject: "bg-[#fce4ec] text-[#c62828]",
+}
+
+const MODE_LABEL: Record<string, string> = {
+  new: "신규 문서",
+  existing: "기존 문서 수정",
+  none: "문서 변경 없음",
+}
+
+function ReviewHistoryView({ srId }: { srId: string }) {
+  const [history, setHistory] = useState<SRReviewHistory | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ignore = false
+    api.getSRReviewHistory(srId)
+      .then(h => { if (!ignore) setHistory(h) })
+      .catch(e => { if (!ignore) setError(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (!ignore) setLoading(false) })
+    return () => { ignore = true }
+  }, [srId])
+
+  if (loading) return <div className="text-sm text-[#9a9bad] py-4">검토 내역 로딩 중...</div>
+  if (error) return <div className="text-sm text-[#b91c1c] py-4">검토 내역 로딩 실패: {error}</div>
+  if (!history) return <div className="text-sm text-[#9a9bad] py-4">검토 내역이 없습니다.</div>
+  if (history.status === "in_review") return <div className="text-sm text-[#9a9bad] py-4">검토 진행 중입니다.</div>
+
+  const action = history.action
+
+  return (
+    <div className="space-y-5 text-sm">
+      <div className="flex items-center gap-3">
+        {action && (
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${ACTION_BADGE[action]}`}>
+            {ACTION_LABEL[action]}
+          </span>
+        )}
+        <span className="text-xs text-[#757684]">
+          {history.reviewer_name ?? "익명"} · {history.reviewed_at ? new Date(history.reviewed_at).toLocaleString("ko-KR") : "—"}
+        </span>
+      </div>
+
+      {history.ai_recommendation && (
+        <section>
+          <p className="text-xs font-semibold text-[#757684] mb-1">AI 추천</p>
+          <p className="text-[#191c1e] bg-[#eef2ff] border border-[#c7d2fe] rounded-lg p-3">
+            <span className="font-semibold">{history.ai_recommendation.recommendation}</span>
+            <span className="mx-1 text-[#757684]">·</span>
+            <span>{history.ai_recommendation.reason}</span>
+          </p>
+        </section>
+      )}
+
+      <section>
+        <p className="text-xs font-semibold text-[#757684] mb-1">선택 결과</p>
+        <p className="text-[#191c1e]">
+          {history.selected_doc_mode ? MODE_LABEL[history.selected_doc_mode] ?? history.selected_doc_mode : "—"}
+          {history.selected_document_title && (
+            <span className="ml-2 text-[#757684]">· {history.selected_document_title}</span>
+          )}
+        </p>
+      </section>
+
+      {history.final_proposal && history.final_proposal.proposed_content && (
+        <section>
+          <p className="text-xs font-semibold text-[#757684] mb-1">적용된 본문</p>
+          {history.final_proposal.original_content ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] text-[#757684] mb-1">기존</p>
+                <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-96">{history.final_proposal.original_content}</pre>
+              </div>
+              <div>
+                <p className="text-[10px] text-[#757684] mb-1">최종</p>
+                <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-96">{history.final_proposal.proposed_content}</pre>
+              </div>
+            </div>
+          ) : (
+            <pre className="text-xs text-[#191c1e] bg-[#f0fdf4] p-3 rounded-lg border border-[#bbf7d0] whitespace-pre-wrap overflow-auto max-h-96">{history.final_proposal.proposed_content}</pre>
+          )}
+        </section>
+      )}
+
+      {history.comment && (
+        <section>
+          <p className="text-xs font-semibold text-[#757684] mb-1">검토 코멘트</p>
+          <p className="text-[#191c1e] bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg p-3 whitespace-pre-wrap">{history.comment}</p>
+        </section>
       )}
     </div>
   )
