@@ -59,8 +59,6 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   const [loading, setLoading] = useState(false)
   const [input, setInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>("question")
-  const [isCreating, setIsCreating] = useState(false)
-
   const [srDraftsByMessage, setSrDraftsByMessage] = useState<Record<string, SRDraftCreated>>({})
   const [srSendingId, setSrSendingId] = useState<string | null>(null)
   const [srSentById, setSrSentById] = useState<Record<string, string>>({})
@@ -77,6 +75,10 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   // effect and send() race; without this, getMessages([]) overwrites the
   // [user, streaming] placeholders and SSE tokens have nothing to update.
   const inFlightRef = useRef(false)
+  // Synchronous guard for lazy session creation. React state updates are
+  // async, so isCreating state alone cannot prevent two rapid clicks from
+  // both passing the guard and calling ensureSession() twice.
+  const isCreatingRef = useRef(false)
 
   const canSubmitSR = typeof api.submitSR === "function"
   const canSubmitFeedback = typeof api.submitFeedback === "function"
@@ -115,21 +117,20 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
   }, [sessionId, api, resetAll])
 
   const send = useCallback(async () => {
-    if (!input.trim() || isCreating) return
+    if (!input.trim() || isCreatingRef.current) return
     let activeSessionId = sessionId
     if (!activeSessionId) {
       if (!api.ensureSession) return
-      setIsCreating(true)
+      isCreatingRef.current = true
       try {
         const created = await api.ensureSession()
         activeSessionId = created.id
         onSessionCreated?.(created)
       } catch {
-        setIsCreating(false)
+        isCreatingRef.current = false
         return
-      } finally {
-        setIsCreating(false)
       }
+      isCreatingRef.current = false
     }
     inFlightRef.current = true
     const question = chatMode === "change_request" ? `[변경 요청] ${input}` : input
@@ -189,7 +190,7 @@ export function useChatSession({ sessionId, api, onSessionCreated }: UseChatSess
       setLoading(false)
       inFlightRef.current = false
     }
-  }, [input, sessionId, chatMode, api, isCreating, onSessionCreated])
+  }, [input, sessionId, chatMode, api, onSessionCreated])
 
   const sendSR = useCallback(async (draft: SRDraftCreated) => {
     if (!api.submitSR) return
