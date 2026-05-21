@@ -68,7 +68,7 @@ export function Layout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const { notifications, unreadCount, newNotification, markRead, markAllRead, clearNew } =
+  const { notifications, unreadCount, newNotification, markRead, markAllRead, clearNew, reload } =
     useNotifications(user?.id)
   const { runningJob, clearJob } = useManualJob()
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -193,6 +193,7 @@ export function Layout() {
               unreadCount={unreadCount}
               onMarkRead={markRead}
               onMarkAllRead={markAllRead}
+              onOpen={() => void reload()}
             />
             <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
               <Settings className="h-[18px] w-[18px]" />
