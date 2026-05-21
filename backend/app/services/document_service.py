@@ -297,6 +297,7 @@ async def convert_and_finalize(
                     title="문서 변환 완료",
                     message=f"'{doc_title}' 파일 변환이 완료되었습니다.",
                     document_id=document_id,
+                    link_path=f"/documents/{document_id}",
                 )
     except Exception:
         async with SessionLocal() as db:
@@ -314,6 +315,7 @@ async def convert_and_finalize(
                     title="문서 변환 실패",
                     message=f"파일 변환 중 오류가 발생했습니다: {filename}",
                     document_id=document_id,
+                    link_path=f"/documents/{document_id}",
                 )
 
 
