@@ -157,7 +157,7 @@ DocumentDetail mount
 | 상황 | 처리 |
 | --- | --- |
 | `doc.tags === null` | `doc.tags ?? []`로 정규화 |
-| 추천 호출 실패 | `onSuggestError`로 부모 통지 → "추천 불러오기 실패 · 재시도" 인라인 링크. 클릭 시 `TagEditor`의 추천 버튼을 다시 누른 효과(suggestError 클리어 + 자동 호출 재시도 — 이를 위해 `TagEditor`에 별도 메서드는 두지 않고, 패널이 `key`를 토글해 `TagEditor`를 재마운트하는 방식으로 단순화) |
+| 추천 호출 실패 | `onSuggestError`로 부모 통지 → "추천 불러오기 실패 · 재시도" 인라인 링크. 패널에서 `attempt` 카운터 state를 두고 `<TagEditor key={attempt} ...>`로 렌더 → 재시도 클릭 시 `setAttempt(a => a + 1)` + `setSuggestError(null)` → `TagEditor`가 재마운트되어 `autoSuggestOnMount`가 다시 발화한다. 별도 imperative 핸들 불필요. |
 | 추천 결과 0개 | 패널 유지, `TagEditor`의 수동 입력 필드만 활성. 기존 동작과 일치 |
 | PATCH 실패 | optimistic 적용 후 롤백 + 인라인 에러 메시지 |
 | 인플라이트 PATCH 중 추가 클릭 | last-wins. 매 클릭 새 PATCH 발사, 최종 응답 기준 |
