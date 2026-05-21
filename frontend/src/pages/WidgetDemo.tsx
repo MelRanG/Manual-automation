@@ -266,9 +266,9 @@ export function WidgetDemo() {
 
       {/* Floating Chatbot */}
       {chatOpen ? (
-        <div className="fixed bottom-8 right-8 z-50 flex flex-col items-end">
-          <div className="w-[400px] h-[550px] bg-white rounded-xl shadow-[0_10px_25px_rgba(0,0,0,0.15)] border border-[#c4c5d5] flex flex-col overflow-hidden">
-            <div className="bg-[#00288e] text-white p-4 flex justify-between items-center">
+        <div className="fixed z-50 inset-0 md:inset-auto md:bottom-8 md:right-8 md:flex md:flex-col md:items-end">
+          <div className="w-full h-full md:w-[400px] md:h-[550px] bg-white md:rounded-xl md:shadow-[0_10px_25px_rgba(0,0,0,0.15)] md:border md:border-[#c4c5d5] flex flex-col overflow-hidden">
+            <div className="bg-[#00288e] text-white p-4 pt-[calc(env(safe-area-inset-top)+1rem)] flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>smart_toy</span>
                 <span className="text-xl font-semibold">DocOps AI 어시스턴트</span>
