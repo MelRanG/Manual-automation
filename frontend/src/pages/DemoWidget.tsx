@@ -9,10 +9,9 @@ export interface DemoWidgetProps {
   allowAllReasons: boolean
   onSaveBehavior: "none" | "weather-modal"
   showEtcInput: boolean
-  reserveSpaceForChat: boolean
 }
 
-export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, reserveSpaceForChat }: DemoWidgetProps) {
+export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput }: DemoWidgetProps) {
   const [toastOpen, setToastOpen] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -281,7 +280,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, rese
         </main>
 
         {/* 하단 sticky 저장 버튼 */}
-        <div className={`sticky bottom-0 z-40 bg-white border-t border-[#c4c5d5] p-4 ${reserveSpaceForChat ? "pr-20" : ""}`}>
+        <div className="sticky bottom-0 z-40 bg-white border-t border-[#c4c5d5] p-4">
           <button
             type="button"
             onClick={handleSave}
@@ -356,7 +355,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, rese
         <button
           type="button"
           onClick={() => setChatOpen(true)}
-          className={`fixed ${reserveSpaceForChat ? "bottom-8" : "bottom-24"} right-8 z-50 w-14 h-14 rounded-full bg-[#00288e] text-white shadow-lg hover:bg-[#1e40af] transition-all hover:scale-105 flex items-center justify-center`}
+          className="fixed bottom-32 right-8 z-50 w-14 h-14 rounded-full bg-[#00288e] text-white shadow-lg hover:bg-[#1e40af] transition-all hover:scale-105 flex items-center justify-center"
           aria-label="챗봇 열기"
         >
           <span
