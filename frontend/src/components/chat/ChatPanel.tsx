@@ -8,9 +8,11 @@ interface Props {
   chat: ChatSessionState
   variant: "full" | "compact"
   emptyState?: React.ReactNode
+  /** true면 SR draft에 "수정하기/승인" 버튼 노출 (단일 "SR 보내기" 대신). */
+  srApprovalUi?: boolean
 }
 
-export function ChatPanel({ chat, variant, emptyState }: Props) {
+export function ChatPanel({ chat, variant, emptyState, srApprovalUi }: Props) {
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -43,6 +45,7 @@ export function ChatPanel({ chat, variant, emptyState }: Props) {
               srSendingId={chat.srSendingId}
               srSendError={chat.srSendErrorById[chat.srDraftsByMessage[msg.id]?.id]}
               onSendSR={chat.canSubmitSR ? chat.sendSR : undefined}
+              srApprovalUi={srApprovalUi}
               canSubmitFeedback={chat.canSubmitFeedback}
               feedbackFor={chat.feedbackFor}
               feedbackText={chat.feedbackText}

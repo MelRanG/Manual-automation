@@ -12,9 +12,11 @@ export interface DemoWidgetProps {
   onSaveBehavior: "none" | "weather-modal"
   showEtcInput: boolean
   loggedIn: boolean
+  /** true면 SR 초안에 "수정하기/승인" 버튼만 노출하고 자동 전송하지 않음 (승인 클릭 시 SR 전송). */
+  requireSrApproval?: boolean
 }
 
-export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, loggedIn }: DemoWidgetProps) {
+export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, loggedIn, requireSrApproval }: DemoWidgetProps) {
   const [toastOpen, setToastOpen] = useState(false)
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -32,6 +34,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, logg
     userId: loggedIn ? DEMO_USER_ID : null,
     api: adapter,
     changeRequestContext: `[페이지: ${window.location.pathname}]`,
+    autoSubmitSr: !requireSrApproval,
   })
 
   const pendingSendRef = useRef(false)
@@ -358,7 +361,7 @@ export function DemoWidget({ allowAllReasons, onSaveBehavior, showEtcInput, logg
               </div>
             </div>
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <ChatPanel chat={chatWithLazySend} variant="compact" emptyState={emptyState} />
+              <ChatPanel chat={chatWithLazySend} variant="compact" emptyState={emptyState} srApprovalUi={requireSrApproval} />
             </div>
           </div>
         </div>

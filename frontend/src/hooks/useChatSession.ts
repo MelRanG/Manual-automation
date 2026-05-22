@@ -16,6 +16,8 @@ export interface UseChatSessionArgs {
   onSessionCreated?: (session: ChatSession) => void
   /** change_request 모드일 때 질문에 invisibly 덧붙일 컨텍스트 (예: "[페이지: /demo-widget-after]"). */
   changeRequestContext?: string
+  /** false면 change_request 응답에 SR draft가 와도 자동 전송하지 않음 — 사용자 클릭(승인) 필요. */
+  autoSubmitSr?: boolean
 }
 
 export interface ChatSessionState {
@@ -54,7 +56,7 @@ export interface ChatSessionState {
   resetAll: () => void
 }
 
-export function useChatSession({ sessionId, api, onSessionCreated, changeRequestContext }: UseChatSessionArgs): ChatSessionState {
+export function useChatSession({ sessionId, api, onSessionCreated, changeRequestContext, autoSubmitSr = true }: UseChatSessionArgs): ChatSessionState {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [citations, setCitations] = useState<Citation[]>([])
   const [citationsByMessage, setCitationsByMessage] = useState<Record<string, Citation[]>>({})
@@ -194,7 +196,7 @@ export function useChatSession({ sessionId, api, onSessionCreated, changeRequest
       setMessages(prev => prev.map(m =>
         m.id === "streaming" ? { ...m, id: messageId, content, citations: responseCitations } : m
       ))
-      if (srDraft && chatMode === "change_request" && api.submitSR) {
+      if (srDraft && chatMode === "change_request" && autoSubmitSr && api.submitSR) {
         // 사용자 클릭 없이 즉시 Jira 전송 — 데모 변경요청 흐름.
         void sendSRRef.current(srDraft)
       }
@@ -206,7 +208,7 @@ export function useChatSession({ sessionId, api, onSessionCreated, changeRequest
       setLoading(false)
       inFlightRef.current = false
     }
-  }, [input, sessionId, chatMode, api, onSessionCreated, changeRequestContext])
+  }, [input, sessionId, chatMode, api, onSessionCreated, changeRequestContext, autoSubmitSr])
 
   const sendSR = useCallback(async (draft: SRDraftCreated) => {
     if (!api.submitSR) return
