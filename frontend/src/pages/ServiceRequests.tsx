@@ -447,14 +447,16 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
       // 1. latest-proposal로 이전 상태 복원
       const latest = await api.getLatestProposal(sr.id).catch(() => null)
       if (ignore) return
-      let restoredDocId: string | null = null
+      let hasRestoredProposal = false
       if (latest) {
         setDocMode(latest.doc_mode_hint as DocMode)
         if (latest.proposal?.document_id) {
           setSelectedDocId(latest.proposal.document_id)
-          restoredDocId = latest.proposal.document_id
         }
-        if (latest.proposal) setProposal(latest.proposal)
+        if (latest.proposal) {
+          setProposal(latest.proposal)
+          hasRestoredProposal = true
+        }
         setStep(3)
       }
 
@@ -471,12 +473,53 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
       }
       if (ignore) return
       setRecommendation(rec)
-      if (
-        !restoredDocId &&
-        rec?.recommendation === "existing" &&
-        rec.suggested_document_id
-      ) {
-        setSelectedDocId(rec.suggested_document_id)
+
+      // 3. AI 추천 결과로 초안 미리 생성 (DB에 없을 때만)
+      if (!hasRestoredProposal && rec && rec.recommendation !== "none") {
+        const docId = rec.recommendation === "existing" ? rec.suggested_document_id ?? null : null
+        if (rec.recommendation === "existing" && !docId) return  // 문서 미지정이면 수동 선택 대기
+        if (docId) setSelectedDocId(docId)
+        setDocMode(rec.recommendation as DocMode)
+        setGenerating(true)
+        setGenerateError(null)
+        try {
+          const analysis = await api.analyzeImpact({
+            source_type: "jira_sr",
+            source_id: sr.id,
+            related_document_ids: docId ? [docId] : undefined,
+          })
+          if (ignore) return
+          if (docId) {
+            const cps = await api.generateProposalForDocument(
+              analysis.id, docId, analysis.recommended_strategy || "update"
+            )
+            const cp = Array.isArray(cps) ? cps[0] : cps
+            if (cp && !ignore) {
+              setProposal(cp)
+              setStep(3)
+            } else if (!ignore) {
+              setGenerateError("초안 응답이 비어있습니다.")
+            }
+          } else {
+            if (!ignore) {
+              setProposal({
+                id: analysis.id,
+                impact_analysis_id: analysis.id,
+                document_id: "",
+                original_content: "",
+                proposed_content: analysis.reasoning,
+                diff: "",
+                status: analysis.status,
+                created_at: analysis.created_at,
+              })
+              setStep(3)
+            }
+          }
+        } catch (e) {
+          if (!ignore) setGenerateError(e instanceof Error ? e.message : "초안 생성 실패")
+        } finally {
+          if (!ignore) setGenerating(false)
+        }
       }
     })()
     return () => { ignore = true }
@@ -514,6 +557,73 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
 
   const filteredDocs = docs.filter(d => d.title.toLowerCase().includes(docQuery.toLowerCase()))
 
+  const recCard = (
+    <>
+      {recLoading && (
+        <div className="p-3 bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg text-xs text-[#757684]">
+          AI 분석 중...
+        </div>
+      )}
+      {!recLoading && recError && (
+        <div className="p-3 bg-[#fff7f7] border border-[#fecaca] rounded-lg text-xs text-[#b91c1c] flex items-center justify-between">
+          <span>AI 추천 사용 불가. 직접 선택해주세요.</span>
+          <button
+            onClick={async () => {
+              setRecError(null); setRecLoading(true)
+              try {
+                const r = await api.postAiDocRecommendation(sr.id, true)
+                setRecommendation(r)
+              } catch (e) {
+                setRecError(e instanceof Error ? e.message : "재시도 실패")
+              } finally { setRecLoading(false) }
+            }}
+            className="text-[#00288e] underline"
+          >
+            재시도
+          </button>
+        </div>
+      )}
+      {!recLoading && !recError && recommendation && (
+        <div className="p-3 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-[#4a4bdc]">
+              ✨ AI 추천: {recommendation.recommendation === "new" ? "신규 문서 작성"
+                : recommendation.recommendation === "existing" ? "기존 문서 수정"
+                : "문서 수정 없음"}
+            </p>
+            <div className="flex items-center gap-2">
+              {step === 3 && (
+                <button
+                  onClick={() => { setProposal(null); setStep(1) }}
+                  className="text-[10px] text-[#757684] hover:underline"
+                >
+                  다른 방식 선택
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  setRecLoading(true)
+                  try {
+                    const r = await api.postAiDocRecommendation(sr.id, true)
+                    setRecommendation(r)
+                  } catch (e) {
+                    setRecError(e instanceof Error ? e.message : "재생성 실패")
+                  } finally { setRecLoading(false) }
+                }}
+                className="text-[10px] text-[#4a4bdc] hover:underline"
+              >
+                재생성
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-[#444653] whitespace-pre-wrap">{recommendation.reason}</p>
+        </div>
+      )}
+    </>
+  )
+
+  const preparingDraft = generating && !proposal
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -530,59 +640,17 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
         </span>
       </div>
 
-      {step === 1 && (
-        <div className="space-y-3">
-          {recLoading && (
-            <div className="p-3 bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg text-xs text-[#757684]">
-              AI 분석 중...
-            </div>
-          )}
-          {!recLoading && recError && (
-            <div className="p-3 bg-[#fff7f7] border border-[#fecaca] rounded-lg text-xs text-[#b91c1c] flex items-center justify-between">
-              <span>AI 추천 사용 불가. 직접 선택해주세요.</span>
-              <button
-                onClick={async () => {
-                  setRecError(null); setRecLoading(true)
-                  try {
-                    const r = await api.postAiDocRecommendation(sr.id, true)
-                    setRecommendation(r)
-                  } catch (e) {
-                    setRecError(e instanceof Error ? e.message : "재시도 실패")
-                  } finally { setRecLoading(false) }
-                }}
-                className="text-[#00288e] underline"
-              >
-                재시도
-              </button>
-            </div>
-          )}
-          {!recLoading && !recError && recommendation && (
-            <div className="p-3 bg-[#eef2ff] border border-[#c7d2fe] rounded-lg space-y-1">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-[#4a4bdc]">
-                  ✨ AI 추천: {recommendation.recommendation === "new" ? "신규 문서 작성"
-                    : recommendation.recommendation === "existing" ? "기존 문서 수정"
-                    : "문서 수정 없음"}
-                </p>
-                <button
-                  onClick={async () => {
-                    setRecLoading(true)
-                    try {
-                      const r = await api.postAiDocRecommendation(sr.id, true)
-                      setRecommendation(r)
-                    } catch (e) {
-                      setRecError(e instanceof Error ? e.message : "재생성 실패")
-                    } finally { setRecLoading(false) }
-                  }}
-                  className="text-[10px] text-[#4a4bdc] hover:underline"
-                >
-                  재생성
-                </button>
-              </div>
-              <p className="text-xs text-[#444653] whitespace-pre-wrap">{recommendation.reason}</p>
-            </div>
-          )}
+      {recCard}
 
+      {preparingDraft && (
+        <div className="p-4 bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg text-sm text-[#444653] flex items-center gap-2">
+          <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+          AI 초안 생성 중...
+        </div>
+      )}
+
+      {step === 1 && !preparingDraft && (
+        <div className="space-y-3">
           <p className="text-sm font-medium text-[#191c1e]">문서 반영 방식을 선택하세요</p>
           <div className="grid grid-cols-3 gap-3">
             <button
