@@ -948,7 +948,7 @@ function ReviewHistoryView({ srId }: { srId: string }) {
         <section>
           <p className="text-xs font-semibold text-[#757684] mb-1">적용된 본문</p>
           {history.final_proposal.original_content ? (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
                 <p className="text-[10px] text-[#757684] mb-1">기존</p>
                 <pre className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] whitespace-pre-wrap overflow-auto max-h-96">{history.final_proposal.original_content}</pre>
@@ -1040,7 +1040,7 @@ function DraftEditor({
   return (
     <div className="space-y-4">
       {proposal.original_content ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-4">
           <div>
             <p className="text-xs font-semibold text-[#757684] mb-2">기존 내용</p>
             <div className="text-xs text-[#191c1e] bg-[#fff7f7] p-3 rounded-lg border border-[#fecaca] min-h-[12rem]">
