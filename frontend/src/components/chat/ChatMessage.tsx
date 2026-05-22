@@ -11,6 +11,8 @@ interface Props {
   srSendingId: string | null
   srSendError?: string
   onSendSR?: (draft: SRDraftCreated) => void
+  /** true면 "SR 보내기" 대신 "수정하기" + "승인" 버튼을 노출 (승인 = onSendSR). */
+  srApprovalUi?: boolean
   canSubmitFeedback: boolean
   feedbackFor: string | null
   feedbackText: string
@@ -124,6 +126,25 @@ export function ChatMessageView(p: Props) {
               <p className="text-[11px] text-[#757684]">검토 후 바로 Jira/Webhook으로 전송할 수 있습니다.</p>
               {p.srSentText ? (
                 <span className="text-xs font-semibold text-emerald-700">{p.srSentText}</span>
+              ) : p.srApprovalUi ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={p.srSendingId === srDraft.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#c4c5d5] bg-white px-3 py-1.5 text-xs font-semibold text-[#444653] hover:bg-[#f2f4f6] disabled:opacity-50 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">edit</span>
+                    수정하기
+                  </button>
+                  <button
+                    onClick={() => p.onSendSR!(srDraft)}
+                    disabled={p.srSendingId === srDraft.id}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#15803d] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#166534] disabled:opacity-50 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-sm">check</span>
+                    {p.srSendingId === srDraft.id ? "전송 중..." : "승인"}
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => p.onSendSR!(srDraft)}

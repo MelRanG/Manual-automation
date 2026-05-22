@@ -7,6 +7,7 @@ export function DemoWidgetBefore() {
       onSaveBehavior="none"
       showEtcInput={false}
       loggedIn={true}
+      requireSrApproval={true}
     />
   )
 }
