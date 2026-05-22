@@ -473,53 +473,12 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
       }
       if (ignore) return
       setRecommendation(rec)
-
-      // 3. AI 추천 결과로 초안 미리 생성 (DB에 없을 때만)
-      if (!hasRestoredProposal && rec && rec.recommendation !== "none") {
-        const docId = rec.recommendation === "existing" ? rec.suggested_document_id ?? null : null
-        if (rec.recommendation === "existing" && !docId) return  // 문서 미지정이면 수동 선택 대기
-        if (docId) setSelectedDocId(docId)
-        setDocMode(rec.recommendation as DocMode)
-        setGenerating(true)
-        setGenerateError(null)
-        try {
-          const analysis = await api.analyzeImpact({
-            source_type: "jira_sr",
-            source_id: sr.id,
-            related_document_ids: docId ? [docId] : undefined,
-          })
-          if (ignore) return
-          if (docId) {
-            const cps = await api.generateProposalForDocument(
-              analysis.id, docId, analysis.recommended_strategy || "update"
-            )
-            const cp = Array.isArray(cps) ? cps[0] : cps
-            if (cp && !ignore) {
-              setProposal(cp)
-              setStep(3)
-            } else if (!ignore) {
-              setGenerateError("초안 응답이 비어있습니다.")
-            }
-          } else {
-            if (!ignore) {
-              setProposal({
-                id: analysis.id,
-                impact_analysis_id: analysis.id,
-                document_id: "",
-                original_content: "",
-                proposed_content: analysis.reasoning,
-                diff: "",
-                status: analysis.status,
-                created_at: analysis.created_at,
-              })
-              setStep(3)
-            }
-          }
-        } catch (e) {
-          if (!ignore) setGenerateError(e instanceof Error ? e.message : "초안 생성 실패")
-        } finally {
-          if (!ignore) setGenerating(false)
-        }
+      if (
+        !hasRestoredProposal &&
+        rec?.recommendation === "existing" &&
+        rec.suggested_document_id
+      ) {
+        setSelectedDocId(rec.suggested_document_id)
       }
     })()
     return () => { ignore = true }
@@ -622,8 +581,6 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
     </>
   )
 
-  const preparingDraft = generating && !proposal
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
@@ -642,14 +599,7 @@ function SRReview({ sr, docs, onRefetch, reviewerId }: { sr: SRDraft; docs: Docu
 
       {recCard}
 
-      {preparingDraft && (
-        <div className="p-4 bg-[#f7f9fb] border border-[#e0e3e5] rounded-lg text-sm text-[#444653] flex items-center gap-2">
-          <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
-          AI 초안 생성 중...
-        </div>
-      )}
-
-      {step === 1 && !preparingDraft && (
+      {step === 1 && (
         <div className="space-y-3">
           <p className="text-sm font-medium text-[#191c1e]">문서 반영 방식을 선택하세요</p>
           <div className="grid grid-cols-3 gap-3">
